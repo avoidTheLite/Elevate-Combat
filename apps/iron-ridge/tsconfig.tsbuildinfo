@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/components/CombatLog.tsx","./src/components/MapCanvas.tsx","./src/components/UnitPanel.tsx","./src/data/maps.ts","./src/data/unitDefs.ts","./src/lib/combat.ts","./src/store/gameStore.ts","./src/types/game.ts"],"version":"5.9.3"}
