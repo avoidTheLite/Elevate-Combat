@@ -1,13 +1,18 @@
 {
-  "name": "elevate-combat",
+  "name": "iron-ridge",
   "private": true,
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write ."
   },
   "devDependencies": {
+    "@iron-ridge/eslint-config": "workspace:*",
+    "eslint": "^9.20.0",
+    "prettier": "^3.5.3",
     "turbo": "^2.5.4"
   },
   "packageManager": "pnpm@11.18.0",
