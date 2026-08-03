@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+
+  /* HSL design tokens — neon-punk dark theme */
+  --background: 210 100% 3%;
+  --foreground: 190 100% 55%;
+
+  --primary: 190 100% 50%;
+  --primary-foreground: 210 100% 3%;
+
+  --secondary: 340 100% 59%;
+  --secondary-foreground: 210 100% 3%;
+
+  --accent: 70 100% 50%;
+  --accent-foreground: 210 100% 3%;
+
+  --muted: 210 50% 10%;
+  --muted-foreground: 195 60% 30%;
+
+  --border: 210 80% 10%;
+  --ring: 190 100% 50%;
+
+  --success: 145 100% 50%;
+  --warning: 38 100% 65%;
+  --destructive: 345 100% 60%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: 'Courier New', monospace;
+}

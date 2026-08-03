@@ -1,0 +1,20 @@
+{
+  "name": "@iron-ridge/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-n": "^17.16.2",
+    "typescript-eslint": "^8.32.1"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  }
+}
