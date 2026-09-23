@@ -1,0 +1,261 @@
+{
+  "schemaNotes": {
+    "description": "Shared unit schema for Iron Ridge testing eras. Combat resolution is derived, not hand-authored: look up damageTypes[attacker.damageType][defender.armorClass] to get the base effectiveness multiplier for an engagement. This naturally produces asymmetric outcomes (e.g. a tank beating rifle infantry despite its own weapon being weak against unarmored targets, because the infantry's weapon does ~none against heavy armor) without needing separate strongVs/weakVs lists per unit.",
+    "resolutionModel": "effectiveness = damageTypes[attackerDamageType].effectiveness[defenderArmorClass]. Apply variance range where specified before finalizing damage.",
+    "fields": {
+      "id": "unique string identifier",
+      "name": "display name",
+      "unitClass": "production/role category. Medieval: infantry | cavalry | artillery. WW2: infantry | vehicle | artillery.",
+      "armorClass": "target classification used for damage resolution: unarmored | light_armor | heavy_armor",
+      "damageType": "weapon family used for damage resolution: piercing | non_piercing | siege",
+      "attackType": "melee | ranged_direct | indirect",
+      "role": "one-line functional description",
+      "specialRules": "array of short rule strings capturing mechanics not covered by the damage-type/armor-class matrix (suppression, first-strike, fortification interaction, etc.)",
+      "placementCategory": "automatic (standing/garrison, placed at strategic layer) | warned (range-and-time gated pre-placement) | combat_fixed (must be placed live during tactical phase, cannot reposition after) | combat_mobile (moves with field commander, placed live, repositionable)",
+      "notes": "free text for open design questions or balancing flags"
+    }
+  },
+
+  "damageTypes": {
+    "description": "Three-type system shared across both eras. Effectiveness is qualitative for now (high/medium/low/none); numeric multipliers TBD once point-budget/formula pass happens. 'variance' flags types where actual rolled damage should swing widely around the average rather than being a flat value.",
+    "piercing": {
+      "description": "Arrows/spears (medieval); autocannon rounds (WW2). Trades some stopping power against soft targets for penetration.",
+      "exampleWeapons": ["bow", "spear", "LAV autocannon"],
+      "effectiveness": {
+        "vs_unarmored": "medium",
+        "vs_light_armor": "high",
+        "vs_heavy_armor": "low"
+      },
+      "vs_fortification": "none",
+      "variance": "low"
+    },
+    "non_piercing": {
+      "description": "Swords/axes (medieval); rifle/MG small arms (WW2). Optimized against unarmored targets, minimal effect on real armor.",
+      "exampleWeapons": ["sword", "axe", "rifle", "machine gun"],
+      "effectiveness": {
+        "vs_unarmored": "high",
+        "vs_light_armor": "low",
+        "vs_heavy_armor": "none"
+      },
+      "vs_fortification": "none",
+      "variance": "low"
+    },
+    "siege": {
+      "description": "Catapults (medieval, concussive-force siege engines); rockets, mortars, artillery, tank and AT-gun rounds (WW2, explosive). The only damage type that reliably threatens heavy armor and fortifications. Weak and unreliable against a single soldier, but capable of an occasional catastrophic hit.",
+      "exampleWeapons": ["catapult", "bazooka/rocket", "mortar shell", "tank cannon", "AT gun round", "artillery shell"],
+      "effectiveness": {
+        "vs_unarmored": "low",
+        "vs_light_armor": "high",
+        "vs_heavy_armor": "high"
+      },
+      "vs_fortification": "high",
+      "variance": "high",
+      "specialRules": [
+        "Only damage type effective against fortifications/structures",
+        "vs_unarmored uses a wide damage range (mostly-miss, occasional near-total-loss) rather than a flat scalar, per dispersed-target logic"
+      ]
+    }
+  },
+
+  "medieval": {
+    "era": "medieval",
+    "units": [
+      {
+        "id": "med_infantry",
+        "name": "Infantry",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "non_piercing",
+        "attackType": "melee",
+        "role": "Core line troop, closes and holds ground",
+        "specialRules": [],
+        "placementCategory": "combat_mobile",
+        "notes": ""
+      },
+      {
+        "id": "med_archers",
+        "name": "Archers",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "piercing",
+        "attackType": "ranged_direct",
+        "role": "Ranged harassment, terrain/elevation-dependent damage dealer",
+        "specialRules": [
+          "First-strike: gets a ranged attack before melee units close, partially offsetting weak survivability once melee contact is made"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": "Weak in raw matchups by design; value comes from elevation/range positioning and first-strike damage, not a combat-line role."
+      },
+      {
+        "id": "med_horseman",
+        "name": "Horseman (Cavalry)",
+        "unitClass": "cavalry",
+        "armorClass": "unarmored",
+        "damageType": "non_piercing",
+        "attackType": "melee",
+        "role": "Fast shock/flanking unit, punishes exposed infantry and archers",
+        "specialRules": [
+          "High movement range relative to other medieval units",
+          "Speed denies archers time to loose multiple volleys before contact (mechanical advantage vs. archers, not a damage-type advantage)",
+          "Charge bonus vs. infantry may scale with distance covered before contact (future refinement)"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": ""
+      },
+      {
+        "id": "med_spearman",
+        "name": "Spearman",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "piercing",
+        "attackType": "melee",
+        "role": "Anti-cavalry specialist, braced formation fighter",
+        "specialRules": [
+          "Braced-formation bonus vs. cavalry charges (mechanical advantage layered on top of base damage-type resolution)"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": ""
+      },
+      {
+        "id": "med_artillery",
+        "name": "Artillery (Catapult)",
+        "unitClass": "artillery",
+        "armorClass": "unarmored",
+        "damageType": "siege",
+        "attackType": "indirect",
+        "role": "Indirect siege weapon; concussive-force damage, sole unit type able to damage fortifications",
+        "specialRules": [
+          "No melee capability",
+          "Can arc fire over terrain/ridgelines that block direct-fire units (per Map-01 lesson design)",
+          "Vulnerable to fast units (cavalry) closing distance due to no melee defense"
+        ],
+        "placementCategory": "combat_fixed",
+        "notes": "Damage type is siege/concussive, not explosive — medieval siege engines work via kinetic/concussive force rather than blast."
+      }
+    ]
+  },
+
+  "ww2": {
+    "era": "ww2",
+    "units": [
+      {
+        "id": "ww2_rifle_infantry",
+        "name": "Rifle Infantry",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "non_piercing",
+        "attackType": "ranged_direct",
+        "role": "Core line troop, anti-infantry",
+        "specialRules": [],
+        "placementCategory": "combat_mobile",
+        "notes": ""
+      },
+      {
+        "id": "ww2_at_infantry",
+        "name": "AT Infantry (Bazooka/Rockets)",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "siege",
+        "attackType": "ranged_direct",
+        "role": "Man-portable anti-vehicle specialist",
+        "specialRules": [
+          "Low hit probability vs. unarmored/dispersed infantry regardless of raw lethality (inherits siege-type variance vs. unarmored)"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": ""
+      },
+      {
+        "id": "ww2_machine_gun",
+        "name": "Machine Gun Team",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "non_piercing",
+        "attackType": "ranged_direct",
+        "role": "Crew-served suppression and anti-infantry",
+        "specialRules": [
+          "Suppression mechanic ties into existing action-economy/exposure system",
+          "Differentiates from Rifle Infantry via suppression, not damage type (both are non_piercing)"
+        ],
+        "placementCategory": "combat_fixed",
+        "notes": "Crew-served weapon, loses mobility once set up — fixed counterpart to the mobile MG-nest repositioning example discussed earlier."
+      },
+      {
+        "id": "ww2_mortar",
+        "name": "Mortar Team",
+        "unitClass": "infantry",
+        "armorClass": "unarmored",
+        "damageType": "siege",
+        "attackType": "indirect",
+        "role": "Crew-served short/medium range indirect fire, squad-level support",
+        "specialRules": [
+          "Shorter effective range than Artillery class — distinguishes it as squad-level support rather than a rolling-chassis asset"
+        ],
+        "placementCategory": "combat_fixed",
+        "notes": "Deliberately kept distinct from Artillery for era-symmetry — mortar is man-portable/crew-served, Artillery is vehicle-mounted."
+      },
+      {
+        "id": "ww2_tank",
+        "name": "Tank",
+        "unitClass": "vehicle",
+        "armorClass": "heavy_armor",
+        "damageType": "siege",
+        "attackType": "ranged_direct",
+        "role": "Armored breakthrough unit",
+        "specialRules": [
+          "Beats unarmored infantry primarily via superior survivability (infantry's non_piercing weapon does ~none vs heavy_armor), not via strong offense vs unarmored (siege type is weak/variance-heavy there)",
+          "Multiple tank variants may exist with varying armor/firepower levels within this unit type — class dictates armor category, not fixed stats",
+          "Design goal: tune damage/survivability numbers so shots-to-kill vs. AT Gun is comparable in both directions despite different raw damage numbers"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": "Balance target: avoid tank-always-beats-AT-gun-if-both-survive-first-hit outcome. AT Gun should trade roughly evenly if it gets the engagement, offset by AT Gun's lower mobility/higher exposure as the real tradeoff, not raw combat math."
+      },
+      {
+        "id": "ww2_at_gun",
+        "name": "AT Gun",
+        "unitClass": "vehicle",
+        "armorClass": "light_armor",
+        "damageType": "siege",
+        "attackType": "ranged_direct",
+        "role": "Static/towed anti-vehicle emplacement",
+        "specialRules": [
+          "Low mobility/high exposure is the intended tradeoff against Tank's mobility, not a damage-output difference",
+          "Vulnerable to being overrun by unsupported infantry assault despite strong anti-armor output"
+        ],
+        "placementCategory": "combat_fixed",
+        "notes": "Shares light_armor classification with LAV and Artillery. Towed/static nature may later split into its own placement rules distinct from mobile vehicles."
+      },
+      {
+        "id": "ww2_light_armored_vehicle",
+        "name": "Light Armored Vehicle (LAV)",
+        "unitClass": "vehicle",
+        "armorClass": "light_armor",
+        "damageType": "piercing",
+        "attackType": "ranged_direct",
+        "role": "Fast anti-infantry/anti-light-armor vehicle; potential future mechanized-infantry transport pairing",
+        "specialRules": [
+          "High mobility relative to Tank",
+          "Autocannon/small-cannon armament placed in piercing category — distinct from Tank/AT Gun's siege-type armament and from infantry's non_piercing small arms",
+          "Candidate for future mechanized-infantry pairing rule (LAV + infantry unit deployed as a combined package) rather than a separate unit type"
+        ],
+        "placementCategory": "combat_mobile",
+        "notes": "Shares light_armor classification with Artillery and AT Gun — distinct from Tank's heavy_armor."
+      },
+      {
+        "id": "ww2_artillery",
+        "name": "Artillery (Motorized)",
+        "unitClass": "artillery",
+        "armorClass": "light_armor",
+        "damageType": "siege",
+        "attackType": "indirect",
+        "role": "Long-range indirect fire, mounted on rolling chassis; sole unit type able to damage fortifications",
+        "specialRules": [
+          "Longer effective range than Mortar",
+          "All variants motorized for simplicity; future refinement may split into towed/deployed vs. truck-mobile variants, affecting permanent vs. mobile deployment cost",
+          "Vulnerable to fast flanking attacks (LAV/tanks) — mirrors medieval cavalry-vs-catapult dynamic"
+        ],
+        "placementCategory": "combat_fixed",
+        "notes": "Deployed vs. mobile artillery distinction (towed/repositionable vs. truck-attached) flagged as future differentiation tied to deployment cost."
+      }
+    ]
+  }
+}
