@@ -34,6 +34,8 @@ import type {
   TokenSpec,
 } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
+import type { OverlayMode } from './overlays.ts';
+import { CAPTURE_COLOR, basicColors, controlColors, heightColors } from './overlays.ts';
 
 export function tokenKind(typeId: string): TokenKind {
   const t = unitType(typeId);
@@ -71,20 +73,24 @@ function borderSegments(
   return out;
 }
 
-export function buildStrategicScene(game: GameState, ui: UiState, view: Team | null): SceneSpec {
+export function buildStrategicScene(
+  game: GameState,
+  ui: UiState,
+  view: Team | null,
+  overlay: OverlayMode = 'basic',
+): SceneSpec {
   const { world, terrain } = worldOf(game);
   const hOf = heightFn(world, terrain.heights);
   const cells: CellSpec[] = world.subs.map((s) => {
+    const h = terrain.heights[s.index]!;
     const owner = game.hexes[s.main]?.owner ?? null;
-    return {
-      key: s.key,
-      q: s.hex.q,
-      r: s.hex.r,
-      h: terrain.heights[s.index]!,
-      tint: owner ? TEAM_COLOR[owner] : null,
-      tintAmount: 0.14,
-      fort: game.forts[s.key] ?? 0,
-    };
+    const colors =
+      overlay === 'height'
+        ? heightColors(h)
+        : overlay === 'control'
+          ? controlColors(owner ? { kind: 'team', team: owner } : { kind: 'none' })
+          : basicColors;
+    return { key: s.key, q: s.hex.q, r: s.hex.r, h, ...colors, fort: game.forts[s.key] ?? 0 };
   });
 
   const allMains = world.mains.map((m) => m.key);
@@ -206,7 +212,12 @@ export interface TacticalView {
   visible: Set<string> | null;
 }
 
-export function buildTacticalScene(game: GameState, ui: UiState, view: Team | null): TacticalView {
+export function buildTacticalScene(
+  game: GameState,
+  ui: UiState,
+  view: Team | null,
+  overlay: OverlayMode = 'basic',
+): TacticalView {
   const battle = game.battle!;
   const ctx = buildContext(game.settings, battle);
   const { world } = ctx;
@@ -216,15 +227,27 @@ export function buildTacticalScene(game: GameState, ui: UiState, view: Team | nu
   // During deployment, a player only sees their own zone + known ground.
   const cells: CellSpec[] = [...ctx.cells].map((k) => {
     const s = world.subByKey.get(k)!;
+    const h = terrain.heights[s.index]!;
+    const colors =
+      overlay === 'height'
+        ? heightColors(h)
+        : overlay === 'control'
+          ? controlColors(
+              s.main === battle.contested
+                ? { kind: 'capture' }
+                : s.main === battle.origin
+                  ? { kind: 'team', team: battle.attacker }
+                  : { kind: 'none' },
+            )
+          : basicColors;
     return {
       key: k,
       q: s.hex.q,
       r: s.hex.r,
-      h: terrain.heights[s.index]!,
+      h,
+      ...colors,
       dim: visible ? !visible.has(k) && battle.phase === 'combat' : false,
       fort: battle.forts[k] ?? 0,
-      tint: s.main === battle.contested ? 0xffa030 : null,
-      tintAmount: 0.08,
     };
   });
 
@@ -242,7 +265,7 @@ export function buildTacticalScene(game: GameState, ui: UiState, view: Team | nu
     },
     {
       segments: borderSegments(world, [battle.contested], hOf, () => true),
-      color: 0xffa030,
+      color: CAPTURE_COLOR, // capture-point outline: shown in every overlay
       width: 3,
       opacity: 0.95,
     },

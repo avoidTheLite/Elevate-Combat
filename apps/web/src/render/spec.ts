@@ -7,9 +7,9 @@ export interface CellSpec {
   q: number;
   r: number;
   h: number;
-  /** Optional tint mixed into the terrain fill (e.g. territory owner). */
-  tint?: number | null;
-  tintAmount?: number;
+  /** Top/side fill and top-outline colours — chosen by the active overlay (overlays.ts). */
+  fill: number;
+  line: number;
   /** Fogged / out-of-play cells are drawn darker. */
   dim?: boolean;
   fort?: number;

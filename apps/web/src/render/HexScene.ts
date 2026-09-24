@@ -23,12 +23,6 @@ import {
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
 
-const FILL = [
-  0x05071c, 0x07112c, 0x091d3c, 0x0b2a4b, 0x0d3958, 0x104a64, 0x15606e, 0x1e7a76, 0x6a4a0c,
-];
-const LINE = [
-  0x2c2c80, 0x2b4198, 0x2a5eb2, 0x2a7ec8, 0x22a0dc, 0x20c2e8, 0x44e2e0, 0x9cfff0, 0xffc030,
-];
 const ISO_ELEVATION = Math.atan(1 / Math.SQRT2); // 35.264°
 const STATUS_COLOR = { clear: 0x33ff88, marginal: 0xffb020, blocked: 0xff3344 } as const;
 
@@ -44,10 +38,6 @@ interface TokenObj {
   labelEl: HTMLDivElement;
   target: THREE.Vector3;
   kindSig: string;
-}
-
-function mixColor(a: number, b: number, t: number): THREE.Color {
-  return new THREE.Color(a).lerp(new THREE.Color(b), t);
 }
 
 let glowTexture: THREE.Texture | null = null;
@@ -324,21 +314,21 @@ export class HexScene {
       m.makeScale(0.985, topY(c.h), 0.985);
       m.setPosition(w.x, 0, w.z);
       mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, new THREE.Color(FILL[c.h] ?? FILL[0]));
+      mesh.setColorAt(i, new THREE.Color(c.fill));
     });
     mesh.count = cells.length;
     mesh.instanceMatrix.needsUpdate = true;
     this.terrainMesh = mesh;
     this.world.add(mesh);
 
-    // Glowing top outlines (one line-segment soup, coloured by height).
+    // Glowing top outlines (one line-segment soup, coloured per cell by the overlay).
     const pos: number[] = [];
     const col: number[] = [];
     const corners = Array.from({ length: 6 }, (_, i) => hexCorner(i, 0.985));
     for (const c of cells) {
       const w = hexToWorld(c);
       const y = topY(c.h) + 0.004;
-      const clr = new THREE.Color(LINE[c.h] ?? LINE[0]);
+      const clr = new THREE.Color(c.line);
       for (let i = 0; i < 6; i++) {
         const a = corners[i]!;
         const b = corners[(i + 1) % 6]!;
@@ -362,13 +352,11 @@ export class HexScene {
     const outlineColors = this.outline?.geometry.getAttribute('color') as
       THREE.BufferAttribute | undefined;
     cells.forEach((c, i) => {
-      let clr = new THREE.Color(FILL[c.h] ?? FILL[0]);
-      if (c.tint !== undefined && c.tint !== null)
-        clr = clr.lerp(new THREE.Color(c.tint), c.tintAmount ?? 0.25);
+      const clr = new THREE.Color(c.fill);
       if (c.dim) clr.multiplyScalar(0.35);
       mesh.setColorAt(i, clr);
       if (outlineColors) {
-        const lc = new THREE.Color(LINE[c.h] ?? LINE[0]);
+        const lc = new THREE.Color(c.line);
         if (c.dim) lc.multiplyScalar(0.3);
         for (let v = 0; v < 12; v++) outlineColors.setXYZ(i * 12 + v, lc.r, lc.g, lc.b);
       }
@@ -843,8 +831,3 @@ export class HexScene {
     });
   }
 }
-
-// Re-export for callers that need the same palette in HUD legends.
-export const HEIGHT_LINE_COLORS = LINE;
-export const HEIGHT_FILL_COLORS = FILL;
-export { mixColor };

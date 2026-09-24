@@ -10,6 +10,7 @@ import {
   worldOf,
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene } from './buildScene.ts';
+import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
 
 const UI = {
   selectedMain: null,
@@ -74,5 +75,51 @@ describe('scene building', () => {
     // Omniscient spectator sees everyone.
     const all = buildTacticalScene(s, UI, null).spec.tokens;
     expect(all).toHaveLength(s.battle!.units.filter((u) => u.hp > 0).length);
+  });
+
+  describe('information overlays', () => {
+    it('BASIC paints every cell the same neutral tone', () => {
+      const s = battleState();
+      const { spec } = buildTacticalScene(s, UI, null, 'basic');
+      expect(new Set(spec.cells.map((c) => c.fill))).toEqual(new Set([BASIC_FILL]));
+    });
+
+    it('HEIGHT colours cells by elevation', () => {
+      const s = battleState();
+      const { spec } = buildTacticalScene(s, UI, null, 'height');
+      for (const c of spec.cells) expect(c.fill).toBe(HEIGHT_FILL[c.h]);
+      expect(new Set(spec.cells.map((c) => c.fill)).size).toBeGreaterThan(2);
+    });
+
+    it('CONTROL highlights exactly the capture point cells', () => {
+      const s = battleState();
+      const { spec, ctx } = buildTacticalScene(s, UI, null, 'control');
+      const captureCells = new Set(ctx.world.mainByKey.get(s.battle!.contested)!.subKeys);
+      const captureFill = spec.cells.find((c) => captureCells.has(c.key))!.fill;
+      for (const c of spec.cells) {
+        if (captureCells.has(c.key)) expect(c.fill).toBe(captureFill);
+        else expect(c.fill).not.toBe(captureFill);
+      }
+    });
+
+    it('the capture-point outline is drawn in every overlay', () => {
+      const s = battleState();
+      for (const o of OVERLAYS) {
+        const { spec } = buildTacticalScene(s, UI, null, o.id);
+        const outline = spec.borders.find((b) => b.color === CAPTURE_COLOR);
+        expect(outline?.segments.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('strategic CONTROL tints territory by owner; BASIC does not', () => {
+      const s = createGame({
+        ...defaultSettings(),
+        grid: { mainCols: 4, mainRows: 3, subRadius: 2 },
+      });
+      const byOwner = (mode: 'basic' | 'control'): Set<number> =>
+        new Set(buildStrategicScene(s, UI, 'A', mode).cells.map((c) => c.fill));
+      expect(byOwner('basic').size).toBe(1);
+      expect(byOwner('control').size).toBe(3); // Alpha, Bravo, neutral
+    });
   });
 });

@@ -17,7 +17,9 @@ import {
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene } from '../../render/buildScene.ts';
 import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
+import { OverlayBar } from '../game/OverlayBar.tsx';
 import { SceneView } from '../game/SceneView.tsx';
+import { useViewStore } from '../../stores/useViewStore.ts';
 import { StrategicSidebar } from '../game/StrategicSidebar.tsx';
 import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
 import { Button } from '../ui/Button.tsx';
@@ -61,13 +63,14 @@ export function GameScreen(): React.ReactElement {
     return () => clearTimeout(id);
   }, [error, clearError]);
 
+  const overlay = useViewStore((s) => s.overlay);
   const tactical = useMemo(
-    () => (inBattle ? buildTacticalScene(game, ui, view) : null),
-    [game, ui, view, inBattle],
+    () => (inBattle ? buildTacticalScene(game, ui, view, overlay) : null),
+    [game, ui, view, inBattle, overlay],
   );
   const strategic = useMemo(
-    () => (!inBattle ? buildStrategicScene(game, ui, view) : null),
-    [game, ui, view, inBattle],
+    () => (!inBattle ? buildStrategicScene(game, ui, view, overlay) : null),
+    [game, ui, view, inBattle, overlay],
   );
   const spec = tactical?.spec ?? strategic!;
 
@@ -226,6 +229,7 @@ export function GameScreen(): React.ReactElement {
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         <main className="relative shrink-0 h-[48dvh] md:h-auto md:flex-1 md:shrink">
           <SceneView spec={spec} selectedKey={selectedKey} onHover={onHover} onClick={onClick} />
+          <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && (
             <div
               role="alert"
@@ -401,7 +405,8 @@ function Help({ onClose }: { onClose: () => void }): React.ReactElement {
           </p>
           <p>
             <b className="text-[hsl(var(--primary))]">Camera:</b> WASD/arrows or drag to pan, Q/E
-            rotate, wheel zoom, R reset, F firing view while aiming.
+            rotate, wheel zoom, R reset, F firing view while aiming, 1/2/3 map overlay (basic /
+            height / control).
           </p>
         </div>
       </Panel>

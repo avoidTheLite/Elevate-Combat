@@ -63,3 +63,20 @@ describe('App – game start flow', () => {
     expect(await screen.findByRole('button', { name: /end turn/i })).toBeInTheDocument();
   });
 });
+
+describe('App – information overlays', () => {
+  it('switches map overlay by button and by number key', async () => {
+    const { useViewStore } = await import('./stores/useViewStore.ts');
+    act(() => useViewStore.getState().setOverlay('basic'));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /2 height/i }));
+    expect(useViewStore.getState().overlay).toBe('height');
+    expect(screen.getByTestId('overlay-legend')).toHaveTextContent(/H8 Peak/);
+    fireEvent.keyDown(window, { key: '3' });
+    expect(useViewStore.getState().overlay).toBe('control');
+    expect(screen.getByTestId('overlay-legend')).toHaveTextContent(/ALPHA territory/);
+    fireEvent.keyDown(window, { key: '1' });
+    expect(useViewStore.getState().overlay).toBe('basic');
+  });
+});
