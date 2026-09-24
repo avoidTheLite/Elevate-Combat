@@ -38,7 +38,12 @@ export function lineOfSight(
     const t = i / (path.length - 1);
     const line = h0 + (h1 - h0) * t;
     const ground = heightOf(hexKey(path[i]!));
-    if (ground === undefined) continue; // off-map: treat as open
+    // Off-map / outside the battle footprint: fail closed so edge fights can't clip void.
+    if (ground === undefined) {
+      if (!blockedAt) blockedAt = path[i]!;
+      clearance = Math.min(clearance, -1);
+      continue;
+    }
     const c = line - ground;
     if (c < clearance) clearance = c;
     if (c < 0 && !blockedAt) blockedAt = path[i]!;
@@ -70,7 +75,11 @@ export function arcClearance(from: Hex, to: Hex, heightOf: HeightFn, eye = 0.5):
     const t = i / (path.length - 1);
     const line = arcHeight(h0, h1, dist, t);
     const ground = heightOf(hexKey(path[i]!));
-    if (ground === undefined) continue;
+    if (ground === undefined) {
+      if (!blockedAt) blockedAt = path[i]!;
+      clearance = Math.min(clearance, -1);
+      continue;
+    }
     const c = line - ground;
     if (c < clearance) clearance = c;
     if (c < 0 && !blockedAt) blockedAt = path[i]!;

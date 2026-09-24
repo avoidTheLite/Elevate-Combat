@@ -35,9 +35,18 @@ interface GameStore {
   fxBusyUntil: number;
   handoff: Team | null;
   aiSpeed: number;
+  /** Quit dialog: choose abandon vs save-and-quit. */
+  quitPrompt: boolean;
   newGame: (settings: GameSettings) => void;
   loadSaved: () => boolean;
   hasSave: () => boolean;
+  requestQuit: () => void;
+  cancelQuit: () => void;
+  /** Keep autosave and return to setup. */
+  saveAndQuit: () => void;
+  /** Wipe autosave and return to setup. */
+  abandon: () => void;
+  /** @deprecated prefer saveAndQuit / abandon — kept for tests that clear store state. */
   quit: () => void;
   dispatch: (action: GameAction) => boolean;
   aiTick: () => void;
@@ -54,6 +63,49 @@ function save(game: GameState | null): void {
   } catch {
     // Storage may be unavailable (private mode, previews) — saving is best-effort.
   }
+}
+
+/** Lightweight structural guard — accepts unknown extra fields. */
+export function isValidSave(raw: unknown): raw is GameState {
+  if (!raw || typeof raw !== 'object') return false;
+  const g = raw as Record<string, unknown>;
+  if (typeof g.version !== 'string' || !g.version.startsWith('0.9')) return false;
+  if (!g.settings || typeof g.settings !== 'object') return false;
+  const settings = g.settings as Record<string, unknown>;
+  if (typeof settings.era !== 'string' || !settings.grid || typeof settings.grid !== 'object')
+    return false;
+  if (!settings.controllers || typeof settings.controllers !== 'object') return false;
+  if (typeof g.phase !== 'string') return false;
+  if (typeof g.turn !== 'number' || typeof g.active !== 'string') return false;
+  if (!g.cp || typeof g.cp !== 'object') return false;
+  if (!g.hq || typeof g.hq !== 'object') return false;
+  if (!g.hexes || typeof g.hexes !== 'object') return false;
+  if (!Array.isArray(g.armies)) return false;
+  if (!g.forts || typeof g.forts !== 'object') return false;
+  if (typeof g.rng !== 'number' || typeof g.nextId !== 'number') return false;
+  return true;
+}
+
+function clearSession(): Pick<
+  GameStore,
+  'game' | 'ui' | 'error' | 'handoff' | 'lastOutcome' | 'fx' | 'fxBusyUntil' | 'quitPrompt'
+> {
+  return {
+    game: null,
+    ui: EMPTY_UI,
+    error: null,
+    handoff: null,
+    lastOutcome: null,
+    fx: null,
+    fxBusyUntil: 0,
+    quitPrompt: false,
+  };
+}
+
+function hotseatHandoff(game: GameState): Team | null {
+  const { A, B } = game.settings.controllers;
+  if (A !== 'human' || B !== 'human' || !game.settings.fog) return null;
+  return actingTeam(game);
 }
 
 /** Which team's view (fog of war) the screen should show. Null = omniscient spectator. */
@@ -84,11 +136,12 @@ function attackPatch(
   const attacker = prev.battle?.units.find((u) => u.id === outcome.attackerId);
   if (!attacker) return { lastOutcome: outcome, fx: lastFx, fxBusyUntil: 0 };
   const target = prev.battle!.units.find((u) => u.pos === outcome.target && u.hp > 0) ?? null;
+  // Plan FX with the shooter's fog view (prev), not post-resolution actingTeam.
   const fx = planAttackFx(
     outcome,
     attacker.typeId,
     (lastFx?.id ?? 0) + 1,
-    effectVisibility(prev, next, viewTeam(next)),
+    effectVisibility(prev, next, viewTeam(prev) ?? attacker.team),
     target?.id ?? null,
   );
   // The AI resumes once the round has landed (numbers keep floating meanwhile).
@@ -104,6 +157,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   fxBusyUntil: 0,
   handoff: null,
   aiSpeed: 220,
+  quitPrompt: false,
 
   newGame: (settings) => {
     const game = createGame(settings);
@@ -112,7 +166,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       settings.controllers.A === 'human' && settings.controllers.B === 'human' && settings.fog
         ? 'A'
         : null;
-    set({ game, ui: EMPTY_UI, error: null, lastOutcome: null, handoff: first });
+    set({
+      ...clearSession(),
+      game,
+      handoff: first,
+    });
   },
 
   hasSave: () => {
@@ -127,16 +185,51 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
-      const game = JSON.parse(raw) as GameState;
-      if (!game.version?.startsWith('0.9')) return false;
-      set({ game, ui: EMPTY_UI, error: null, handoff: null });
+      const parsed: unknown = JSON.parse(raw);
+      if (!isValidSave(parsed)) {
+        localStorage.removeItem(SAVE_KEY);
+        return false;
+      }
+      // Older saves may lack battle.objective — fill defaults when a battle is mid-flight.
+      if (parsed.battle && !parsed.battle.objective) {
+        parsed.battle.objective = {
+          kind: 'capture_point',
+          captureRadius: 1,
+          extractionAtOrigin: true,
+        };
+        parsed.battle.extracted = parsed.battle.extracted ?? false;
+      }
+      set({
+        ...clearSession(),
+        game: parsed,
+        handoff: hotseatHandoff(parsed),
+      });
       return true;
     } catch {
+      try {
+        localStorage.removeItem(SAVE_KEY);
+      } catch {
+        /* ignore */
+      }
       return false;
     }
   },
 
-  quit: () => set({ game: null, ui: EMPTY_UI, error: null, handoff: null, lastOutcome: null }),
+  requestQuit: () => set({ quitPrompt: true }),
+  cancelQuit: () => set({ quitPrompt: false }),
+  saveAndQuit: () => {
+    const { game } = get();
+    if (game) save(game);
+    set(clearSession());
+  },
+  abandon: () => {
+    save(null);
+    set(clearSession());
+  },
+  quit: () => {
+    // Soft clear for tests — does not touch localStorage (use abandon / saveAndQuit).
+    set(clearSession());
+  },
 
   dispatch: (action) => {
     const { game } = get();
@@ -165,13 +258,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const res = apply(game, action);
     let next = res.state;
     if (res.error) {
+      console.warn('[ai] illegal action, falling back', action, res.error);
       const fallback: GameAction =
         game.phase === 'battle'
           ? game.battle?.phase === 'deploy'
             ? { type: 'finishDeploy' }
             : { type: 'endBattleTurn' }
           : { type: 'endTurn' };
-      next = apply(game, fallback).state;
+      const fb = apply(game, fallback);
+      if (fb.error) {
+        console.warn('[ai] fallback also failed', fallback, fb.error);
+        return;
+      }
+      next = fb.state;
     }
     save(next);
     const patch: Partial<GameStore> = { game: next };

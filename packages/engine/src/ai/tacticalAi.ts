@@ -1,6 +1,7 @@
 // ── Tactical AI ──────────────────────────────────────────────────────────────
 // Stateless: given a state, return the next single action for the side to act.
-// Respects fog of war — it only reasons about enemies its units can see.
+// Respects fog of war — it only reasons about enemies its units can see, plus
+// (for retreat) enemies that can threaten us via teammate vision / range.
 
 import type { HexKey } from '../hex.ts';
 import { hexDistance, parseKey } from '../hex.ts';
@@ -9,10 +10,11 @@ import type { BattleContext } from '../battleMap.ts';
 import { deploymentZone, h, liveUnits, refreshOccupancy } from '../battleMap.ts';
 import { MAX_FORT, previewAttack } from '../combat.ts';
 import { reachable } from '../movement.ts';
-import { contextFor, warnedRangeCells } from '../tactical.ts';
-import type { Battle, BattleUnit, GameState } from '../types.ts';
+import { contextFor, holdsCaptureZone, warnedRangeCells } from '../tactical.ts';
+import type { Battle, BattleUnit, GameState, Team } from '../types.ts';
+import { otherTeam } from '../types.ts';
 import { unitType } from '../units.ts';
-import { visibleEnemies } from '../visibility.ts';
+import { canSee, visibleCells, visibleEnemies } from '../visibility.ts';
 
 interface Shot {
   cell: HexKey;
@@ -38,8 +40,13 @@ function bestShot(
 }
 
 function objective(ctx: BattleContext, battle: Battle): HexKey {
-  const c = ctx.world.mainByKey.get(battle.contested)!.center;
-  return `${c.q},${c.r}`;
+  return (
+    battle.objective.captureKey ??
+    (() => {
+      const c = ctx.world.mainByKey.get(battle.contested)!.center;
+      return `${c.q},${c.r}`;
+    })()
+  );
 }
 
 function threatAt(cell: HexKey, enemies: BattleUnit[]): number {
@@ -51,6 +58,41 @@ function threatAt(cell: HexKey, enemies: BattleUnit[]): number {
     if (d <= et.maxRange + (et.attackType === 'melee' ? et.move : 1)) t += et.cost * 0.1;
   }
   return t;
+}
+
+/**
+ * Forces that should count against us for a retreat decision under fog:
+ * visible enemies, plus unseen enemies that can see us or are in range of us
+ * when their team already has vision of our units (teammate spotting).
+ */
+export function knownThreats(
+  ctx: BattleContext,
+  battle: Battle,
+  team: Team,
+  mine: BattleUnit[],
+): BattleUnit[] {
+  const enemyTeam = otherTeam(team);
+  const visible = new Set(visibleEnemies(ctx, battle, team).map((e) => e.id));
+  const enemyVision = visibleCells(ctx, battle, enemyTeam);
+  const out: BattleUnit[] = [];
+  for (const e of liveUnits(battle, enemyTeam)) {
+    if (!e.pos) continue;
+    if (visible.has(e.id)) {
+      out.push(e);
+      continue;
+    }
+    const knowsUs = mine.some((u) => u.pos && enemyVision.has(u.pos));
+    if (!knowsUs) continue;
+    const et = unitType(e.typeId);
+    const seesUs = mine.some((u) => u.pos && canSee(ctx, e, u.pos));
+    const inRange = mine.some((u) => {
+      if (!u.pos) return false;
+      const d = hexDistance(parseKey(e.pos!), parseKey(u.pos));
+      return d >= et.minRange && d <= et.maxRange;
+    });
+    if (seesUs || inRange) out.push(e);
+  }
+  return out;
 }
 
 function cellScore(
@@ -129,12 +171,17 @@ export function tacticalAiStep(state: GameState): GameAction {
   const mine = liveUnits(battle, team);
   const enemies = visibleEnemies(ctx, battle, team);
 
+  // Holding the capture zone: attacker takes the free win (secure) rather than grind.
+  if (team === battle.attacker && holdsCaptureZone(ctx, battle, team)) {
+    return { type: 'secureObjective' };
+  }
+
   // Withdraw a shattered attacking force rather than feed it in.
   if (team === battle.attacker && battle.round >= 3) {
     const val = (us: BattleUnit[]): number =>
       us.reduce((s, x) => s + unitType(x.typeId).cost * (x.hp / x.maxHp), 0);
     const ours = val(mine);
-    const theirs = val(liveUnits(battle, battle.defender));
+    const theirs = val(knownThreats(ctx, battle, team, mine));
     if (ours < theirs * 0.25) return { type: 'retreat' };
   }
 

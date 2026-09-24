@@ -50,6 +50,11 @@ export function defaultSettings(): GameSettings {
     controllers: { A: 'human', B: 'ai' },
     fog: true,
     battleRounds: 10,
+    battleObjective: {
+      kind: 'capture_point',
+      captureRadius: 1,
+      extractionAtOrigin: true,
+    },
   };
 }
 
@@ -128,6 +133,8 @@ export function createGame(input: GameSettings): GameState {
     `Campaign start — ${settings.era.toUpperCase()} era, ${mainCols}×${mainRows} main grid, sub-radius ${settings.grid.subRadius}`,
     'A',
   );
+  // Income / warning clocks tick at the start of each player's turn — including turn 1.
+  beginTurn(state, 'A');
   return state;
 }
 
@@ -226,6 +233,12 @@ function beginTurn(state: GameState, team: Team): void {
   }
 }
 
+function teamArmyValue(state: GameState, team: Team): number {
+  return state.armies
+    .filter((a) => a.team === team && a.units.length > 0)
+    .reduce((s, a) => s + armyStrength(a), 0);
+}
+
 export function endStrategicTurn(state: GameState): StratResult {
   if (state.phase !== 'strategic') return { ok: false, error: 'Finish the pending battle first' };
   const next = otherTeam(state.active);
@@ -234,12 +247,29 @@ export function endStrategicTurn(state: GameState): StratResult {
   if (state.turn > ECONOMY.maxTurns) {
     const a = ownedCount(state, 'A');
     const b = ownedCount(state, 'B');
-    const winner: Team = a >= b ? 'A' : 'B';
-    declareWinner(
-      state,
-      winner,
-      `Turn limit — ${TEAM_NAME[winner]} holds more territory (${a} vs ${b})`,
-    );
+    let winner: Team | null = null;
+    let reason: string;
+    if (a !== b) {
+      winner = a > b ? 'A' : 'B';
+      reason = `Turn limit — ${TEAM_NAME[winner]} holds more territory (${a} vs ${b})`;
+    } else {
+      const va = teamArmyValue(state, 'A');
+      const vb = teamArmyValue(state, 'B');
+      if (Math.abs(va - vb) > 0.01) {
+        winner = va > vb ? 'A' : 'B';
+        reason = `Turn limit — territory tied (${a}); ${TEAM_NAME[winner]} has stronger armies`;
+      } else if (state.cp.A !== state.cp.B) {
+        winner = state.cp.A > state.cp.B ? 'A' : 'B';
+        reason = `Turn limit — territory & armies tied; ${TEAM_NAME[winner]} has more CP`;
+      } else {
+        reason = `Turn limit — deadlock (${a} hexes each). DRAW.`;
+        state.winner = null;
+        state.phase = 'over';
+        log(state, `★ CAMPAIGN DRAW — ${reason}`, state.active);
+        return { ok: true };
+      }
+    }
+    declareWinner(state, winner, reason);
     return { ok: true };
   }
   beginTurn(state, next);
@@ -488,11 +518,17 @@ export function concludeBattle(state: GameState): StratResult {
     `Battle at ${b.contested}: ${TEAM_NAME[b.winner]} victorious (${b.endReason})`,
     b.winner,
   );
-  applyBattleOutcome(state, p, b.winner);
+  const extracted = b.extracted;
+  applyBattleOutcome(state, p, b.winner, extracted);
   return { ok: true };
 }
 
-function applyBattleOutcome(state: GameState, p: PendingBattle, winner: Team): void {
+function applyBattleOutcome(
+  state: GameState,
+  p: PendingBattle,
+  winner: Team,
+  extracted = false,
+): void {
   const { world } = worldOf(state);
   const att = state.armies.find((a) => a.id === p.attackerArmyId);
   const def = state.armies.find((a) => a.id === p.defenderArmyId);
@@ -527,8 +563,11 @@ function applyBattleOutcome(state: GameState, p: PendingBattle, winner: Team): v
       }
     }
     if (att.units.length) {
-      att.at = p.target;
+      // EXTRACT returns to the origin deploy hex; SECURE / wipeout occupies the prize.
+      att.at = extracted ? p.origin : p.target;
       capture(state, world, p.target, att.team, true);
+      if (extracted)
+        log(state, `${TEAM_NAME[att.team]} extracts to ${p.origin} after securing ${p.target}`, att.team);
     }
   }
   state.armies = state.armies.filter((a) => a.units.length > 0);

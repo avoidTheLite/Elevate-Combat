@@ -3,7 +3,7 @@
 // first, until one side is wiped out, retreats, or the round limit expires.
 
 import type { HexKey } from './hex.ts';
-import { directionTo, hexDistance, parseKey } from './hex.ts';
+import { directionTo, hexDistance, hexKey, parseKey, spiral } from './hex.ts';
 import type { World } from './grid.ts';
 import { mainNeighbors } from './grid.ts';
 import type { BattleContext } from './battleMap.ts';
@@ -13,11 +13,57 @@ import type { AttackOutcome } from './combat.ts';
 import { costField, pathTo, reachable } from './movement.ts';
 import type { Rng } from './rng.ts';
 import { createRng } from './rng.ts';
-import type { Army, Battle, BattleLogEntry, BattleUnit, GameState, Team } from './types.ts';
+import type {
+  Army,
+  Battle,
+  BattleLogEntry,
+  BattleObjective,
+  BattleUnit,
+  GameState,
+  Team,
+} from './types.ts';
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { unitType } from './units.ts';
 
 export const WARNED_CAP = { placements: 4, range: 6 } as const;
+
+export const DEFAULT_BATTLE_OBJECTIVE: BattleObjective = {
+  kind: 'capture_point',
+  captureRadius: 1,
+  extractionAtOrigin: true,
+};
+
+export function resolveBattleObjective(state: GameState, contested: HexKey, world: World): BattleObjective {
+  const center = world.mainByKey.get(contested)!.center;
+  const override = state.settings.battleObjective ?? {};
+  return {
+    kind: override.kind ?? DEFAULT_BATTLE_OBJECTIVE.kind,
+    captureKey: override.captureKey ?? `${center.q},${center.r}`,
+    captureRadius: override.captureRadius ?? DEFAULT_BATTLE_OBJECTIVE.captureRadius,
+    extractionAtOrigin: override.extractionAtOrigin ?? DEFAULT_BATTLE_OBJECTIVE.extractionAtOrigin,
+  };
+}
+
+/** Sub-hexes that make up the capture zone (point + radius), clipped to the battle map. */
+export function captureZoneCells(ctx: BattleContext, battle: Battle): Set<HexKey> {
+  const key = battle.objective.captureKey ?? `${ctx.world.mainByKey.get(battle.contested)!.center.q},${ctx.world.mainByKey.get(battle.contested)!.center.r}`;
+  const center = parseKey(key);
+  const out = new Set<HexKey>();
+  for (const c of spiral(center, battle.objective.captureRadius)) {
+    const k = hexKey(c);
+    if (ctx.cells.has(k)) out.add(k);
+  }
+  return out;
+}
+
+/** Attacker holds the capture zone when they have units there and the defender does not. */
+export function holdsCaptureZone(ctx: BattleContext, battle: Battle, team: Team): boolean {
+  if (battle.objective.kind !== 'capture_point') return false;
+  const zone = captureZoneCells(ctx, battle);
+  const mine = liveUnits(battle, team).some((u) => u.pos && zone.has(u.pos));
+  const theirs = liveUnits(battle, otherTeam(team)).some((u) => u.pos && zone.has(u.pos));
+  return mine && !theirs;
+}
 
 export type ActionResult = { ok: true; outcome?: AttackOutcome } | { ok: false; error: string };
 
@@ -64,6 +110,7 @@ export function createBattle(
     }
   }
   const warning = state.hexes[target]?.warning ?? 0;
+  const objective = resolveBattleObjective(state, target, world);
   const battle: Battle = {
     id: `battle-${state.nextId++}`,
     era: state.settings.era,
@@ -87,6 +134,8 @@ export function createBattle(
     warningTurns: warning,
     warnedPlacements: Math.min(WARNED_CAP.placements, warning * 2),
     warnedRange: Math.min(WARNED_CAP.range, warning * 3),
+    objective,
+    extracted: false,
     log: [],
     winner: null,
     endReason: null,
@@ -96,7 +145,10 @@ export function createBattle(
     `BATTLE for ${target}: ${TEAM_NAME[battle.attacker]} attacks from ${origin}. ` +
       (warning > 0
         ? `${TEAM_NAME[battle.defender]} had ${warning} turn(s) of warning — ${battle.warnedPlacements} warned fortification(s) within ${battle.warnedRange} MP.`
-        : `SURPRISE ATTACK — no warned-category preparation.`),
+        : `SURPRISE ATTACK — no warned-category preparation.`) +
+      (objective.kind === 'capture_point'
+        ? ` Capture point ${objective.captureKey} (r${objective.captureRadius}): hold it clear of defenders to SECURE or EXTRACT.`
+        : ''),
   );
   return battle;
 }
@@ -288,6 +340,42 @@ export function checkVictory(battle: Battle): void {
 export function retreat(battle: Battle, team: Team): ActionResult {
   if (battle.phase === 'over') return { ok: false, error: 'Battle already over' };
   finish(battle, otherTeam(team), `${TEAM_NAME[team]} withdrew from the field`);
+  return { ok: true };
+}
+
+/**
+ * Attacker reward for holding the capture zone: stay and claim the hex (fortify-in-place).
+ */
+export function secureObjective(ctx: BattleContext, battle: Battle): ActionResult {
+  if (battle.phase !== 'combat') return { ok: false, error: 'Battle not in combat' };
+  if (battle.active !== battle.attacker) return { ok: false, error: 'Only the attacker can secure' };
+  if (!holdsCaptureZone(ctx, battle, battle.attacker))
+    return { ok: false, error: 'Must hold the capture zone clear of defenders' };
+  finish(
+    battle,
+    battle.attacker,
+    `${TEAM_NAME[battle.attacker]} secured the capture point and fortified in place`,
+  );
+  return { ok: true };
+}
+
+/**
+ * Attacker reward for holding the capture zone: free extraction via the origin deploy hex.
+ * Survivors pull back to origin; the attacker still wins the contested hex.
+ */
+export function extractFromBattle(ctx: BattleContext, battle: Battle): ActionResult {
+  if (battle.phase !== 'combat') return { ok: false, error: 'Battle not in combat' };
+  if (battle.active !== battle.attacker) return { ok: false, error: 'Only the attacker can extract' };
+  if (!battle.objective.extractionAtOrigin)
+    return { ok: false, error: 'This map has no extraction zone' };
+  if (!holdsCaptureZone(ctx, battle, battle.attacker))
+    return { ok: false, error: 'Must hold the capture zone clear of defenders to extract' };
+  battle.extracted = true;
+  finish(
+    battle,
+    battle.attacker,
+    `${TEAM_NAME[battle.attacker]} extracted via ${battle.origin} after securing the capture point`,
+  );
   return { ok: true };
 }
 

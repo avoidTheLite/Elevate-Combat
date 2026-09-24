@@ -2,6 +2,7 @@ import type { BattleContext, GameState, Team } from '@iron-ridge/engine';
 import {
   TEAM_NAME,
   h,
+  holdsCaptureZone,
   liveUnits,
   poolLabel,
   previewAttack,
@@ -13,6 +14,10 @@ import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
 
 const DIR_NAMES = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
+
+function actedTitle(acted: boolean, fallback: string): string {
+  return acted ? 'Unit already acted this turn' : fallback;
+}
 
 export function TacticalSidebar({
   game,
@@ -86,8 +91,9 @@ export function TacticalSidebar({
           value={`α ${liveUnits(battle, 'A').length} · β ${liveUnits(battle, 'B').length}`}
         />
         <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-          Attacker must hold the orange hex with the defender cleared from it by the round limit, or
-          wipe out the defenders.
+          {battle.objective.kind === 'capture_point'
+            ? `Hold capture point ${battle.objective.captureKey} (r${battle.objective.captureRadius}) clear of defenders to SECURE or EXTRACT. Round limit still favours the defender if the zone is contested.`
+            : 'Attacker must hold the orange hex with the defender cleared from it by the round limit, or wipe out the defenders.'}
         </div>
       </Panel>
 
@@ -147,6 +153,7 @@ export function TacticalSidebar({
                         variant="ghost"
                         onClick={() => dispatch({ type: 'packUp', unitId: unit.id })}
                         disabled={unit.acted}
+                        title={actedTitle(unit.acted, 'Pack up to move again (spends the turn)')}
                       >
                         PACK UP
                       </Button>
@@ -155,6 +162,7 @@ export function TacticalSidebar({
                         size="sm"
                         onClick={() => dispatch({ type: 'setUp', unitId: unit.id })}
                         disabled={unit.acted}
+                        title={actedTitle(unit.acted, 'Set up to fire (combat_fixed)')}
                       >
                         SET UP
                       </Button>
@@ -164,6 +172,7 @@ export function TacticalSidebar({
                       size="sm"
                       onClick={() => dispatch({ type: 'dig', unitId: unit.id })}
                       disabled={unit.acted}
+                      title={actedTitle(unit.acted, 'Dig fortification on this cell')}
                     >
                       DIG IN
                     </Button>
@@ -175,7 +184,13 @@ export function TacticalSidebar({
                       dispatch({ type: 'rotate', unitId: unit.id, dir: unit.facing + 1 })
                     }
                     disabled={unit.acted || unit.mp < 1}
-                    title="Rotate facing (1 MP)"
+                    title={
+                      unit.acted
+                        ? 'Unit already acted this turn'
+                        : unit.mp < 1
+                          ? 'Needs 1 MP to rotate'
+                          : 'Rotate facing (1 MP)'
+                    }
                   >
                     ↺ FACE
                   </Button>
@@ -186,7 +201,13 @@ export function TacticalSidebar({
                       dispatch({ type: 'rotate', unitId: unit.id, dir: unit.facing + 5 })
                     }
                     disabled={unit.acted || unit.mp < 1}
-                    title="Rotate facing (1 MP)"
+                    title={
+                      unit.acted
+                        ? 'Unit already acted this turn'
+                        : unit.mp < 1
+                          ? 'Needs 1 MP to rotate'
+                          : 'Rotate facing (1 MP)'
+                    }
                   >
                     FACE ↻
                   </Button>
@@ -359,12 +380,39 @@ export function TacticalSidebar({
           </>
         ) : battle.phase === 'combat' ? (
           <>
+            {canAct &&
+              battle.active === battle.attacker &&
+              holdsCaptureZone(ctx, battle, battle.attacker) && (
+                <div className="flex gap-1 mb-1">
+                  <Button
+                    className="flex-1"
+                    onClick={() => dispatch({ type: 'secureObjective' })}
+                    title="Claim the hex and stay on the field (fortify in place)"
+                  >
+                    SECURE
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    variant="ghost"
+                    disabled={!battle.objective.extractionAtOrigin}
+                    title={
+                      battle.objective.extractionAtOrigin
+                        ? `Free extract to deploy hex ${battle.origin} — you still capture the contested hex`
+                        : 'This map has no extraction zone'
+                    }
+                    onClick={() => dispatch({ type: 'extract' })}
+                  >
+                    EXTRACT
+                  </Button>
+                </div>
+              )}
             <div className="flex gap-1">
               <Button className="flex-1" onClick={() => dispatch({ type: 'endBattleTurn' })}>
                 END TURN →
               </Button>
               <Button
                 variant="destructive"
+                title="Concede the field — the other side wins the hex"
                 onClick={() => {
                   if (window.confirm('Withdraw from the battle? The other side wins the hex.'))
                     dispatch({ type: 'retreat' });
@@ -375,6 +423,7 @@ export function TacticalSidebar({
             </div>
             <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
               Click a unit to select · blue = reachable · red = valid target · right-click deselect.
+              Illegal attacks show why in the error toast.
             </div>
           </>
         ) : (

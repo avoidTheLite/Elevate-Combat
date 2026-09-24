@@ -96,7 +96,9 @@ const STATS: Record<string, UnitStats> = {
     minRange: 2,
     maxRange: 6,
     profile: 'rifle_mg',
-    direct: pool(1, 6, 1),
+    // Slightly stronger than the first pass so first-strike remains meaningful once
+    // fort / suppression / facing apply to the volley TN (same as meleeStrike).
+    direct: pool(1, 6, 2),
     splash: null,
     splashRadius: 0,
     cost: 4,

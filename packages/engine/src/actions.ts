@@ -28,6 +28,8 @@ import {
   placeWarnedFort,
   retreat,
   rotateUnit,
+  secureObjective,
+  extractFromBattle,
   setUp,
 } from './tactical.ts';
 import type { GameState } from './types.ts';
@@ -52,6 +54,8 @@ export type GameAction =
   | { type: 'rotate'; unitId: string; dir: number }
   | { type: 'endBattleTurn' }
   | { type: 'retreat' }
+  | { type: 'secureObjective' }
+  | { type: 'extract' }
   | { type: 'concludeBattle' };
 
 export interface ApplyResult {
@@ -144,6 +148,12 @@ export function apply(prev: GameState, action: GameAction): ApplyResult {
       break;
     case 'retreat':
       res = battleAction(() => retreat(state.battle!, state.battle!.active));
+      break;
+    case 'secureObjective':
+      res = battleAction(() => secureObjective(contextFor(state), state.battle!));
+      break;
+    case 'extract':
+      res = battleAction(() => extractFromBattle(contextFor(state), state.battle!));
       break;
   }
 
