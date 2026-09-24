@@ -5,6 +5,8 @@
 // Team colour is the body; weapons are a neutral light metal.
 
 import * as THREE from 'three';
+import type { Era } from '@iron-ridge/engine';
+import { unitType } from '@iron-ridge/engine';
 
 export interface ModelOptions {
   color: number;
@@ -12,6 +14,7 @@ export interface ModelOptions {
 }
 
 const NEUTRAL = 0xdfe8ee; // weapons / metal
+const GOLD = 0xffcc33; // commander insignia (crown / star)
 /** Emissive share of the team colour — high, so units read as glowing light-forms. */
 const TEAM_GLOW = 0.6;
 
@@ -22,6 +25,7 @@ interface Kit {
   skin: THREE.Material;
   metal: THREE.Material;
   dark: THREE.Material;
+  gold: THREE.Material;
   edge: THREE.LineBasicMaterial;
 }
 
@@ -45,6 +49,7 @@ function makeKit(o: ModelOptions): Kit {
     skin: team,
     metal: lambert(NEUTRAL, o.opacity, 0.3),
     dark: team,
+    gold: lambert(GOLD, o.opacity, 0.55),
     edge: new THREE.LineBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -232,23 +237,49 @@ function archer(k: Kit): void {
   hands(k, f, [0.48, 0.3, 0], [0.12, 0.3, 0]);
 }
 
-function horseman(k: Kit): void {
-  const horse = new THREE.Group();
-  part(k, horse, box(0.56, 0.22, 0.26), k.light, [0, 0.34, 0], { edges: true, name: 'horse' });
-  part(k, horse, box(0.16, 0.24, 0.14), k.light, [0.3, 0.5, 0]); // neck + head
-  part(k, horse, box(0.18, 0.1, 0.13), k.light, [0.38, 0.58, 0]); // muzzle
+/** Boxy horse (faces +X), added to `parent`. */
+function horse(k: Kit, parent: THREE.Object3D, pos: V3 = [0, 0, 0], scale = 1): THREE.Group {
+  const h = new THREE.Group();
+  h.position.set(...pos);
+  h.scale.setScalar(scale);
+  part(k, h, box(0.56, 0.22, 0.26), k.light, [0, 0.34, 0], { edges: true, name: 'horse' });
+  part(k, h, box(0.16, 0.24, 0.14), k.light, [0.3, 0.5, 0]); // neck + head
+  part(k, h, box(0.18, 0.1, 0.13), k.light, [0.38, 0.58, 0]); // muzzle
   for (const [x, z] of [
     [0.2, 0.09],
     [0.2, -0.09],
     [-0.2, 0.09],
     [-0.2, -0.09],
   ] as const) {
-    part(k, horse, new THREE.CylinderGeometry(0.045, 0.045, 0.24, 6), k.dark, [x, 0.12, z]);
+    part(k, h, new THREE.CylinderGeometry(0.045, 0.045, 0.24, 6), k.dark, [x, 0.12, z]);
   }
-  k.root.add(horse);
-  const rider = figure(k, horse, { helmet: true, scale: 0.8, y: 0.44 });
+  parent.add(h);
+  return h;
+}
+
+/** Gold crown ring with points, sized for a figure's head. */
+function crown(k: Kit, parent: THREE.Object3D, y: number): void {
+  const c = new THREE.Group();
+  c.name = 'crown';
+  c.position.y = y;
+  part(k, c, new THREE.CylinderGeometry(0.13, 0.12, 0.07, 8, 1, true), k.gold, [0, 0, 0]);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    part(k, c, new THREE.ConeGeometry(0.035, 0.09, 4), k.gold, [
+      Math.cos(a) * 0.12,
+      0.075,
+      Math.sin(a) * 0.12,
+    ]);
+  }
+  parent.add(c);
+}
+
+function horseman(k: Kit, o: { crown?: boolean } = {}): void {
+  const h = horse(k, k.root);
+  const rider = figure(k, h, { helmet: !o.crown, scale: 0.8, y: 0.44 });
   part(k, rider, barrelGeo(0.016, 0.7), k.metal, [0.05, 0.28, 0.14], { name: 'weapon' }); // lance
   hands(k, rider, [0.12, 0.28, 0.14]);
+  if (o.crown) crown(k, rider, 0.66);
 }
 
 // ── Vehicles & guns ──
@@ -336,4 +367,141 @@ export function buildUnitModel(typeId: string, o: ModelOptions): THREE.Group {
   (BUILDERS[typeId] ?? ((kit: Kit) => rifleman(kit)))(k);
   k.root.name = typeId;
   return k.root;
+}
+
+// ── Army commander clusters (strategic map) ──────────────────────────────────
+
+export type ArmyCategory = 'infantry' | 'armor' | 'artillery' | 'cavalry';
+
+export function armyCategory(typeId: string): ArmyCategory {
+  const t = unitType(typeId);
+  if (t.unitClass === 'cavalry') return 'cavalry';
+  if (t.attackType === 'indirect') return 'artillery';
+  if (t.unitClass === 'vehicle') return 'armor';
+  return 'infantry';
+}
+
+export const MAX_ESCORTS = 3;
+
+/**
+ * Which unit models escort the commander: a reduced, representative sample.
+ * Each category present gets one slot (its most common type), biggest category
+ * first; leftover slots go to the next most common types, so a pure-infantry
+ * army still shows variety (e.g. rifle + MG + bazooka) rather than clones.
+ */
+export function armyEscorts(typeIds: string[]): string[] {
+  const count = new Map<string, number>();
+  for (const id of typeIds) count.set(id, (count.get(id) ?? 0) + 1);
+  // Most common first; ties broken by roster order for stability.
+  const types = [...count.keys()].sort(
+    (a, b) => count.get(b)! - count.get(a)! || typeIds.indexOf(a) - typeIds.indexOf(b),
+  );
+  const byCategory = new Map<ArmyCategory, number>();
+  for (const id of typeIds)
+    byCategory.set(armyCategory(id), (byCategory.get(armyCategory(id)) ?? 0) + 1);
+  const categories = [...byCategory.keys()].sort((a, b) => byCategory.get(b)! - byCategory.get(a)!);
+
+  const picks: string[] = [];
+  for (const c of categories) {
+    const rep = types.find((id) => armyCategory(id) === c);
+    if (rep && picks.length < MAX_ESCORTS) picks.push(rep);
+  }
+  for (const id of types) {
+    if (picks.length >= MAX_ESCORTS) break;
+    if (!picks.includes(id)) picks.push(id);
+  }
+  return picks;
+}
+
+function starGeo(outer: number, inner: number, depth: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  g.rotateX(-Math.PI / 2); // lie flat, face up
+  return g;
+}
+
+/** Half-cylinder canvas cover (dome up), axis along X. */
+function coverGeo(radius: number, length: number): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(radius, radius, length, 8, 1, false, 0, Math.PI);
+  g.rotateZ(Math.PI / 2);
+  return g;
+}
+
+/** WW2 command vehicle: covered truck with a gold star on the hood. */
+function commandTruck(k: Kit, parent: THREE.Object3D): void {
+  const t = new THREE.Group();
+  t.name = 'commander';
+  part(k, t, box(0.18, 0.14, 0.36), k.body, [0.5, 0.24, 0], { name: 'hood' });
+  part(k, t, box(0.24, 0.3, 0.4), k.body, [0.3, 0.32, 0], { name: 'cab' });
+  part(k, t, box(0.56, 0.1, 0.42), k.body, [-0.12, 0.22, 0], { name: 'bed' });
+  part(k, t, coverGeo(0.21, 0.56), k.body, [-0.12, 0.27, 0], { name: 'cover' });
+  for (const x of [0.42, -0.22])
+    for (const z of [0.22, -0.22]) part(k, t, wheelGeo(0.11, 0.07), k.dark, [x, 0.11, z]);
+  const star = part(k, t, starGeo(0.1, 0.042, 0.015), k.gold, [0.5, 0.315, 0], { name: 'star' });
+  star.rotation.y = -Math.PI / 2; // one point toward the front
+  parent.add(t);
+}
+
+/** Medieval baggage: a covered horse-cart. */
+function horseCart(k: Kit, parent: THREE.Object3D, pos: V3): void {
+  const c = new THREE.Group();
+  c.name = 'cart';
+  c.position.set(...pos);
+  part(k, c, box(0.46, 0.08, 0.34), k.body, [0, 0.24, 0], { name: 'bed' });
+  part(k, c, coverGeo(0.17, 0.46), k.body, [0, 0.28, 0], { name: 'cover' });
+  for (const z of [0.2, -0.2]) part(k, c, wheelGeo(0.14, 0.05), k.dark, [-0.02, 0.14, z]);
+  for (const z of [0.08, -0.08]) part(k, c, barrelGeo(0.015, 0.36), k.body, [0.23, 0.22, z]); // shafts
+  horse(k, c, [0.62, 0, 0], 0.75);
+  parent.add(c);
+}
+
+/**
+ * Strategic army token: commander (+ baggage) and a small escort sample.
+ * Faces +X; the scene turns it toward the enemy.
+ */
+export function buildArmyModel(era: Era, typeIds: string[], o: ModelOptions): THREE.Group {
+  const k = makeKit(o);
+  if (era === 'ww2') {
+    const truck = new THREE.Group();
+    truck.position.x = -0.25;
+    commandTruck(makeKitFrom(k, truck), truck);
+    k.root.add(truck);
+  } else {
+    horseCart(k, k.root, [-0.55, 0, 0.2]);
+    const cmd = new THREE.Group();
+    cmd.name = 'commander';
+    cmd.position.set(0.1, 0, -0.25);
+    const sub = makeKitFrom(k, cmd);
+    horseman(sub, { crown: true });
+    k.root.add(cmd);
+  }
+  // Escorts in a loose arc ahead of the commander.
+  const slots: V3[] = [
+    [1.1, 0, -0.7],
+    [1.35, 0, 0.12],
+    [1.0, 0, 0.9],
+  ];
+  armyEscorts(typeIds).forEach((id, i) => {
+    const e = buildUnitModel(id, o);
+    e.name = 'escort';
+    e.position.set(...slots[i]!);
+    e.scale.setScalar(0.72);
+    k.root.add(e);
+  });
+  k.root.name = 'army';
+  return k.root;
+}
+
+/** Same materials, different root (so a sub-model can be positioned as a group). */
+function makeKitFrom(k: Kit, root: THREE.Group): Kit {
+  return { ...k, root };
 }

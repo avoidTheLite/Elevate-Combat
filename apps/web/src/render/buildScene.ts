@@ -10,6 +10,7 @@ import {
   edgeSegment,
   generateTerrain,
   hexKey,
+  hexToWorld,
   lineOfSight,
   liveUnits,
   mainBoundary,
@@ -97,6 +98,13 @@ export function mainOutline(
 }
 
 const OUTLINE_LIFT = 0.03;
+
+/** Local-frame heading from one sub-hex to another (see TokenSpec.yaw). */
+function yawToward(from: { q: number; r: number }, to: { q: number; r: number }): number {
+  const a = hexToWorld(from);
+  const b = hexToWorld(to);
+  return Math.atan2(b.z - a.z, b.x - a.x);
+}
 
 export function buildStrategicScene(
   game: GameState,
@@ -210,6 +218,8 @@ export function buildStrategicScene(
       selected: a.id === ui.selectedArmy,
       spent: a.team === game.active && a.movesLeft === 0,
       ready: a.team === game.active && a.movesLeft > 0,
+      army: { era: game.settings.era, units: a.units.map((u) => u.typeId) },
+      yaw: yawToward(m.center, world.mainByKey.get(game.hq[a.team === 'A' ? 'B' : 'A'])!.center),
       scale: tokenScale,
     });
   }

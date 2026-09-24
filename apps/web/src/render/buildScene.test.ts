@@ -231,4 +231,23 @@ describe('scene building', () => {
       }
     });
   });
+
+  it('strategic armies carry their roster and face the enemy HQ', () => {
+    const s = createGame({
+      ...defaultSettings(),
+      grid: { mainCols: 5, mainRows: 3, subRadius: 3 },
+    });
+    const tokens = buildStrategicScene(s, UI, null).tokens.filter((t) => t.kind === 'army');
+    expect(tokens).toHaveLength(2);
+    for (const t of tokens) {
+      const a = s.armies.find((x) => x.id === t.id)!;
+      expect(t.army).toEqual({ era: 'ww2', units: a.units.map((u) => u.typeId) });
+    }
+    // Alpha (west) and Bravo (east) face roughly opposite ways.
+    const [ya, yb] = [
+      tokens.find((t) => t.team === 'A')!.yaw!,
+      tokens.find((t) => t.team === 'B')!.yaw!,
+    ];
+    expect(Math.abs(Math.cos(ya - yb) + 1)).toBeLessThan(0.3);
+  });
 });

@@ -25,7 +25,7 @@ import {
 import type { AttackFx } from './effects.ts';
 import type { ActiveEffect, FxEnv } from './fx.ts';
 import { createAttackEffects } from './fx.ts';
-import { buildUnitModel, hasUnitModel } from './unitModels.ts';
+import { buildArmyModel, buildUnitModel, hasUnitModel } from './unitModels.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
 
@@ -53,6 +53,8 @@ const TOKEN_LINGER = 1.3;
 const TOKEN_FADE = 0.45;
 /** Unit models are authored ~0.65 tall; scale them up to read at tactical zoom. */
 const UNIT_MODEL_SCALE = 1.3;
+/** Army clusters span ~2 units before scaling; keep them inside their main hex. */
+const ARMY_MODEL_SCALE = 1.15;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -525,7 +527,13 @@ export class HexScene {
   private makeBody(t: TokenSpec): THREE.Group {
     const color = TEAM_COLOR[t.team];
     const g = new THREE.Group();
-    if (t.model && hasUnitModel(t.model)) {
+    if (t.army) {
+      // Commander cluster: command vehicle / mounted commander + escort sample.
+      const model = buildArmyModel(t.army.era, t.army.units, { color, opacity: t.spent ? 0.5 : 1 });
+      model.rotation.y = -(t.yaw ?? 0);
+      model.scale.setScalar(ARMY_MODEL_SCALE);
+      g.add(model);
+    } else if (t.model && hasUnitModel(t.model)) {
       // Detailed unit model; its own shape shows which way it faces.
       const model = buildUnitModel(t.model, { color, opacity: t.spent ? 0.5 : 1 });
       const d = hexToWorld(DIRECTIONS[t.facing ?? 0]!);
@@ -591,7 +599,7 @@ export class HexScene {
     for (const t of tokens) {
       seen.add(t.id);
       const pos = this.cellPos(t.key);
-      const sig = `${t.kind}|${t.model}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
+      const sig = `${t.kind}|${t.model}|${t.army?.units.join(',')}|${t.yaw?.toFixed(2)}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
       let obj = this.tokens.get(t.id);
       if (!obj) {
         const group = new THREE.Group();
