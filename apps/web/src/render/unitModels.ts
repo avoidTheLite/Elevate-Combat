@@ -501,6 +501,91 @@ export function buildArmyModel(era: Era, typeIds: string[], o: ModelOptions): TH
   return k.root;
 }
 
+// ── HQ buildings ──
+// Authored in world units at scale 1 (not token-scaled): they sit inside the HQ
+// wall, whose corners are the neighbouring cell centres (~1.7 from the middle).
+
+/** Pitched-roof prism, ridge along Z, with closed (boxed) gable ends; eaves at y = 0. */
+function gableRoofGeo(width: number, rise: number, length: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, 0);
+  shape.lineTo(width / 2, 0);
+  shape.lineTo(0, rise);
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
+  g.translate(0, 0, -length / 2);
+  return g;
+}
+
+/** WW2 HQ: two Quonset-hut barracks and a gabled command building. */
+function ww2Hq(k: Kit): void {
+  for (const z of [-0.5, 0.5]) {
+    const hut = new THREE.Group();
+    hut.name = 'barracks';
+    hut.position.set(-0.35, 0, z);
+    part(k, hut, coverGeo(0.26, 0.9), k.body, [0, 0, 0], { name: 'hut' });
+    part(k, hut, box(0.04, 0.16, 0.12), k.metal, [0.46, 0.08, 0], { name: 'door' });
+    k.root.add(hut);
+  }
+  const hall = new THREE.Group();
+  hall.name = 'command';
+  hall.position.set(0.55, 0, 0);
+  part(k, hall, box(0.5, 0.34, 0.8), k.body, [0, 0.17, 0], { name: 'hall' });
+  part(k, hall, gableRoofGeo(0.62, 0.24, 0.92), k.body, [0, 0.34, 0], { name: 'roof' });
+  part(k, hall, box(0.04, 0.18, 0.14), k.metal, [0.26, 0.09, 0], { name: 'door' });
+  k.root.add(hall);
+}
+
+/** Medieval HQ: square keep — four corner towers, curtain walls, drawbridge gate at +X. */
+function medievalHq(k: Kit): void {
+  const half = 0.55;
+  const wallH = 0.4;
+  const thick = 0.1;
+  for (const x of [-half, half])
+    for (const z of [-half, half]) {
+      part(k, k.root, new THREE.CylinderGeometry(0.15, 0.17, 0.62, 8), k.body, [x, 0.31, z], {
+        name: 'tower',
+      });
+      part(k, k.root, new THREE.ConeGeometry(0.19, 0.22, 8), k.body, [x, 0.73, z], {
+        name: 'spire',
+      });
+    }
+  const len = 2 * half;
+  part(k, k.root, box(thick, wallH, len), k.body, [-half, wallH / 2, 0], { name: 'wall' });
+  part(k, k.root, box(len, wallH, thick), k.body, [0, wallH / 2, -half], { name: 'wall' });
+  part(k, k.root, box(len, wallH, thick), k.body, [0, wallH / 2, half], { name: 'wall' });
+  // Front wall: two stubs either side of the gate, a lintel above it.
+  const gate = 0.3;
+  const stub = (len - gate) / 2;
+  for (const s of [-1, 1])
+    part(k, k.root, box(thick, wallH, stub), k.body, [half, wallH / 2, (s * (gate + stub)) / 2], {
+      name: 'wall',
+    });
+  part(k, k.root, box(thick, wallH - 0.26, gate), k.body, [half, 0.26 + (wallH - 0.26) / 2, 0], {
+    name: 'lintel',
+  });
+  // Lowered drawbridge with its chains.
+  part(k, k.root, box(0.36, 0.03, gate - 0.04), k.metal, [half + 0.2, 0.015, 0], {
+    name: 'drawbridge',
+    edges: true,
+  });
+  for (const z of [-1, 1]) {
+    const chain = part(k, k.root, barrelGeo(0.01, 0.43), k.metal, [half + 0.36, 0.03, z * 0.12], {
+      name: 'chain',
+    });
+    chain.rotation.z = Math.PI - Math.atan2(0.23, 0.36); // up and back to the gate top
+  }
+}
+
+/** Strategic HQ building for the era. Faces +X (gate / command door). */
+export function buildHqModel(era: Era, o: ModelOptions): THREE.Group {
+  const k = makeKit(o);
+  if (era === 'ww2') ww2Hq(k);
+  else medievalHq(k);
+  k.root.name = 'hq';
+  return k.root;
+}
+
 /** Same materials, different root (so a sub-model can be positioned as a group). */
 function makeKitFrom(k: Kit, root: THREE.Group): Kit {
   return { ...k, root };

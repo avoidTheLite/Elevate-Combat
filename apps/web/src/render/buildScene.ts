@@ -191,13 +191,15 @@ export function buildStrategicScene(
         kind: 'hq',
         team,
         label: `◈ ${team === 'A' ? 'ALPHA' : 'BRAVO'} HQ`,
+        era: game.settings.era,
+        yaw: yawToward(hq.center, world.mainByKey.get(game.hq[team === 'A' ? 'B' : 'A'])!.center),
         scale: tokenScale,
       });
   }
   const armies = view ? visibleArmies(game, view) : game.armies;
   for (const a of armies) {
     const m = world.mainByKey.get(a.at)!;
-    // Offset from the centre so the HQ beacon and army token don't overlap.
+    // Offset from the centre so the HQ and army token don't overlap.
     let spotHex = m.center;
     for (let i = 0; i < Math.max(1, game.settings.grid.subRadius - 1); i++)
       spotHex = neighbor(spotHex, 4);

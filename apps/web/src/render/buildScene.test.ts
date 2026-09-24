@@ -232,6 +232,18 @@ describe('scene building', () => {
     });
   });
 
+  it('HQs carry the era and face the enemy HQ', () => {
+    const s = createGame({
+      ...defaultSettings(),
+      grid: { mainCols: 5, mainRows: 3, subRadius: 3 },
+    });
+    const hqs = buildStrategicScene(s, UI, null).tokens.filter((t) => t.kind === 'hq');
+    expect(hqs).toHaveLength(2);
+    for (const t of hqs) expect(t.era).toBe('ww2');
+    const [ya, yb] = [hqs.find((t) => t.team === 'A')!.yaw!, hqs.find((t) => t.team === 'B')!.yaw!];
+    expect(Math.abs(Math.cos(ya - yb) + 1)).toBeLessThan(0.3);
+  });
+
   it('strategic armies carry their roster and face the enemy HQ', () => {
     const s = createGame({
       ...defaultSettings(),

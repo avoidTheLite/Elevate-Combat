@@ -5,6 +5,7 @@ import {
   MAX_ESCORTS,
   armyEscorts,
   buildArmyModel,
+  buildHqModel,
   buildUnitModel,
   hasUnitModel,
 } from './unitModels.ts';
@@ -196,5 +197,39 @@ describe('army commander clusters', () => {
       colours.delete(team);
       expect([...colours].sort()).toEqual([0xdfe8ee, 0xffcc33].sort());
     }
+  });
+});
+
+describe('HQ buildings', () => {
+  const hq = (era: 'ww2' | 'medieval'): THREE.Group =>
+    buildHqModel(era, { color: 0x00f0ff, opacity: 1 });
+
+  it('WW2: two half-cylinder barracks and a gabled command building', () => {
+    const g = hq('ww2');
+    const huts = named(g, 'hut');
+    expect(huts).toHaveLength(2);
+    for (const h of huts) {
+      const p = h.geometry as THREE.CylinderGeometry;
+      expect(p.type).toBe('CylinderGeometry');
+      expect(p.parameters.thetaLength).toBeCloseTo(Math.PI);
+    }
+    expect(named(g, 'hall')).toHaveLength(1);
+    expect(named(g, 'roof')[0]!.geometry.type).toBe('ExtrudeGeometry');
+  });
+
+  it('Medieval: four towers, curtain walls and a drawbridge gate', () => {
+    const g = hq('medieval');
+    expect(named(g, 'tower')).toHaveLength(4);
+    expect(named(g, 'wall').length).toBeGreaterThanOrEqual(4);
+    expect(named(g, 'drawbridge')).toHaveLength(1);
+    // The drawbridge lies outside the front (+X) wall.
+    const wallX = Math.max(...named(g, 'tower').map((t) => t.position.x));
+    expect(named(g, 'drawbridge')[0]!.position.x).toBeGreaterThan(wallX);
+  });
+
+  it.each(['ww2', 'medieval'] as const)('%s fits inside the HQ wall', (era) => {
+    const b = new THREE.Box3().setFromObject(hq(era));
+    // Wall faces are ~1.5 from the centre (apothem of the ring-centre hexagon).
+    for (const v of [b.min.x, b.max.x, b.min.z, b.max.z]) expect(Math.abs(v)).toBeLessThan(1.3);
   });
 });

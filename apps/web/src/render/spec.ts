@@ -35,11 +35,13 @@ export interface TokenSpec {
   facing?: number;
   /** Unit type id — selects the detailed unit model (tactical units). */
   model?: string;
+  /** HQ: era selects the building model. */
+  era?: Era;
   /** Strategic army: era + unit roster, rendered as a commander cluster. */
   army?: { era: Era; units: string[] };
   /** Heading in the world group's local frame (radians, atan2(z, x)); 0 = +X. */
   yaw?: number;
-  /** Can still act this turn (glow). Undefined = always glow (HQ beacons). */
+  /** Can still act this turn (glow). Undefined = always glow (HQs). */
   ready?: boolean;
   selected?: boolean;
   spent?: boolean;
