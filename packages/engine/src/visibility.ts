@@ -1,7 +1,7 @@
 // ── Fog of war / spotting ────────────────────────────────────────────────────
 // A team sees a cell if any of its units is within vision range and has LOS.
-// High ground extends vision (+1 per 3 levels) — and because LOS is symmetric,
-// elevated units are also seen from further away (mutual exposure).
+// High ground extends the *viewer's* vision (+1 per 3 levels) as a one-way FOW
+// advantage — elevated units are not automatically more exposed.
 
 import type { HexKey } from './hex.ts';
 import { hexDistance, parseKey, spiral, hexKey } from './hex.ts';
@@ -47,5 +47,9 @@ export function visibleEnemies(ctx: BattleContext, battle: Battle, team: Team): 
 
 /** Is `target` spotted for indirect fire by any friendly unit (including the shooter)? */
 export function isSpotted(ctx: BattleContext, battle: Battle, team: Team, target: HexKey): boolean {
-  return liveUnits(battle, team).some((u) => canSee(ctx, u, target));
+  if (liveUnits(battle, team).some((u) => canSee(ctx, u, target))) return true;
+  // A unit that just fired stays revealed — that revelation also spots its hex for HE.
+  return liveUnits(battle).some(
+    (u) => u.team !== team && u.revealed && u.pos === target && u.hp > 0,
+  );
 }

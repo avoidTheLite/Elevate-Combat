@@ -33,6 +33,20 @@ import { TEAM_COLOR, topY } from './spec.ts';
 const ISO_ELEVATION = Math.atan(1 / Math.SQRT2); // 35.264°
 const STATUS_COLOR = { clear: 0x33ff88, marginal: 0xffb020, blocked: 0xff3344 } as const;
 
+/** Dispose geometries and materials under a subtree (unique materials once). */
+function disposeObject3D(root: THREE.Object3D): void {
+  const mats = new Set<THREE.Material>();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material;
+    if (!mat) return;
+    if (Array.isArray(mat)) mat.forEach((x) => mats.add(x));
+    else mats.add(mat);
+  });
+  for (const mat of mats) mat.dispose();
+}
+
 export interface SceneHandlers {
   onHover?: (key: string | null) => void;
   onClick?: (key: string, button: number) => void;
@@ -325,12 +339,35 @@ export class HexScene {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
-    this.renderer.dispose();
+    this.clearEffects();
+    for (const id of [...this.tokens.keys()]) this.removeToken(id);
+    if (this.overlayMesh) {
+      this.world.remove(this.overlayMesh);
+      disposeObject3D(this.overlayMesh);
+      this.overlayMesh = null;
+    }
+    if (this.fortMesh) {
+      this.world.remove(this.fortMesh);
+      disposeObject3D(this.fortMesh);
+      this.fortMesh = null;
+    }
+    for (const child of [...this.borderGroup.children]) {
+      this.borderGroup.remove(child);
+      disposeObject3D(child);
+    }
+    for (const mat of this.lineMaterials) mat.dispose();
+    this.lineMaterials = [];
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
+      const mat = m.material;
+      if (mat) {
+        if (Array.isArray(mat)) mat.forEach((x) => x.dispose?.());
+        else (mat as THREE.Material).dispose?.();
+      }
     });
-    this.container.innerHTML = '';
+    this.renderer.dispose();
+    this.container.replaceChildren();
   }
 
   // ── Terrain ──
@@ -442,7 +479,7 @@ export class HexScene {
   private buildOverlays(spec: SceneSpec): void {
     if (this.overlayMesh) {
       this.world.remove(this.overlayMesh);
-      this.overlayMesh.geometry.dispose();
+      disposeObject3D(this.overlayMesh);
       this.overlayMesh = null;
     }
     const list = spec.overlays.filter((o) => this.cellIndex.has(o.key));
@@ -472,7 +509,7 @@ export class HexScene {
   private buildForts(cells: CellSpec[]): void {
     if (this.fortMesh) {
       this.world.remove(this.fortMesh);
-      this.fortMesh.geometry.dispose();
+      disposeObject3D(this.fortMesh);
       this.fortMesh = null;
     }
     const list = cells.filter((c) => (c.fort ?? 0) > 0);
@@ -493,8 +530,9 @@ export class HexScene {
   private buildBorders(spec: SceneSpec): void {
     for (const child of [...this.borderGroup.children]) {
       this.borderGroup.remove(child);
-      (child as LineSegments2).geometry.dispose();
+      disposeObject3D(child);
     }
+    for (const mat of this.lineMaterials) mat.dispose();
     this.lineMaterials = [];
     for (const layer of spec.borders) {
       if (!layer.segments.length) continue;
@@ -624,6 +662,7 @@ export class HexScene {
       }
       if (obj.kindSig !== sig) {
         obj.group.remove(obj.body);
+        disposeObject3D(obj.body);
         obj.body = this.makeBody(t);
         obj.still = obj.body.getObjectByName('hq-wall');
         obj.group.add(obj.body);
@@ -633,14 +672,14 @@ export class HexScene {
       const s = t.scale ?? 1;
       obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 1.6 : 1.25) * s, 0);
       const teamHex = `#${TEAM_COLOR[t.team].toString(16).padStart(6, '0')}`;
-      const hp =
-        t.hpFrac !== undefined
-          ? `<div class="ir-hp"><div style="width:${Math.round(t.hpFrac * 100)}%;background:${t.hpFrac > 0.5 ? '#33ff88' : t.hpFrac > 0.25 ? '#ffb020' : '#ff3344'}"></div></div>`
-          : '';
-      obj.labelEl.innerHTML =
-        `<div class="ir-name" style="color:${teamHex};${t.selected ? 'outline:1px solid #ffff44;' : ''}">${t.label}${t.badge ? ` <span class="ir-badge">${t.badge}</span>` : ''}</div>` +
-        (t.sub ? `<div class="ir-sub">${t.sub}</div>` : '') +
-        hp;
+      setTokenLabel(obj.labelEl, {
+        name: t.label,
+        badge: t.badge,
+        sub: t.sub,
+        teamHex,
+        selected: !!t.selected,
+        hpFrac: t.hpFrac,
+      });
       obj.labelEl.style.opacity = t.spent ? '0.55' : '1';
     }
     for (const [id, obj] of this.tokens) {
@@ -656,6 +695,7 @@ export class HexScene {
     if (!obj) return;
     obj.group.remove(obj.label);
     obj.labelEl.remove();
+    disposeObject3D(obj.body);
     this.tokenGroup.remove(obj.group);
     this.tokens.delete(id);
   }
@@ -919,5 +959,49 @@ export class HexScene {
       this.hoverRing.visible = false;
       this.handlers.onHover?.(null);
     });
+  }
+}
+
+/** Build token label DOM without innerHTML (labels come from persisted game state). */
+function setTokenLabel(
+  el: HTMLDivElement,
+  opts: {
+    name: string;
+    badge?: string;
+    sub?: string;
+    teamHex: string;
+    selected: boolean;
+    hpFrac?: number;
+  },
+): void {
+  el.replaceChildren();
+  const name = document.createElement('div');
+  name.className = 'ir-name';
+  name.style.color = opts.teamHex;
+  if (opts.selected) name.style.outline = '1px solid #ffff44';
+  name.textContent = opts.name;
+  if (opts.badge) {
+    name.appendChild(document.createTextNode(' '));
+    const badge = document.createElement('span');
+    badge.className = 'ir-badge';
+    badge.textContent = opts.badge;
+    name.appendChild(badge);
+  }
+  el.appendChild(name);
+  if (opts.sub) {
+    const sub = document.createElement('div');
+    sub.className = 'ir-sub';
+    sub.textContent = opts.sub;
+    el.appendChild(sub);
+  }
+  if (opts.hpFrac !== undefined) {
+    const hp = document.createElement('div');
+    hp.className = 'ir-hp';
+    const bar = document.createElement('div');
+    bar.style.width = `${Math.round(opts.hpFrac * 100)}%`;
+    bar.style.background =
+      opts.hpFrac > 0.5 ? '#33ff88' : opts.hpFrac > 0.25 ? '#ffb020' : '#ff3344';
+    hp.appendChild(bar);
+    el.appendChild(hp);
   }
 }

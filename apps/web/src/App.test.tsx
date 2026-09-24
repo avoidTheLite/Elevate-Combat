@@ -55,12 +55,22 @@ describe('App – game start flow', () => {
     expect(useGameStore.getState().game!.active).toBe('A');
   });
 
-  it('MENU returns to setup and CONTINUE restores the autosave', async () => {
+  it('MENU opens quit dialog; Save & Quit keeps CONTINUE', async () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /save & quit/i }));
     fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
     expect(await screen.findByRole('button', { name: /end turn/i })).toBeInTheDocument();
+  });
+
+  it('Abandon clears the autosave so CONTINUE disappears', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /abandon/i }));
+    expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start new game/i })).toBeInTheDocument();
   });
 });
 

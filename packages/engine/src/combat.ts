@@ -446,17 +446,11 @@ function faceToward(u: BattleUnit, target: HexKey): void {
   if (u.pos && u.pos !== target) u.facing = bestFacing(u.pos, target);
 }
 
-/** A single melee strike (no reactions). */
-function meleeStrike(
-  rng: Rng,
-  battle: Battle,
-  log: BattleLogEntry[],
+function meleePointBlank(
   striker: BattleUnit,
   victim: BattleUnit,
-  bonus: number,
-  tag: string,
-): number {
-  const st = unitType(striker.typeId);
+  battle: Battle,
+): { tn: number; facingDmg: number } {
   const vt = unitType(victim.typeId);
   let tn = BASE_TN[vt.armorClass] - 5; // point-blank
   let facingDmg = 0;
@@ -468,6 +462,21 @@ function meleeStrike(
   const fort = victim.pos ? (battle.forts[victim.pos] ?? 0) : 0;
   tn += fort;
   if (striker.suppressed) tn += 2;
+  return { tn, facingDmg };
+}
+
+/** A single melee strike (no reactions). */
+function meleeStrike(
+  rng: Rng,
+  battle: Battle,
+  log: BattleLogEntry[],
+  striker: BattleUnit,
+  victim: BattleUnit,
+  bonus: number,
+  tag: string,
+): number {
+  const st = unitType(striker.typeId);
+  const { tn, facingDmg } = meleePointBlank(striker, victim, battle);
   const roll = rng.die(20);
   const hit = roll !== 1 && (roll === 20 || roll >= tn);
   push(
@@ -674,8 +683,7 @@ function meleeLikeVolley(
   archer: BattleUnit,
   target: BattleUnit,
 ): number {
-  const tt = unitType(target.typeId);
-  const tn = BASE_TN[tt.armorClass] - 5;
+  const { tn, facingDmg } = meleePointBlank(archer, target, battle);
   const roll = rng.die(20);
   const hit = roll !== 1 && (roll === 20 || roll >= tn);
   push(
@@ -689,7 +697,7 @@ function meleeLikeVolley(
     attacker: archer,
     defender: target,
     pool: unitType(archer.typeId).direct,
-    facingDmg: 0,
+    facingDmg,
     bonus: 0,
     tag: 'Volley',
   });

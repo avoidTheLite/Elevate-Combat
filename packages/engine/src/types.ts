@@ -61,6 +61,22 @@ export interface BattleLogEntry {
   kind: 'info' | 'hit' | 'miss' | 'kill' | 'system';
 }
 
+/** Map/scenario battle objective — chosen when the campaign is seeded. */
+export type BattleObjectiveKind = 'hold_contested' | 'capture_point';
+
+export interface BattleObjective {
+  kind: BattleObjectiveKind;
+  /**
+   * Sub-hex of the designated capture point. When omitted, the contested main-hex
+   * centre is used. Future maps can place this anywhere on the battle footprint.
+   */
+  captureKey?: HexKey;
+  /** Extra ring around the capture point that must be clear of defenders. */
+  captureRadius: number;
+  /** Attacker origin main-hex is the extraction zone for a successful pull-out. */
+  extractionAtOrigin: boolean;
+}
+
 export interface Battle {
   id: string;
   era: Era;
@@ -86,6 +102,10 @@ export interface Battle {
   /** Warned-category fortifications the defender may still place during deployment. */
   warnedPlacements: number;
   warnedRange: number;
+  /** Resolved objective for this battle (from settings / map seed). */
+  objective: BattleObjective;
+  /** Attacker chose EXTRACT after securing the capture point — survivors return to origin. */
+  extracted: boolean;
   log: BattleLogEntry[];
   winner: Team | null;
   endReason: string | null;
@@ -108,6 +128,8 @@ export interface GameSettings {
   controllers: Record<Team, Controller>;
   fog: boolean;
   battleRounds: number;
+  /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
+  battleObjective?: Partial<BattleObjective>;
 }
 
 export interface StrategicLogEntry {

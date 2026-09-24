@@ -36,7 +36,9 @@ export function GameScreen(): React.ReactElement {
   const handoff = useGameStore((s) => s.handoff);
   const aiSpeed = useGameStore((s) => s.aiSpeed);
   const fx = useGameStore((s) => s.fx);
-  const { setUi, aiTick, clearError, dismissHandoff, quit, setAiSpeed } = useGameStore.getState();
+  const quitPrompt = useGameStore((s) => s.quitPrompt);
+  const { setUi, aiTick, clearError, dismissHandoff, requestQuit, setAiSpeed } =
+    useGameStore.getState();
   const [help, setHelp] = useState(false);
 
   const view = viewTeam(game);
@@ -222,7 +224,7 @@ export function GameScreen(): React.ReactElement {
           <Button size="sm" variant="ghost" onClick={() => setHelp(true)}>
             ? HELP
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => quit()}>
+          <Button size="sm" variant="ghost" onClick={() => requestQuit()}>
             MENU
           </Button>
         </div>
@@ -284,7 +286,33 @@ export function GameScreen(): React.ReactElement {
         </Overlay>
       )}
       {help && <Help onClose={() => setHelp(false)} />}
+      {quitPrompt && <QuitDialog />}
     </div>
+  );
+}
+
+function QuitDialog(): React.ReactElement {
+  const cancelQuit = useGameStore((s) => s.cancelQuit);
+  const saveAndQuit = useGameStore((s) => s.saveAndQuit);
+  const abandon = useGameStore((s) => s.abandon);
+  return (
+    <Overlay>
+      <div className="text-lg font-bold tracking-widest">LEAVE CAMPAIGN?</div>
+      <div className="text-xs text-[hsl(var(--muted-foreground))] leading-4">
+        Save &amp; Quit keeps CONTINUE on the setup screen. Abandon deletes the autosave.
+      </div>
+      <div className="flex flex-wrap gap-2 justify-center">
+        <Button size="lg" onClick={() => saveAndQuit()}>
+          SAVE &amp; QUIT
+        </Button>
+        <Button size="lg" variant="destructive" onClick={() => abandon()}>
+          ABANDON
+        </Button>
+        <Button size="lg" variant="ghost" onClick={() => cancelQuit()}>
+          CANCEL
+        </Button>
+      </div>
+    </Overlay>
   );
 }
 
@@ -356,15 +384,18 @@ function BattleOver({ game }: { game: GameState }): React.ReactElement {
 }
 
 function GameOver({ game }: { game: GameState }): React.ReactElement {
-  const quit = useGameStore((s) => s.quit);
+  const abandon = useGameStore((s) => s.abandon);
   const last = game.log[game.log.length - 1];
+  const draw = game.winner === null;
   return (
     <Overlay>
-      <div className={`text-2xl font-bold tracking-widest ${teamClass(game.winner!)}`}>
-        ★ {TEAM_NAME[game.winner!]} WINS
+      <div
+        className={`text-2xl font-bold tracking-widest ${draw ? 'text-[hsl(var(--muted-foreground))]' : teamClass(game.winner!)}`}
+      >
+        {draw ? '★ DRAW' : `★ ${TEAM_NAME[game.winner!]} WINS`}
       </div>
       <div className="text-xs">{last?.text}</div>
-      <Button size="lg" onClick={() => quit()}>
+      <Button size="lg" onClick={() => abandon()}>
         NEW CAMPAIGN
       </Button>
     </Overlay>
