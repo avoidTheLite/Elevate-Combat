@@ -396,6 +396,20 @@ export function rotateUnit(battle: Battle, unitId: string, dir: number): ActionR
   return { ok: true };
 }
 
+/**
+ * Action points shown to the player: one MOVE point and one ACT point per turn.
+ * - MOVE is available until the unit moves (it may keep spending leftover MP), and is
+ *   never available to a set-up combat_fixed unit.
+ * - ACT (fire / set up / pack up / dig in) is available until the unit acts; acting
+ *   also ends the unit's activation, so both points are then spent.
+ */
+export function actionPoints(u: BattleUnit): { left: number; max: number } {
+  if (u.hp <= 0 || !u.pos) return { left: 0, max: 2 };
+  const canAct = !u.acted;
+  const canMove = canAct && !u.moved && !u.deployed && u.mp > 0;
+  return { left: (canMove ? 1 : 0) + (canAct ? 1 : 0), max: 2 };
+}
+
 export function battleRng(state: GameState): Rng {
   return createRng(state.rng);
 }

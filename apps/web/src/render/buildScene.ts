@@ -1,7 +1,8 @@
 // ── GameState + UI selection → SceneSpec ─────────────────────────────────────
 
-import type { BattleContext, BattleUnit, GameState, Team, World } from '@iron-ridge/engine';
+import type { Battle, BattleContext, BattleUnit, GameState, Team, World } from '@iron-ridge/engine';
 import {
+  actionPoints,
   arcClearance,
   buildContext,
   canMoveTo,
@@ -9,6 +10,7 @@ import {
   edgeSegment,
   generateTerrain,
   hexKey,
+  hexToWorld,
   lineOfSight,
   liveUnits,
   mainBoundary,
@@ -97,6 +99,13 @@ export function mainOutline(
 
 const OUTLINE_LIFT = 0.03;
 
+/** Local-frame heading from one sub-hex to another (see TokenSpec.yaw). */
+function yawToward(from: { q: number; r: number }, to: { q: number; r: number }): number {
+  const a = hexToWorld(from);
+  const b = hexToWorld(to);
+  return Math.atan2(b.z - a.z, b.x - a.x);
+}
+
 export function buildStrategicScene(
   game: GameState,
   ui: UiState,
@@ -182,13 +191,15 @@ export function buildStrategicScene(
         kind: 'hq',
         team,
         label: `◈ ${team === 'A' ? 'ALPHA' : 'BRAVO'} HQ`,
+        era: game.settings.era,
+        yaw: yawToward(hq.center, world.mainByKey.get(game.hq[team === 'A' ? 'B' : 'A'])!.center),
         scale: tokenScale,
       });
   }
   const armies = view ? visibleArmies(game, view) : game.armies;
   for (const a of armies) {
     const m = world.mainByKey.get(a.at)!;
-    // Offset from the centre so the HQ beacon and army token don't overlap.
+    // Offset from the centre so the HQ and army token don't overlap.
     let spotHex = m.center;
     for (let i = 0; i < Math.max(1, game.settings.grid.subRadius - 1); i++)
       spotHex = neighbor(spotHex, 4);
@@ -208,6 +219,9 @@ export function buildStrategicScene(
       hpFrac: max ? hp / max : 1,
       selected: a.id === ui.selectedArmy,
       spent: a.team === game.active && a.movesLeft === 0,
+      ready: a.team === game.active && a.movesLeft > 0,
+      army: { era: game.settings.era, units: a.units.map((u) => u.typeId) },
+      yaw: yawToward(m.center, world.mainByKey.get(game.hq[a.team === 'A' ? 'B' : 'A'])!.center),
       scale: tokenScale,
     });
   }
@@ -346,7 +360,7 @@ export function buildTacticalScene(
     if (view && u.team !== view) {
       if (battle.phase === 'deploy' || !enemiesSeen?.has(u.id)) continue;
     }
-    tokens.push(unitToken(u, battle.active, ui.selectedUnit, battle.phase === 'combat'));
+    tokens.push(unitToken(u, battle, ui.selectedUnit));
   }
 
   return {
@@ -366,26 +380,31 @@ export function buildTacticalScene(
   };
 }
 
-function unitToken(
-  u: BattleUnit,
-  active: Team,
-  selected: string | null,
-  combat: boolean,
-): TokenSpec {
+function unitToken(u: BattleUnit, battle: Battle, selected: string | null): TokenSpec {
   const t = unitType(u.typeId);
   const flags: string[] = [];
   if (u.suppressed) flags.push('SUP');
   if (u.deployed) flags.push('SET');
+  const combat = battle.phase === 'combat';
+  const myTurn = combat && u.team === battle.active;
+  const ap = actionPoints(u);
+  const name = u.id === selected ? u.label : t.short;
   return {
     id: u.id,
     key: u.pos!,
     kind: tokenKind(u.typeId),
+    model: u.typeId,
     team: u.team,
-    label: u.id === selected ? u.label : t.short,
+    // Action points only mean something for the side whose turn it is.
+    label: myTurn ? `${name} (${ap.left}/${ap.max})` : name,
     badge: flags.join(' ') || undefined,
     hpFrac: u.hp / u.maxHp,
     facing: u.facing,
     selected: u.id === selected,
-    spent: combat && u.team === active && u.acted,
+    spent: myTurn && ap.left === 0,
+    // Glow = can still act: this turn's units with AP left; while deploying, the deploying side.
+    ready: combat
+      ? myTurn && ap.left > 0
+      : battle.phase === 'deploy' && u.team === battle.deployTeam,
   };
 }

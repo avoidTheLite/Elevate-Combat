@@ -25,6 +25,8 @@ import {
 import type { AttackFx } from './effects.ts';
 import type { ActiveEffect, FxEnv } from './fx.ts';
 import { createAttackEffects } from './fx.ts';
+import { buildArmyModel, buildHqModel, buildUnitModel, hasUnitModel } from './unitModels.ts';
+import { FORT_LEVEL_HEIGHT, buildHqWall, fortMaterial, fortRingGeometry } from './fortModels.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
 
@@ -43,6 +45,8 @@ interface TokenObj {
   labelEl: HTMLDivElement;
   target: THREE.Vector3;
   kindSig: string;
+  /** Part of the body that stays planted while the rest bobs (the HQ wall). */
+  still?: THREE.Object3D;
   /** Scene time the token left the spec; it lingers briefly then fades (kills stay visible until impact). */
   leftAt?: number;
 }
@@ -50,6 +54,10 @@ interface TokenObj {
 /** How long a removed token lingers, and the tail of that spent shrinking away. */
 const TOKEN_LINGER = 1.3;
 const TOKEN_FADE = 0.45;
+/** Unit models are authored ~0.65 tall; scale them up to read at tactical zoom. */
+const UNIT_MODEL_SCALE = 1.3;
+/** Army clusters span ~2 units before scaling; keep them inside their main hex. */
+const ARMY_MODEL_SCALE = 1.15;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -470,19 +478,11 @@ export class HexScene {
     const list = cells.filter((c) => (c.fort ?? 0) > 0);
     if (!list.length) return;
     // Sandbag ring / bunker: a low hex wall whose height shows the level.
-    const geo = new THREE.CylinderGeometry(0.8, 0.88, 1, 6, 1, true);
-    geo.translate(0, 0.5, 0);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffc34d,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.85,
-    });
-    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    const mesh = new THREE.InstancedMesh(fortRingGeometry(), fortMaterial(), list.length);
     const m = new THREE.Matrix4();
     list.forEach((c, i) => {
       const w = hexToWorld(c);
-      m.makeScale(1, 0.12 * (c.fort ?? 1), 1);
+      m.makeScale(1, FORT_LEVEL_HEIGHT * (c.fort ?? 1), 1);
       m.setPosition(w.x, topY(c.h), w.z);
       mesh.setMatrixAt(i, m);
     });
@@ -522,78 +522,80 @@ export class HexScene {
   private makeBody(t: TokenSpec): THREE.Group {
     const color = TEAM_COLOR[t.team];
     const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: t.spent ? 0.45 : 0.92,
-    });
-    const edge = new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: t.spent ? 0.35 : 0.9,
-    });
-    const add = (geo: THREE.BufferGeometry, y: number): THREE.Mesh => {
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.y = y;
-      const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edge);
-      e.position.y = y;
-      g.add(mesh, e);
-      return mesh;
-    };
-    switch (t.kind) {
-      case 'infantry':
-        add(new THREE.ConeGeometry(0.34, 0.8, 4), 0.4);
-        break;
-      case 'engineer':
-        add(new THREE.CylinderGeometry(0.28, 0.34, 0.55, 6), 0.28);
-        add(new THREE.BoxGeometry(0.5, 0.08, 0.12), 0.62);
-        break;
-      case 'cavalry':
-        add(new THREE.OctahedronGeometry(0.42), 0.5);
-        break;
-      case 'vehicle':
-        add(new THREE.BoxGeometry(0.62, 0.32, 0.9), 0.16);
-        add(new THREE.BoxGeometry(0.38, 0.2, 0.42), 0.42);
-        break;
-      case 'artillery':
-        add(new THREE.TetrahedronGeometry(0.42), 0.34);
-        break;
-      case 'army':
-        add(new THREE.OctahedronGeometry(0.9), 1.0);
-        break;
-      case 'hq':
-        add(new THREE.CylinderGeometry(0.12, 0.12, 3.2, 6), 1.6);
-        add(new THREE.TorusGeometry(0.9, 0.06, 6, 6), 0.1).rotation.x = Math.PI / 2;
-        break;
+    if (t.army) {
+      // Commander cluster: command vehicle / mounted commander + escort sample.
+      const model = buildArmyModel(t.army.era, t.army.units, { color, opacity: t.spent ? 0.5 : 1 });
+      model.rotation.y = -(t.yaw ?? 0);
+      model.scale.setScalar(ARMY_MODEL_SCALE);
+      g.add(model);
+    } else if (t.model && hasUnitModel(t.model)) {
+      // Detailed unit model; its own shape shows which way it faces.
+      const model = buildUnitModel(t.model, { color, opacity: t.spent ? 0.5 : 1 });
+      const d = hexToWorld(DIRECTIONS[t.facing ?? 0]!);
+      model.rotation.y = -Math.atan2(d.z, d.x);
+      model.scale.setScalar(UNIT_MODEL_SCALE);
+      g.add(model);
+    } else {
+      this.addMarkerBody(g, t, color);
     }
-    // Facing pointer (tactical units only).
-    if (t.facing !== undefined && t.kind !== 'army' && t.kind !== 'hq') {
-      const arrow = new THREE.Mesh(
-        new THREE.ConeGeometry(0.12, 0.4, 3),
-        new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    // The glow marks "can still act": units with action points left, armies with moves.
+    if (t.ready !== false) {
+      const glow = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: getGlowTexture(),
+          color,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
       );
-      const d = hexToWorld(DIRECTIONS[t.facing]!);
-      const len = Math.hypot(d.x, d.z);
-      arrow.position.set((d.x / len) * 0.62, 0.12, (d.z / len) * 0.62);
-      arrow.rotation.z = -Math.PI / 2;
-      arrow.rotation.y = -Math.atan2(d.z, d.x);
-      g.add(arrow);
+      glow.scale.setScalar(t.kind === 'army' ? 3.6 : 1.9);
+      glow.position.y = 0.3;
+      g.add(glow);
     }
-    const glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: getGlowTexture(),
-        color,
+    g.scale.setScalar(t.scale ?? 1);
+    if (t.kind !== 'hq') return g;
+    // The HQ wall traces real cell centres, so it and the buildings inside it sit
+    // outside the token scale.
+    const root = new THREE.Group();
+    root.add(g, buildHqWall(this.cellPos(t.key).y, this.hqRing(t.key)));
+    if (t.era) {
+      const hq = buildHqModel(t.era, { color, opacity: 1 });
+      hq.rotation.y = -(t.yaw ?? 0);
+      root.add(hq);
+    }
+    return root;
+  }
+
+  /** Ground heights (world y) of the six cells around an HQ, in DIRECTIONS order. */
+  private hqRing(key: string): number[] {
+    const c = parseKey(key);
+    return DIRECTIONS.map((_, d) => {
+      const k = hexKey(neighbor(c, d));
+      return this.cellPos(this.cellIndex.has(k) ? k : key).y;
+    });
+  }
+
+  /** Fallback marker (units without a model) — a simple glowing octahedron. */
+  private addMarkerBody(g: THREE.Group, t: TokenSpec, color: number): void {
+    if (t.kind === 'hq') return; // the HQ is its wall (added in makeBody) plus the glow
+    const geo = new THREE.OctahedronGeometry(t.kind === 'army' ? 0.9 : 0.4);
+    const y = t.kind === 'army' ? 1.0 : 0.45;
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: t.spent ? 0.45 : 0.92 }),
+    );
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({
+        color: 0xffffff,
         transparent: true,
-        opacity: 0.55,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
+        opacity: t.spent ? 0.35 : 0.9,
       }),
     );
-    glow.scale.setScalar(t.kind === 'army' ? 3.6 : 1.8);
-    glow.position.y = 0.3;
-    g.add(glow);
-    g.scale.setScalar(t.scale ?? 1);
-    return g;
+    mesh.position.y = edges.position.y = y;
+    g.add(mesh, edges);
   }
 
   private buildTokens(tokens: TokenSpec[]): void {
@@ -601,7 +603,13 @@ export class HexScene {
     for (const t of tokens) {
       seen.add(t.id);
       const pos = this.cellPos(t.key);
-      const sig = `${t.kind}|${t.team}|${t.facing}|${t.spent}|${t.scale}`;
+      const ring =
+        t.kind === 'hq'
+          ? this.hqRing(t.key)
+              .map((y) => y.toFixed(2))
+              .join(',')
+          : '';
+      const sig = `${t.kind}|${ring}|${t.model}|${t.army?.units.join(',')}|${t.era}|${t.yaw?.toFixed(2)}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
       let obj = this.tokens.get(t.id);
       if (!obj) {
         const group = new THREE.Group();
@@ -617,12 +625,13 @@ export class HexScene {
       if (obj.kindSig !== sig) {
         obj.group.remove(obj.body);
         obj.body = this.makeBody(t);
+        obj.still = obj.body.getObjectByName('hq-wall');
         obj.group.add(obj.body);
         obj.kindSig = sig;
       }
       obj.target.copy(pos);
       const s = t.scale ?? 1;
-      obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 3.6 : 1.25) * s, 0);
+      obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 1.6 : 1.25) * s, 0);
       const teamHex = `#${TEAM_COLOR[t.team].toString(16).padStart(6, '0')}`;
       const hp =
         t.hpFrac !== undefined
@@ -776,6 +785,7 @@ export class HexScene {
     for (const [id, obj] of this.tokens) {
       obj.group.position.lerp(obj.target, Math.min(1, dt * 10));
       obj.body.position.y = 0.04 * Math.sin(t * 2.5 + obj.group.position.x);
+      if (obj.still) obj.still.position.y = -obj.body.position.y;
       if (obj.leftAt !== undefined) {
         const age = t - obj.leftAt;
         if (age >= TOKEN_LINGER) this.removeToken(id);

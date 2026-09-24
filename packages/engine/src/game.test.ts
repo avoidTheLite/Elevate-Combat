@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply } from './actions.ts';
 import { mainNeighbors } from './grid.ts';
 import { runAi } from './runner.ts';
+import { actionPoints } from './tactical.ts';
 import { ECONOMY, createGame, defaultSettings, worldOf } from './strategic.ts';
 import type { GameSettings, GameState } from './types.ts';
 import { DEPLOY_BUFFER, buildContext, deploymentZone, liveUnits } from './battleMap.ts';
@@ -114,4 +115,33 @@ describe('deployment zones', () => {
       expect(gap).toBeGreaterThan(DEPLOY_BUFFER);
     });
   }
+});
+
+describe('action points', () => {
+  it('counts one move point and one act point per turn', () => {
+    const base = {
+      id: 'u',
+      typeId: 'ww2_rifle_infantry',
+      label: 'u',
+      team: 'A' as const,
+      hp: 10,
+      maxHp: 10,
+      pos: '0,0',
+      facing: 0,
+      mp: 4,
+      moved: false,
+      movedDist: 0,
+      acted: false,
+      deployed: false,
+      suppressed: false,
+      revealed: false,
+      firstStrikeUsed: false,
+    };
+    expect(actionPoints(base)).toEqual({ left: 2, max: 2 });
+    expect(actionPoints({ ...base, moved: true, mp: 2 })).toEqual({ left: 1, max: 2 });
+    expect(actionPoints({ ...base, acted: true, mp: 0 })).toEqual({ left: 0, max: 2 });
+    expect(actionPoints({ ...base, deployed: true })).toEqual({ left: 1, max: 2 }); // set-up: fire only
+    expect(actionPoints({ ...base, mp: 0 })).toEqual({ left: 1, max: 2 }); // e.g. suppressed to 0 MP
+    expect(actionPoints({ ...base, hp: 0 })).toEqual({ left: 0, max: 2 });
+  });
 });

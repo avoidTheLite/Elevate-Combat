@@ -1,6 +1,6 @@
 // ── Declarative scene description handed to HexScene each frame-of-state ─────
 
-import type { LosStatus, Team } from '@iron-ridge/engine';
+import type { Era, LosStatus, Team } from '@iron-ridge/engine';
 
 export interface CellSpec {
   key: string;
@@ -33,6 +33,16 @@ export interface TokenSpec {
   sub?: string;
   hpFrac?: number;
   facing?: number;
+  /** Unit type id — selects the detailed unit model (tactical units). */
+  model?: string;
+  /** HQ: era selects the building model. */
+  era?: Era;
+  /** Strategic army: era + unit roster, rendered as a commander cluster. */
+  army?: { era: Era; units: string[] };
+  /** Heading in the world group's local frame (radians, atan2(z, x)); 0 = +X. */
+  yaw?: number;
+  /** Can still act this turn (glow). Undefined = always glow (HQs). */
+  ready?: boolean;
   selected?: boolean;
   spent?: boolean;
   scale?: number;
