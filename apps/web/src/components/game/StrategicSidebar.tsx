@@ -12,7 +12,7 @@ import {
   worldOf,
 } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
-import { Panel, Stat } from '../ui/Panel.tsx';
+import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
 
 export function StrategicSidebar({
@@ -37,8 +37,8 @@ export function StrategicSidebar({
   const hqArmy = armiesAt(game, game.hq[team]).find((a) => a.team === team);
 
   return (
-    <div className="flex flex-col gap-2">
-      <Panel title="COMMAND">
+    <PanelStack priority={['campaign-log', 'hex', 'recruit', 'army', 'command']}>
+      <Panel id="command" title="COMMAND">
         <Stat
           label="Command Points"
           value={`${game.cp[team]} CP`}
@@ -63,100 +63,121 @@ export function StrategicSidebar({
         </div>
       </Panel>
 
-      {main && hexState && (
-        <Panel title={`HEX ${main.col},${main.row}`}>
-          <Stat
-            label="Owner"
-            value={hexState.owner ? TEAM_NAME[hexState.owner] : 'NEUTRAL'}
-            tone={
-              hexState.owner === 'A'
-                ? 'text-[hsl(var(--primary))]'
-                : hexState.owner === 'B'
-                  ? 'text-[hsl(var(--secondary))]'
-                  : undefined
-            }
-          />
-          <Stat label="Mean elevation" value={(terrain.mainHeight.get(main.key) ?? 0).toFixed(1)} />
-          <Stat label="Fortification" value={`${hexFortLevel(game, world, main.key)} levels`} />
-          {hexState.owner === team && (
-            <Stat label="Warning clock" value={`${hexState.warning} turn(s)`} />
-          )}
-          {main.key === game.hq.A && (
-            <Stat label="HQ" value="ALPHA HQ" tone="text-[hsl(var(--primary))]" />
-          )}
-          {main.key === game.hq.B && (
-            <Stat label="HQ" value="BRAVO HQ" tone="text-[hsl(var(--secondary))]" />
-          )}
-          {hexState.owner === team && canAct && (
-            <Button
-              size="sm"
-              onClick={() => dispatch({ type: 'fortify', hex: main.key })}
-              disabled={game.cp[team] < ECONOMY.fortifyCost}
-            >
-              FORTIFY (−{ECONOMY.fortifyCost} CP)
-            </Button>
-          )}
-          {armiesHere.map((a) => (
-            <Button
-              key={a.id}
-              size="sm"
-              variant={a.id === ui.selectedArmy ? 'default' : 'ghost'}
-              onClick={() => setUi({ selectedArmy: a.team === team ? a.id : null })}
-            >
-              {TEAM_NAME[a.team]} ARMY ×{a.units.length}
-            </Button>
-          ))}
-        </Panel>
-      )}
-
-      {army && (
-        <Panel title={`${TEAM_NAME[army.team]} ARMY`} right={<span>{army.movesLeft} move(s)</span>}>
-          <Stat label="Strength" value={armyStrength(army).toFixed(1)} />
-          <Stat label="Attack deployment cost" value={`${attackCost(army)} CP`} />
-          <ul className="text-[11px] flex flex-col gap-0.5 max-h-44 overflow-auto">
-            {army.units.map((u) => {
-              const t = unitType(u.typeId);
-              return (
-                <li key={u.id} className="flex justify-between">
-                  <span>
-                    {u.label} <span className="text-[hsl(var(--muted-foreground))]">{t.name}</span>
-                  </span>
-                  <span className={u.hp < t.hp / 2 ? 'text-[hsl(var(--destructive))]' : ''}>
-                    {u.hp}/{t.hp}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-      )}
-
-      {canAct && (
-        <Panel
-          title="RECRUIT @ HQ"
-          right={<span>{hqArmy ? `${hqArmy.units.length}/${ECONOMY.armyCap}` : 'new army'}</span>}
-        >
-          <div className="grid grid-cols-1 gap-1">
-            {unitsForEra(game.settings.era).map((t) => (
+      <Panel id="hex" title={main ? `HEX ${main.col},${main.row}` : 'HEX'}>
+        {!main || !hexState ? (
+          <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
+            Click a hex to inspect it.
+          </div>
+        ) : (
+          <>
+            <Stat
+              label="Owner"
+              value={hexState.owner ? TEAM_NAME[hexState.owner] : 'NEUTRAL'}
+              tone={
+                hexState.owner === 'A'
+                  ? 'text-[hsl(var(--primary))]'
+                  : hexState.owner === 'B'
+                    ? 'text-[hsl(var(--secondary))]'
+                    : undefined
+              }
+            />
+            <Stat
+              label="Mean elevation"
+              value={(terrain.mainHeight.get(main.key) ?? 0).toFixed(1)}
+            />
+            <Stat label="Fortification" value={`${hexFortLevel(game, world, main.key)} levels`} />
+            {hexState.owner === team && (
+              <Stat label="Warning clock" value={`${hexState.warning} turn(s)`} />
+            )}
+            {main.key === game.hq.A && (
+              <Stat label="HQ" value="ALPHA HQ" tone="text-[hsl(var(--primary))]" />
+            )}
+            {main.key === game.hq.B && (
+              <Stat label="HQ" value="BRAVO HQ" tone="text-[hsl(var(--secondary))]" />
+            )}
+            {hexState.owner === team && canAct && (
               <Button
-                key={t.id}
                 size="sm"
-                variant="ghost"
-                className="justify-between"
-                onClick={() => dispatch({ type: 'recruit', typeId: t.id })}
-                disabled={game.cp[team] < t.cost || (hqArmy?.units.length ?? 0) >= ECONOMY.armyCap}
-                title={`${t.role}\n${t.armorClass} · ${t.damageType} · ${t.attackType} · ${t.placementCategory}`}
+                onClick={() => dispatch({ type: 'fortify', hex: main.key })}
+                disabled={game.cp[team] < ECONOMY.fortifyCost}
               >
-                <span>{t.name}</span>
-                <span className="text-[hsl(var(--warning))]">{t.cost}</span>
+                FORTIFY (−{ECONOMY.fortifyCost} CP)
+              </Button>
+            )}
+            {armiesHere.map((a) => (
+              <Button
+                key={a.id}
+                size="sm"
+                variant={a.id === ui.selectedArmy ? 'default' : 'ghost'}
+                onClick={() => setUi({ selectedArmy: a.team === team ? a.id : null })}
+              >
+                {TEAM_NAME[a.team]} ARMY ×{a.units.length}
               </Button>
             ))}
-          </div>
-        </Panel>
-      )}
+          </>
+        )}
+      </Panel>
 
-      <Panel title="CAMPAIGN LOG">
-        <ol className="text-[10px] leading-4 max-h-48 overflow-auto">
+      <Panel
+        id="army"
+        title={army ? `${TEAM_NAME[army.team]} ARMY` : 'ARMY'}
+        right={army ? <span>{army.movesLeft} move(s)</span> : undefined}
+      >
+        {!army ? (
+          <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
+            Click one of your armies to give it orders.
+          </div>
+        ) : (
+          <>
+            <Stat label="Strength" value={armyStrength(army).toFixed(1)} />
+            <Stat label="Attack deployment cost" value={`${attackCost(army)} CP`} />
+            <ul className="text-[11px] flex flex-col gap-0.5 max-h-44 overflow-auto">
+              {army.units.map((u) => {
+                const t = unitType(u.typeId);
+                return (
+                  <li key={u.id} className="flex justify-between">
+                    <span>
+                      {u.label}{' '}
+                      <span className="text-[hsl(var(--muted-foreground))]">{t.name}</span>
+                    </span>
+                    <span className={u.hp < t.hp / 2 ? 'text-[hsl(var(--destructive))]' : ''}>
+                      {u.hp}/{t.hp}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </Panel>
+
+      <Panel
+        id="recruit"
+        title="RECRUIT @ HQ"
+        right={<span>{hqArmy ? `${hqArmy.units.length}/${ECONOMY.armyCap}` : 'new army'}</span>}
+      >
+        <div className="grid grid-cols-1 gap-1">
+          {unitsForEra(game.settings.era).map((t) => (
+            <Button
+              key={t.id}
+              size="sm"
+              variant="ghost"
+              className="justify-between"
+              onClick={() => dispatch({ type: 'recruit', typeId: t.id })}
+              disabled={
+                !canAct || game.cp[team] < t.cost || (hqArmy?.units.length ?? 0) >= ECONOMY.armyCap
+              }
+              title={`${t.role}\n${t.armorClass} · ${t.damageType} · ${t.attackType} · ${t.placementCategory}`}
+            >
+              <span>{t.name}</span>
+              <span className="text-[hsl(var(--warning))]">{t.cost}</span>
+            </Button>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel id="campaign-log" title="CAMPAIGN LOG" bodyClassName="h-48">
+        <ol className="text-[10px] leading-4 h-full overflow-auto">
           {game.log
             .slice(-60)
             .reverse()
@@ -172,6 +193,6 @@ export function StrategicSidebar({
             ))}
         </ol>
       </Panel>
-    </div>
+    </PanelStack>
   );
 }

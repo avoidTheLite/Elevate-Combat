@@ -128,7 +128,7 @@ export function SceneView({
           </Button>
         )}
       </div>
-      <div className="absolute right-2 bottom-2 text-[9px] text-[hsl(var(--muted-foreground))] text-right leading-4 pointer-events-none">
+      <div className="hidden sm:block absolute right-2 bottom-2 text-[9px] text-[hsl(var(--muted-foreground))] text-right leading-4 pointer-events-none">
         WASD/drag pan · Q/E rotate · wheel zoom · R reset · right-click cancel
       </div>
     </div>

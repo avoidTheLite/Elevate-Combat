@@ -180,7 +180,7 @@ export function GameScreen(): React.ReactElement {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-dvh flex flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[hsl(var(--border-bright))] text-[11px] flex-wrap">
         <div className="flex items-center gap-3">
           <span className="font-bold tracking-[0.3em] text-glow">▲ IRON RIDGE</span>
@@ -222,8 +222,9 @@ export function GameScreen(): React.ReactElement {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
-        <main className="flex-1 min-h-[320px] relative">
+      {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+        <main className="relative shrink-0 h-[48dvh] md:h-auto md:flex-1 md:shrink">
           <SceneView spec={spec} selectedKey={selectedKey} onHover={onHover} onClick={onClick} />
           {error && (
             <div
@@ -234,7 +235,7 @@ export function GameScreen(): React.ReactElement {
             </div>
           )}
         </main>
-        <aside className="w-full md:w-[320px] shrink-0 overflow-y-auto p-2 border-l border-[hsl(var(--border-bright))]">
+        <aside className="flex-1 min-h-0 md:flex-none md:w-[320px] overflow-hidden border-t md:border-t-0 md:border-l border-[hsl(var(--border-bright))]">
           {tactical ? (
             <TacticalSidebar
               game={game}

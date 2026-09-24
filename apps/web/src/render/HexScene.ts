@@ -120,6 +120,8 @@ export class HexScene {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.tabIndex = 0;
+    // Touch drags pan the camera instead of scrolling the page.
+    this.renderer.domElement.style.touchAction = 'none';
 
     this.labels = new CSS2DRenderer();
     this.labels.domElement.style.position = 'absolute';
