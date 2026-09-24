@@ -66,4 +66,32 @@ describe('unit models', () => {
       expect(box.max.x).toBeGreaterThan(-box.min.x);
     },
   );
+
+  it('Tron look: every part is the team colour except the weapons', () => {
+    const team = new THREE.Color(0x00f0ff).getHex();
+    const weaponIds = new Set(['weapon', 'barrel']);
+    for (const id of Object.keys(UNIT_TYPES)) {
+      const colours = new Set<number>();
+      build(id).traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const c = (m.material as THREE.MeshLambertMaterial).color.getHex();
+        if (c !== team) {
+          // Anything not team-coloured must be weapon metal.
+          colours.add(c);
+        }
+      });
+      expect(colours.size).toBeLessThanOrEqual(1);
+    }
+    // And the neutral colour really is on the weapons.
+    const mg = build('ww2_machine_gun');
+    for (const name of weaponIds) {
+      mg.traverse((o) => {
+        if (o.name === name)
+          expect(((o as THREE.Mesh).material as THREE.MeshLambertMaterial).color.getHex()).not.toBe(
+            team,
+          );
+      });
+    }
+  });
 });

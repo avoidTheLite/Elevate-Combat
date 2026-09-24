@@ -12,7 +12,8 @@ export interface ModelOptions {
 }
 
 const NEUTRAL = 0xdfe8ee; // weapons / metal
-const DARK = 0x3a4652; // treads, wheels, bases
+/** Emissive share of the team colour — high, so units read as glowing light-forms. */
+const TEAM_GLOW = 0.6;
 
 interface Kit {
   root: THREE.Group;
@@ -34,19 +35,20 @@ function lambert(color: number, opacity: number, glow = 0.35): THREE.MeshLambert
 }
 
 function makeKit(o: ModelOptions): Kit {
-  const tint = (t: number): number =>
-    new THREE.Color(o.color).lerp(new THREE.Color(0xffffff), t).getHex();
+  // Tron look: every structural part shares one bright, self-lit team colour;
+  // only weapons differ (neutral light metal).
+  const team = lambert(o.color, o.opacity, TEAM_GLOW);
   return {
     root: new THREE.Group(),
-    body: lambert(o.color, o.opacity),
-    light: lambert(tint(0.35), o.opacity),
-    skin: lambert(tint(0.6), o.opacity, 0.25),
+    body: team,
+    light: team,
+    skin: team,
     metal: lambert(NEUTRAL, o.opacity, 0.3),
-    dark: lambert(DARK, o.opacity, 0.2),
+    dark: team,
     edge: new THREE.LineBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.55 * o.opacity,
+      opacity: 0.45 * o.opacity,
     }),
   };
 }
@@ -66,7 +68,10 @@ function part(
   m.position.set(...pos);
   if (opts.rot) m.rotation.set(...opts.rot);
   if (opts.name) m.name = opts.name;
-  if (opts.edges) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), k.edge));
+  // Team-coloured parts are all one colour, so outline each to keep the silhouette readable.
+  if (opts.edges || mat === k.body) {
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), k.edge));
+  }
   parent.add(m);
   return m;
 }
