@@ -25,6 +25,7 @@ import {
 import type { AttackFx } from './effects.ts';
 import type { ActiveEffect, FxEnv } from './fx.ts';
 import { createAttackEffects } from './fx.ts';
+import { buildUnitModel, hasUnitModel } from './unitModels.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
 
@@ -50,6 +51,8 @@ interface TokenObj {
 /** How long a removed token lingers, and the tail of that spent shrinking away. */
 const TOKEN_LINGER = 1.3;
 const TOKEN_FADE = 0.45;
+/** Unit models are authored ~0.65 tall; scale them up to read at tactical zoom. */
+const UNIT_MODEL_SCALE = 1.3;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -522,6 +525,38 @@ export class HexScene {
   private makeBody(t: TokenSpec): THREE.Group {
     const color = TEAM_COLOR[t.team];
     const g = new THREE.Group();
+    if (t.model && hasUnitModel(t.model)) {
+      // Detailed unit model; its own shape shows which way it faces.
+      const model = buildUnitModel(t.model, { color, opacity: t.spent ? 0.5 : 1 });
+      const d = hexToWorld(DIRECTIONS[t.facing ?? 0]!);
+      model.rotation.y = -Math.atan2(d.z, d.x);
+      model.scale.setScalar(UNIT_MODEL_SCALE);
+      g.add(model);
+    } else {
+      this.addMarkerBody(g, t, color);
+    }
+    // The glow marks "can still act": units with action points left, armies with moves.
+    if (t.ready !== false) {
+      const glow = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: getGlowTexture(),
+          color,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      );
+      glow.scale.setScalar(t.kind === 'army' ? 3.6 : 1.9);
+      glow.position.y = 0.3;
+      g.add(glow);
+    }
+    g.scale.setScalar(t.scale ?? 1);
+    return g;
+  }
+
+  /** Strategic markers (armies, HQ beacons) — simple glowing primitives. */
+  private addMarkerBody(g: THREE.Group, t: TokenSpec, color: number): void {
     const mat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -540,60 +575,15 @@ export class HexScene {
       g.add(mesh, e);
       return mesh;
     };
-    switch (t.kind) {
-      case 'infantry':
-        add(new THREE.ConeGeometry(0.34, 0.8, 4), 0.4);
-        break;
-      case 'engineer':
-        add(new THREE.CylinderGeometry(0.28, 0.34, 0.55, 6), 0.28);
-        add(new THREE.BoxGeometry(0.5, 0.08, 0.12), 0.62);
-        break;
-      case 'cavalry':
-        add(new THREE.OctahedronGeometry(0.42), 0.5);
-        break;
-      case 'vehicle':
-        add(new THREE.BoxGeometry(0.62, 0.32, 0.9), 0.16);
-        add(new THREE.BoxGeometry(0.38, 0.2, 0.42), 0.42);
-        break;
-      case 'artillery':
-        add(new THREE.TetrahedronGeometry(0.42), 0.34);
-        break;
-      case 'army':
-        add(new THREE.OctahedronGeometry(0.9), 1.0);
-        break;
-      case 'hq':
-        add(new THREE.CylinderGeometry(0.12, 0.12, 3.2, 6), 1.6);
-        add(new THREE.TorusGeometry(0.9, 0.06, 6, 6), 0.1).rotation.x = Math.PI / 2;
-        break;
-    }
-    // Facing pointer (tactical units only).
-    if (t.facing !== undefined && t.kind !== 'army' && t.kind !== 'hq') {
-      const arrow = new THREE.Mesh(
-        new THREE.ConeGeometry(0.12, 0.4, 3),
-        new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    if (t.kind === 'hq') {
+      add(new THREE.CylinderGeometry(0.12, 0.12, 3.2, 6), 1.6);
+      add(new THREE.TorusGeometry(0.9, 0.06, 6, 6), 0.1).rotation.x = Math.PI / 2;
+    } else {
+      add(
+        new THREE.OctahedronGeometry(t.kind === 'army' ? 0.9 : 0.4),
+        t.kind === 'army' ? 1.0 : 0.45,
       );
-      const d = hexToWorld(DIRECTIONS[t.facing]!);
-      const len = Math.hypot(d.x, d.z);
-      arrow.position.set((d.x / len) * 0.62, 0.12, (d.z / len) * 0.62);
-      arrow.rotation.z = -Math.PI / 2;
-      arrow.rotation.y = -Math.atan2(d.z, d.x);
-      g.add(arrow);
     }
-    const glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: getGlowTexture(),
-        color,
-        transparent: true,
-        opacity: 0.55,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    );
-    glow.scale.setScalar(t.kind === 'army' ? 3.6 : 1.8);
-    glow.position.y = 0.3;
-    g.add(glow);
-    g.scale.setScalar(t.scale ?? 1);
-    return g;
   }
 
   private buildTokens(tokens: TokenSpec[]): void {
@@ -601,7 +591,7 @@ export class HexScene {
     for (const t of tokens) {
       seen.add(t.id);
       const pos = this.cellPos(t.key);
-      const sig = `${t.kind}|${t.team}|${t.facing}|${t.spent}|${t.scale}`;
+      const sig = `${t.kind}|${t.model}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
       let obj = this.tokens.get(t.id);
       if (!obj) {
         const group = new THREE.Group();

@@ -13,7 +13,7 @@ import {
   worldOf,
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene, mainOutline } from './buildScene.ts';
-import type { Segment3 } from './spec.ts';
+import type { Segment3, TokenSpec } from './spec.ts';
 import { topY } from './spec.ts';
 import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
 
@@ -187,6 +187,47 @@ describe('scene building', () => {
           expect(owner).toBeDefined();
           expect(seg.a.y).toBeLessThanOrEqual(maxTop + 0.031);
         }
+      }
+    });
+  });
+
+  describe('unit tokens', () => {
+    it('show action points next to the name and glow only while AP remain', () => {
+      const s = battleState();
+      const b = s.battle!;
+      const mine = b.units.find((u) => u.team === b.active)!;
+      const token = (g: GameState): TokenSpec =>
+        buildTacticalScene(g, UI, null).spec.tokens.find((t) => t.id === mine.id)!;
+      expect(token(s).label).toMatch(/^[A-Z]+ \(2\/2\)$/);
+      expect(token(s).ready).toBe(true);
+      expect(token(s).model).toBe(mine.typeId);
+
+      const moved = structuredClone(s);
+      Object.assign(
+        moved.battle!.units.find((u) => u.id === mine.id)!,
+        { moved: true, mp: 1 },
+      );
+      expect(token(moved).label).toMatch(/\(1\/2\)$/);
+      expect(token(moved).ready).toBe(true);
+
+      const acted = structuredClone(s);
+      Object.assign(
+        acted.battle!.units.find((u) => u.id === mine.id)!,
+        { acted: true, mp: 0 },
+      );
+      expect(token(acted).label).toMatch(/\(0\/2\)$/);
+      expect(token(acted).ready).toBe(false);
+      expect(token(acted).spent).toBe(true);
+    });
+
+    it('the side not on turn shows no AP and no glow', () => {
+      const s = battleState();
+      const b = s.battle!;
+      const theirs = buildTacticalScene(s, UI, null).spec.tokens.filter((t) => t.team !== b.active);
+      expect(theirs.length).toBeGreaterThan(0);
+      for (const t of theirs) {
+        expect(t.label).not.toMatch(/\(/);
+        expect(t.ready).toBe(false);
       }
     });
   });

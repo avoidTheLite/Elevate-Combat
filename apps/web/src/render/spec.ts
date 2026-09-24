@@ -33,6 +33,10 @@ export interface TokenSpec {
   sub?: string;
   hpFrac?: number;
   facing?: number;
+  /** Unit type id — selects the detailed unit model (tactical units). */
+  model?: string;
+  /** Can still act this turn (glow). Undefined = always glow (HQ beacons). */
+  ready?: boolean;
   selected?: boolean;
   spent?: boolean;
   scale?: number;

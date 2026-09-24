@@ -1,7 +1,8 @@
 // ── GameState + UI selection → SceneSpec ─────────────────────────────────────
 
-import type { BattleContext, BattleUnit, GameState, Team, World } from '@iron-ridge/engine';
+import type { Battle, BattleContext, BattleUnit, GameState, Team, World } from '@iron-ridge/engine';
 import {
+  actionPoints,
   arcClearance,
   buildContext,
   canMoveTo,
@@ -208,6 +209,7 @@ export function buildStrategicScene(
       hpFrac: max ? hp / max : 1,
       selected: a.id === ui.selectedArmy,
       spent: a.team === game.active && a.movesLeft === 0,
+      ready: a.team === game.active && a.movesLeft > 0,
       scale: tokenScale,
     });
   }
@@ -346,7 +348,7 @@ export function buildTacticalScene(
     if (view && u.team !== view) {
       if (battle.phase === 'deploy' || !enemiesSeen?.has(u.id)) continue;
     }
-    tokens.push(unitToken(u, battle.active, ui.selectedUnit, battle.phase === 'combat'));
+    tokens.push(unitToken(u, battle, ui.selectedUnit));
   }
 
   return {
@@ -366,26 +368,31 @@ export function buildTacticalScene(
   };
 }
 
-function unitToken(
-  u: BattleUnit,
-  active: Team,
-  selected: string | null,
-  combat: boolean,
-): TokenSpec {
+function unitToken(u: BattleUnit, battle: Battle, selected: string | null): TokenSpec {
   const t = unitType(u.typeId);
   const flags: string[] = [];
   if (u.suppressed) flags.push('SUP');
   if (u.deployed) flags.push('SET');
+  const combat = battle.phase === 'combat';
+  const myTurn = combat && u.team === battle.active;
+  const ap = actionPoints(u);
+  const name = u.id === selected ? u.label : t.short;
   return {
     id: u.id,
     key: u.pos!,
     kind: tokenKind(u.typeId),
+    model: u.typeId,
     team: u.team,
-    label: u.id === selected ? u.label : t.short,
+    // Action points only mean something for the side whose turn it is.
+    label: myTurn ? `${name} (${ap.left}/${ap.max})` : name,
     badge: flags.join(' ') || undefined,
     hpFrac: u.hp / u.maxHp,
     facing: u.facing,
     selected: u.id === selected,
-    spent: combat && u.team === active && u.acted,
+    spent: myTurn && ap.left === 0,
+    // Glow = can still act: this turn's units with AP left; while deploying, the deploying side.
+    ready: combat
+      ? myTurn && ap.left > 0
+      : battle.phase === 'deploy' && u.team === battle.deployTeam,
   };
 }
