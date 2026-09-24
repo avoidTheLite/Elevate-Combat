@@ -3,7 +3,7 @@
 // This module turns that into a small animation plan; fx.ts plays it in three.js.
 
 import type { AttackOutcome, GameState, Team } from '@iron-ridge/engine';
-import { buildContext, hexDistance, parseKey, unitType, visibleEnemies } from '@iron-ridge/engine';
+import { buildContext, hexDistance, parseKey, unitType, revealedEnemies } from '@iron-ridge/engine';
 
 /** Flight shape of the projectile. */
 export type Projectile = 'lob' | 'shell' | 'bullet' | 'arrow' | 'none';
@@ -144,7 +144,7 @@ export function effectVisibility(
     if (!g.battle) continue;
     const ctx = buildContext(g.settings, g.battle);
     for (const u of g.battle.units) if (u.team === view) seen.add(u.id);
-    for (const u of visibleEnemies(ctx, g.battle, view)) seen.add(u.id);
+    for (const u of revealedEnemies(ctx, g.battle, view)) seen.add(u.id);
   }
   return (id) => seen.has(id);
 }

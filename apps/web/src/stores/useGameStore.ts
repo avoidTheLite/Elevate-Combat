@@ -199,6 +199,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         };
         parsed.battle.extracted = parsed.battle.extracted ?? false;
       }
+      // Rename legacy BattleUnit.revealed → exposed (FOW terminology realign).
+      if (parsed.battle?.units) {
+        for (const u of parsed.battle.units as unknown as Array<Record<string, unknown>>) {
+          if (!('exposed' in u) && 'revealed' in u) {
+            u.exposed = Boolean(u.revealed);
+            delete u.revealed;
+          }
+          if (typeof u.exposed !== 'boolean') u.exposed = false;
+        }
+      }
       set({
         ...clearSession(),
         game: parsed,

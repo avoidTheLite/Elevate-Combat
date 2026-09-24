@@ -116,7 +116,7 @@ function flatContext(): { ctx: BattleContext; battle: Battle } {
     acted: false,
     deployed: false,
     suppressed: false,
-    revealed: false,
+    exposed: false,
     firstStrikeUsed: false,
   });
   const battle = {

@@ -14,7 +14,7 @@ import { contextFor, holdsCaptureZone, warnedRangeCells } from '../tactical.ts';
 import type { Battle, BattleUnit, GameState, Team } from '../types.ts';
 import { otherTeam } from '../types.ts';
 import { unitType } from '../units.ts';
-import { canSee, visibleCells, visibleEnemies } from '../visibility.ts';
+import { canSee, visibleCells, revealedEnemies } from '../visibility.ts';
 
 interface Shot {
   cell: HexKey;
@@ -72,7 +72,7 @@ export function knownThreats(
   mine: BattleUnit[],
 ): BattleUnit[] {
   const enemyTeam = otherTeam(team);
-  const visible = new Set(visibleEnemies(ctx, battle, team).map((e) => e.id));
+  const visible = new Set(revealedEnemies(ctx, battle, team).map((e) => e.id));
   const enemyVision = visibleCells(ctx, battle, enemyTeam);
   const out: BattleUnit[] = [];
   for (const e of liveUnits(battle, enemyTeam)) {
@@ -169,7 +169,7 @@ export function tacticalAiStep(state: GameState): GameAction {
 
   const team = battle.active;
   const mine = liveUnits(battle, team);
-  const enemies = visibleEnemies(ctx, battle, team);
+  const enemies = revealedEnemies(ctx, battle, team);
 
   // Holding the capture zone: attacker takes the free win (secure) rather than grind.
   if (team === battle.attacker && holdsCaptureZone(ctx, battle, team)) {

@@ -14,7 +14,7 @@ import { poolAverage, poolLabel, rollPool } from './rng.ts';
 import type { ArmorClass, RangeProfile, UnitType } from './units.ts';
 import { damagesFortification, effectivenessMultiplier, unitType } from './units.ts';
 import type { Battle, BattleLogEntry, BattleUnit } from './types.ts';
-import { isSpotted, visibleEnemies } from './visibility.ts';
+import { isHexRevealed, revealedEnemies } from './visibility.ts';
 
 // §1 base to-hit TN by target size/exposure
 export const BASE_TN: Record<ArmorClass, number> = {
@@ -267,7 +267,7 @@ export function previewAttack(
   if (kind !== 'indirect') {
     if (!target || target.team === attacker.team)
       return illegal(kind, targetKey, target, 'No enemy target there');
-    const seen = visibleEnemies(ctx, battle, attacker.team).some((u) => u.id === target.id);
+    const seen = revealedEnemies(ctx, battle, attacker.team).some((u) => u.id === target.id);
     if (!seen) return illegal(kind, targetKey, target, 'Target not spotted');
   }
   if (dist < at.minRange)
@@ -295,7 +295,7 @@ export function previewAttack(
   } else {
     los = arcClearance(a, b, ctx.heightOf, at.eye);
     if (los.status === 'blocked') return illegal(kind, targetKey, target, 'Arc clipped by terrain');
-    blind = !isSpotted(ctx, battle, attacker.team, targetKey);
+    blind = !isHexRevealed(ctx, battle, attacker.team, targetKey);
     if (blind) mods.push({ label: 'Blind fire (no spotter)', value: BLIND_FIRE_TN });
   }
 
@@ -596,7 +596,7 @@ export function resolveAttack(
   faceToward(attacker, targetKey);
   attacker.acted = true;
   attacker.mp = 0;
-  attacker.revealed = true;
+  attacker.exposed = true;
 
   let roll = 0;
   let result: AttackOutcome['result'] = 'miss';

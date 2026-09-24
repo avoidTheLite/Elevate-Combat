@@ -22,7 +22,7 @@ import {
   unitType,
   visibleArmies,
   visibleCells,
-  visibleEnemies,
+  revealedEnemies,
   warnedRangeCells,
   worldOf,
 } from '@iron-ridge/engine';
@@ -333,7 +333,7 @@ export function buildTacticalScene(
         path = pathTo(reach, ui.hoverCell);
     }
     if (!sel.acted) {
-      const targets = t.attackType === 'indirect' ? [] : visibleEnemies(ctx, battle, sel.team);
+      const targets = t.attackType === 'indirect' ? [] : revealedEnemies(ctx, battle, sel.team);
       for (const e of targets) {
         const pv = previewAttack(ctx, battle, sel, e.pos!);
         if (pv.legal) overlays.push({ key: e.pos!, color: 0xff3344, opacity: 0.45 });
@@ -355,7 +355,7 @@ export function buildTacticalScene(
   }
 
   const tokens: TokenSpec[] = [];
-  const enemiesSeen = view ? new Set(visibleEnemies(ctx, battle, view).map((u) => u.id)) : null;
+  const enemiesSeen = view ? new Set(revealedEnemies(ctx, battle, view).map((u) => u.id)) : null;
   for (const u of liveUnits(battle)) {
     if (view && u.team !== view) {
       if (battle.phase === 'deploy' || !enemiesSeen?.has(u.id)) continue;
