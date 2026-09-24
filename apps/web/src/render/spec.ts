@@ -47,9 +47,20 @@ export interface TrajectorySpec {
   eye: number;
 }
 
+export interface Point3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Segment3 {
+  a: Point3;
+  b: Point3;
+}
+
 export interface BorderLayer {
-  /** World-space (unrotated) segments as [x1,z1,x2,z2,...] with a y per segment. */
-  segments: { ax: number; az: number; bx: number; bz: number; y: number }[];
+  /** World-space (unrotated) 3D line segments. Horizontal edges plus vertical connectors. */
+  segments: Segment3[];
   color: number;
   width: number;
   opacity?: number;

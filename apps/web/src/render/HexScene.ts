@@ -14,9 +14,11 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import {
   arcHeight,
-  hexCorner,
+  edgeCorners,
   hexDistance,
+  hexKey,
   hexToWorld,
+  neighbor,
   parseKey,
   DIRECTIONS,
 } from '@iron-ridge/engine';
@@ -71,6 +73,8 @@ export class HexScene {
   private cellIndex = new Map<string, number>();
   private terrainMesh: THREE.InstancedMesh | null = null;
   private outline: THREE.LineSegments | null = null;
+  /** Vertex range of each cell's lines inside the outline soup (for per-cell recolouring). */
+  private outlineRanges: { start: number; count: number }[] = [];
   private overlayMesh: THREE.InstancedMesh | null = null;
   private fortMesh: THREE.InstancedMesh | null = null;
   private borderGroup = new THREE.Group();
@@ -321,21 +325,40 @@ export class HexScene {
     this.terrainMesh = mesh;
     this.world.add(mesh);
 
-    // Glowing top outlines (one line-segment soup, coloured per cell by the overlay).
+    // Terrain wireframe: one line-segment soup, coloured per cell by the overlay.
+    // Each cell draws its top outline, plus a vertical line down every corner of
+    // each visible side face (where the neighbour is lower, or not rendered), so
+    // the outlines form one connected chain over cliffs. At the edge of the
+    // rendered map the side face is closed off with a base outline at ground
+    // level. Only rendered cells are consulted — out-of-play terrain never adds lines.
     const pos: number[] = [];
-    const col: number[] = [];
-    const corners = Array.from({ length: 6 }, (_, i) => hexCorner(i, 0.985));
+    this.outlineRanges = [];
+    const R = 0.985;
     for (const c of cells) {
+      const start = pos.length / 3;
       const w = hexToWorld(c);
-      const y = topY(c.h) + 0.004;
-      const clr = new THREE.Color(c.line);
-      for (let i = 0; i < 6; i++) {
-        const a = corners[i]!;
-        const b = corners[(i + 1) % 6]!;
-        pos.push(w.x + a.x, y, w.z + a.z, w.x + b.x, y, w.z + b.z);
-        col.push(clr.r, clr.g, clr.b, clr.r, clr.g, clr.b);
+      const top = topY(c.h) + 0.004;
+      const lowAtCorner = new Map<string, { x: number; z: number; y: number }>();
+      for (let d = 0; d < 6; d++) {
+        const [p0, p1] = edgeCorners(d, R);
+        pos.push(w.x + p0.x, top, w.z + p0.z, w.x + p1.x, top, w.z + p1.z);
+        const nIdx = this.cellIndex.get(hexKey(neighbor(c, d)));
+        const nH = nIdx === undefined ? null : cells[nIdx]!.h;
+        if (nH !== null && nH >= c.h) continue; // no visible side face on this edge
+        const low = nH === null ? 0 : topY(nH);
+        if (nH === null) pos.push(w.x + p0.x, 0, w.z + p0.z, w.x + p1.x, 0, w.z + p1.z);
+        for (const p of [p0, p1]) {
+          const k = `${p.x.toFixed(4)},${p.z.toFixed(4)}`;
+          const prev = lowAtCorner.get(k);
+          if (!prev || low < prev.y) lowAtCorner.set(k, { x: p.x, z: p.z, y: low });
+        }
       }
+      for (const p of lowAtCorner.values()) {
+        pos.push(w.x + p.x, top, w.z + p.z, w.x + p.x, p.y, w.z + p.z);
+      }
+      this.outlineRanges.push({ start, count: pos.length / 3 - start });
     }
+    const col = new Float32Array(pos.length);
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     lg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -358,7 +381,11 @@ export class HexScene {
       if (outlineColors) {
         const lc = new THREE.Color(c.line);
         if (c.dim) lc.multiplyScalar(0.3);
-        for (let v = 0; v < 12; v++) outlineColors.setXYZ(i * 12 + v, lc.r, lc.g, lc.b);
+        const range = this.outlineRanges[i];
+        if (range) {
+          for (let v = 0; v < range.count; v++)
+            outlineColors.setXYZ(range.start + v, lc.r, lc.g, lc.b);
+        }
       }
     });
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -441,7 +468,7 @@ export class HexScene {
     for (const layer of spec.borders) {
       if (!layer.segments.length) continue;
       const arr: number[] = [];
-      for (const s of layer.segments) arr.push(s.ax, s.y, s.az, s.bx, s.y, s.bz);
+      for (const s of layer.segments) arr.push(s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z);
       const g = new LineSegmentsGeometry();
       g.setPositions(arr);
       const mat = new LineMaterial({

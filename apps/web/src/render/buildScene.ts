@@ -27,6 +27,7 @@ import {
 import type { UiState } from '../stores/useGameStore.ts';
 import type {
   BorderLayer,
+  Segment3,
   CellSpec,
   OverlaySpec,
   SceneSpec,
@@ -53,25 +54,48 @@ function heightFn(world: World, heights: Int8Array): (k: string) => number {
   };
 }
 
-/** Border segments for a set of main hexes, each shared edge emitted once, lifted to the taller side. */
-function borderSegments(
+/**
+ * Outline of a set of main hexes as one continuous chain of lines.
+ *
+ * Every main hex draws its own full outline, each edge at the top height of its
+ * own (rendered) border cell — never at a neighbour's height, so there are no
+ * lines floating over out-of-play terrain. Wherever consecutive edges step to a
+ * different height, a vertical connector joins them at the shared corner, so the
+ * outline follows the prism faces like a single wire.
+ */
+export function mainOutline(
   world: World,
   mains: string[],
   hOf: (k: string) => number,
-  filter: (inner: string, outer: string | null) => boolean,
-): BorderLayer['segments'] {
-  const out: BorderLayer['segments'] = [];
+  filter: (inner: string, outer: string | null) => boolean = () => true,
+): Segment3[] {
+  const out: Segment3[] = [];
+  const corners = new Map<string, { x: number; z: number; ys: number[] }>();
+  const addCorner = (x: number, z: number, y: number): void => {
+    const k = `${x.toFixed(4)},${z.toFixed(4)}`;
+    const c = corners.get(k);
+    if (c) c.ys.push(y);
+    else corners.set(k, { x, z, ys: [y] });
+  };
   for (const mk of mains) {
     for (const e of mainBoundary(world, mk)) {
       if (!filter(mk, e.otherMain)) continue;
       const seg = edgeSegment(world, e);
-      const outerKey = hexKey(neighbor(parseKey(e.sub), e.dir));
-      const y = topY(Math.max(hOf(e.sub), world.subByKey.has(outerKey) ? hOf(outerKey) : 0)) + 0.03;
-      out.push({ ax: seg.a.x, az: seg.a.z, bx: seg.b.x, bz: seg.b.z, y });
+      const y = topY(hOf(e.sub)) + OUTLINE_LIFT;
+      out.push({ a: { x: seg.a.x, y, z: seg.a.z }, b: { x: seg.b.x, y, z: seg.b.z } });
+      addCorner(seg.a.x, seg.a.z, y);
+      addCorner(seg.b.x, seg.b.z, y);
     }
+  }
+  for (const c of corners.values()) {
+    const lo = Math.min(...c.ys);
+    const hi = Math.max(...c.ys);
+    if (hi - lo > 1e-6) out.push({ a: { x: c.x, y: lo, z: c.z }, b: { x: c.x, y: hi, z: c.z } });
   }
   return out;
 }
+
+const OUTLINE_LIFT = 0.03;
 
 export function buildStrategicScene(
   game: GameState,
@@ -96,12 +120,7 @@ export function buildStrategicScene(
   const allMains = world.mains.map((m) => m.key);
   const borders: BorderLayer[] = [
     {
-      segments: borderSegments(
-        world,
-        allMains,
-        hOf,
-        (inner, outer) => outer === null || inner < outer,
-      ),
+      segments: mainOutline(world, allMains, hOf),
       color: 0xf2fbff,
       width: 2,
       opacity: 0.7,
@@ -111,7 +130,7 @@ export function buildStrategicScene(
   for (const team of ['A', 'B'] as Team[]) {
     const owned = allMains.filter((k) => game.hexes[k]?.owner === team);
     borders.push({
-      segments: borderSegments(
+      segments: mainOutline(
         world,
         owned,
         hOf,
@@ -132,13 +151,13 @@ export function buildStrategicScene(
       if (chk.ok) (chk.battle ? attacks : moves).push(m.key);
     }
     borders.push({
-      segments: borderSegments(world, moves, hOf, () => true),
+      segments: mainOutline(world, moves, hOf, () => true),
       color: 0x66ff99,
       width: 3,
       opacity: 0.95,
     });
     borders.push({
-      segments: borderSegments(world, attacks, hOf, () => true),
+      segments: mainOutline(world, attacks, hOf, () => true),
       color: 0xff4455,
       width: 3.5,
       opacity: 1,
@@ -146,7 +165,7 @@ export function buildStrategicScene(
   }
   if (ui.selectedMain) {
     borders.push({
-      segments: borderSegments(world, [ui.selectedMain], hOf, () => true),
+      segments: mainOutline(world, [ui.selectedMain], hOf, () => true),
       color: 0xffff44,
       width: 3.4,
     });
@@ -253,18 +272,13 @@ export function buildTacticalScene(
 
   const borders: BorderLayer[] = [
     {
-      segments: borderSegments(
-        world,
-        battle.mains,
-        hOf,
-        (inner, outer) => outer === null || inner < outer,
-      ),
-      color: 0x38d8ff,
-      width: 1.4,
-      opacity: 0.45,
+      segments: mainOutline(world, battle.mains, hOf),
+      color: 0xe6f7ff,
+      width: 1.8,
+      opacity: 0.65,
     },
     {
-      segments: borderSegments(world, [battle.contested], hOf, () => true),
+      segments: mainOutline(world, [battle.contested], hOf, () => true),
       color: CAPTURE_COLOR, // capture-point outline: shown in every overlay
       width: 3,
       opacity: 0.95,

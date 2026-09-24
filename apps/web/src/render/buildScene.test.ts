@@ -4,12 +4,17 @@ import {
   apply,
   buildWorld,
   clusterSize,
+  generateTerrain,
+  hexToWorld,
+  mainBoundary,
   createGame,
   defaultSettings,
   mainNeighbors,
   worldOf,
 } from '@iron-ridge/engine';
-import { buildStrategicScene, buildTacticalScene } from './buildScene.ts';
+import { buildStrategicScene, buildTacticalScene, mainOutline } from './buildScene.ts';
+import type { Segment3 } from './spec.ts';
+import { topY } from './spec.ts';
 import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
 
 const UI = {
@@ -120,6 +125,69 @@ describe('scene building', () => {
         new Set(buildStrategicScene(s, UI, 'A', mode).cells.map((c) => c.fill));
       expect(byOwner('basic').size).toBe(1);
       expect(byOwner('control').size).toBe(3); // Alpha, Bravo, neutral
+    });
+  });
+
+  describe('main-grid outlines', () => {
+    const key = (p: { x: number; y: number; z: number }): string =>
+      `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;
+
+    function danglingEnds(segs: Segment3[]): number {
+      const degree = new Map<string, number>();
+      for (const s of segs)
+        for (const p of [s.a, s.b]) degree.set(key(p), (degree.get(key(p)) ?? 0) + 1);
+      return [...degree.values()].filter((d) => d < 2).length;
+    }
+
+    it('every main hex draws its complete outline (not one side per shared edge)', () => {
+      const s = createGame({
+        ...defaultSettings(),
+        grid: { mainCols: 4, mainRows: 3, subRadius: 3 },
+      });
+      const { world, terrain } = worldOf(s);
+      const hOf = (k: string): number => terrain.heights[world.subByKey.get(k)!.index]!;
+      const segs = mainOutline(
+        world,
+        world.mains.map((m) => m.key),
+        hOf,
+      );
+      const horizontal = segs.filter((x) => Math.abs(x.a.y - x.b.y) < 1e-9);
+      const expected = world.mains.reduce((n, m) => n + mainBoundary(world, m.key).length, 0);
+      expect(horizontal).toHaveLength(expected);
+      for (const m of world.mains) expect(mainBoundary(world, m.key)).toHaveLength(6 * (2 * 3 + 1));
+    });
+
+    it('outlines form continuous chains — vertical connectors join every height step', () => {
+      const s = battleState();
+      const spec = buildTacticalScene(s, UI, null, 'basic').spec;
+      for (const layer of spec.borders) {
+        expect(layer.segments.some((x) => Math.abs(x.a.y - x.b.y) > 1e-9)).toBe(true);
+        expect(danglingEnds(layer.segments)).toBe(0);
+      }
+    });
+
+    it('battle-map outlines never float above out-of-play terrain', () => {
+      const s = battleState();
+      const { spec, ctx } = buildTacticalScene(s, UI, null, 'basic');
+      const terrain = generateTerrain(ctx.world, s.settings.seed);
+      const rendered = [...ctx.cells].map((k) => {
+        const sub = ctx.world.subByKey.get(k)!;
+        return { ...hexToWorld(sub.hex), top: topY(terrain.heights[sub.index]!) };
+      });
+      const maxTop = Math.max(...rendered.map((c) => c.top));
+      for (const layer of spec.borders) {
+        for (const seg of layer.segments) {
+          if (Math.abs(seg.a.y - seg.b.y) > 1e-9) continue; // verticals checked via chain test
+          const mx = (seg.a.x + seg.b.x) / 2;
+          const mz = (seg.a.z + seg.b.z) / 2;
+          // The edge must sit on top of a rendered cell it borders (≈0.866 from its centre).
+          const owner = rendered.find(
+            (c) => Math.hypot(c.x - mx, c.z - mz) < 0.9 && Math.abs(c.top + 0.03 - seg.a.y) < 1e-6,
+          );
+          expect(owner).toBeDefined();
+          expect(seg.a.y).toBeLessThanOrEqual(maxTop + 0.031);
+        }
+      }
     });
   });
 });
