@@ -22,6 +22,9 @@ import {
   parseKey,
   DIRECTIONS,
 } from '@iron-ridge/engine';
+import type { AttackFx } from './effects.ts';
+import type { ActiveEffect, FxEnv } from './fx.ts';
+import { createAttackEffects } from './fx.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
 
@@ -40,7 +43,13 @@ interface TokenObj {
   labelEl: HTMLDivElement;
   target: THREE.Vector3;
   kindSig: string;
+  /** Scene time the token left the spec; it lingers briefly then fades (kills stay visible until impact). */
+  leftAt?: number;
 }
+
+/** How long a removed token lingers, and the tail of that spent shrinking away. */
+const TOKEN_LINGER = 1.3;
+const TOKEN_FADE = 0.45;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -81,6 +90,8 @@ export class HexScene {
   private fxGroup = new THREE.Group();
   private tokens = new Map<string, TokenObj>();
   private tokenGroup = new THREE.Group();
+  private effectGroup = new THREE.Group();
+  private effects: ActiveEffect[] = [];
   private selectionRing: THREE.Mesh;
   private hoverRing: THREE.Mesh;
   private lineMaterials: LineMaterial[] = [];
@@ -131,7 +142,7 @@ export class HexScene {
     sun.position.set(30, 60, 20);
     this.scene.add(sun);
     this.scene.add(this.world);
-    this.world.add(this.borderGroup, this.fxGroup, this.tokenGroup);
+    this.world.add(this.borderGroup, this.fxGroup, this.tokenGroup, this.effectGroup);
 
     const ringGeo = new THREE.RingGeometry(0.72, 0.95, 6);
     ringGeo.rotateX(-Math.PI / 2);
@@ -178,6 +189,10 @@ export class HexScene {
     const fresh = spec.terrainId !== this.terrainId;
     this.cells = spec.cells;
     if (fresh) {
+      this.clearEffects();
+      // A new map: tokens that don't carry over are removed now rather than lingering.
+      const carried = new Set(spec.tokens.map((x) => x.id));
+      for (const id of [...this.tokens.keys()]) if (!carried.has(id)) this.removeToken(id);
       this.buildTerrain(spec.cells);
       this.terrainId = spec.terrainId;
       this.frameAll();
@@ -196,6 +211,22 @@ export class HexScene {
       this.selectionRing.position.set(p.x, p.y + 0.03, p.z);
       this.selectionRing.visible = true;
     } else this.selectionRing.visible = false;
+  }
+
+  /** Animate an attack (projectile, impact, floating damage numbers). */
+  playAttack(fx: AttackFx): void {
+    if (!this.cellIndex.has(fx.from) || !this.cellIndex.has(fx.to)) return;
+    const env: FxEnv = {
+      group: this.effectGroup,
+      cellPos: (k) => this.cellPos(k),
+      glow: getGlowTexture(),
+    };
+    this.effects.push(...createAttackEffects(env, fx, this.elapsed));
+  }
+
+  private clearEffects(): void {
+    for (const e of this.effects) e.dispose();
+    this.effects = [];
   }
 
   focus(key: string): void {
@@ -604,12 +635,20 @@ export class HexScene {
       obj.labelEl.style.opacity = t.spent ? '0.55' : '1';
     }
     for (const [id, obj] of this.tokens) {
-      if (seen.has(id)) continue;
-      obj.group.remove(obj.label);
-      obj.labelEl.remove();
-      this.tokenGroup.remove(obj.group);
-      this.tokens.delete(id);
+      if (seen.has(id)) {
+        if (obj.leftAt !== undefined) obj.group.scale.setScalar(1);
+        obj.leftAt = undefined;
+      } else if (obj.leftAt === undefined) obj.leftAt = this.elapsed;
     }
+  }
+
+  private removeToken(id: string): void {
+    const obj = this.tokens.get(id);
+    if (!obj) return;
+    obj.group.remove(obj.label);
+    obj.labelEl.remove();
+    this.tokenGroup.remove(obj.group);
+    this.tokens.delete(id);
   }
 
   // ── Path + trajectory ──
@@ -734,10 +773,24 @@ export class HexScene {
     this.elapsed += dt;
     this.updateCamera(dt);
     const t = this.elapsed;
-    for (const obj of this.tokens.values()) {
+    for (const [id, obj] of this.tokens) {
       obj.group.position.lerp(obj.target, Math.min(1, dt * 10));
       obj.body.position.y = 0.04 * Math.sin(t * 2.5 + obj.group.position.x);
+      if (obj.leftAt !== undefined) {
+        const age = t - obj.leftAt;
+        if (age >= TOKEN_LINGER) this.removeToken(id);
+        else if (age > TOKEN_LINGER - TOKEN_FADE) {
+          const k = (TOKEN_LINGER - age) / TOKEN_FADE;
+          obj.group.scale.setScalar(Math.max(0.01, k));
+          obj.labelEl.style.opacity = String(k);
+        }
+      }
     }
+    this.effects = this.effects.filter((e) => {
+      if (e.update(t)) return true;
+      e.dispose();
+      return false;
+    });
     (this.selectionRing.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(t * 5);
     if (this.pointerDirty) {
       this.pointerDirty = false;

@@ -370,11 +370,26 @@ export function previewAttack(
 
 // ── Resolution ───────────────────────────────────────────────────────────────
 
+/** A unit whose HP changed during one attack resolution (incl. counters and splash). */
+export interface AttackHit {
+  unitId: string;
+  pos: HexKey;
+  damage: number;
+  killed: boolean;
+}
+
 export interface AttackOutcome {
+  attackerId: string;
+  /** Shooter's cell when the attack was made. */
+  from: HexKey;
+  /** Target / impact cell. */
+  target: HexKey;
+  kind: AttackKind;
   roll: number;
   result: 'direct' | 'splash' | 'miss';
   damage: number;
   killed: string[];
+  hits: AttackHit[];
   log: BattleLogEntry[];
 }
 
@@ -628,8 +643,27 @@ export function resolveAttack(
   const killed = battle.units
     .filter((u) => u.hp <= 0 && (before.get(u.id) ?? 0) > 0)
     .map((u) => u.id);
+  const hits: AttackHit[] = battle.units
+    .filter((u) => u.pos && u.hp < (before.get(u.id) ?? u.hp))
+    .map((u) => ({
+      unitId: u.id,
+      pos: u.pos!,
+      damage: before.get(u.id)! - u.hp,
+      killed: u.hp <= 0,
+    }));
   refreshOccupancy(ctx, battle);
-  return { roll, result, damage, killed, log };
+  return {
+    attackerId: attacker.id,
+    from: attacker.pos!,
+    target: targetKey,
+    kind: pv.kind,
+    roll,
+    result,
+    damage,
+    killed,
+    hits,
+    log,
+  };
 }
 
 /** Archers' point-blank volley before melee contact. */

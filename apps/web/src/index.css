@@ -92,3 +92,29 @@ body {
 .ir-token-label .ir-hp > div {
   height: 100%;
 }
+
+/* Floating combat numbers (attack effects) — neutral highlight colours only */
+.ir-fx-label {
+  font:
+    bold 12px 'Courier New',
+    monospace;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+  text-shadow:
+    0 0 3px #000810,
+    0 0 6px #000810,
+    0 0 10px rgba(255, 192, 64, 0.35);
+}
+.ir-fx-damage {
+  color: #ffe066;
+}
+.ir-fx-kill {
+  color: #ffa030;
+  font-size: 13px;
+}
+.ir-fx-miss,
+.ir-fx-noeffect {
+  color: #9fb8c4;
+  font-size: 10px;
+}

@@ -35,6 +35,7 @@ export function GameScreen(): React.ReactElement {
   const error = useGameStore((s) => s.error);
   const handoff = useGameStore((s) => s.handoff);
   const aiSpeed = useGameStore((s) => s.aiSpeed);
+  const fx = useGameStore((s) => s.fx);
   const { setUi, aiTick, clearError, dismissHandoff, quit, setAiSpeed } = useGameStore.getState();
   const [help, setHelp] = useState(false);
 
@@ -53,7 +54,9 @@ export function GameScreen(): React.ReactElement {
           ? 60
           : aiSpeed
         : Math.min(aiSpeed, 150);
-    const id = setTimeout(() => aiTick(), delay);
+    // Let the AI's last shot land before it acts again.
+    const wait = Math.max(delay, useGameStore.getState().fxBusyUntil - Date.now());
+    const id = setTimeout(() => aiTick(), wait);
     return () => clearTimeout(id);
   }, [game, aiTurn, handoff, aiSpeed, aiTick]);
 
@@ -228,7 +231,13 @@ export function GameScreen(): React.ReactElement {
       {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         <main className="relative shrink-0 h-[48dvh] md:h-auto md:flex-1 md:shrink">
-          <SceneView spec={spec} selectedKey={selectedKey} onHover={onHover} onClick={onClick} />
+          <SceneView
+            spec={spec}
+            fx={fx}
+            selectedKey={selectedKey}
+            onHover={onHover}
+            onClick={onClick}
+          />
           <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && (
             <div

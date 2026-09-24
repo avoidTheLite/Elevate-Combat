@@ -10,7 +10,9 @@ import {
   pAtLeast,
   previewAttack,
   rangeBand,
+  resolveAttack,
 } from './combat.ts';
+import { createRng } from './rng.ts';
 import { lineOfSight } from './los.ts';
 import { effectivenessMultiplier, unitType } from './units.ts';
 import type { Battle, BattleUnit } from './types.ts';
@@ -157,5 +159,24 @@ describe('attack preview', () => {
     const pv = previewAttack(ctx, battle, battle.units[1]!, '0,0');
     expect(pv.legal).toBe(true);
     expect(pv.expectedDamage).toBe(0);
+  });
+});
+
+describe('attack outcome for effects', () => {
+  it('reports origin, target, kind and every unit whose HP dropped', () => {
+    const { ctx, battle } = flatContext();
+    // Roll until a damaging hit lands so the hits list is exercised.
+    for (let seed = 1; seed < 200; seed++) {
+      const b = structuredClone(battle);
+      refreshOccupancy(ctx, b);
+      const out = resolveAttack(ctx, createRng(seed), b, b.units[0]!, '5,0');
+      if ('error' in out) throw new Error(out.error);
+      expect(out).toMatchObject({ attackerId: 'tank', from: '0,0', target: '5,0', kind: 'direct' });
+      const lost = b.units.filter((u) => u.hp < battle.units.find((x) => x.id === u.id)!.hp);
+      expect(out.hits.map((h) => h.unitId).sort()).toEqual(lost.map((u) => u.id).sort());
+      for (const h of out.hits) expect(h.damage).toBeGreaterThan(0);
+      if (out.hits.length) return;
+    }
+    throw new Error('no damaging hit in 200 seeds');
   });
 });

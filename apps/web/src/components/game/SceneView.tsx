@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { HexScene } from '../../render/HexScene.ts';
+import type { AttackFx } from '../../render/effects.ts';
 import type { SceneSpec } from '../../render/spec.ts';
 import { Button } from '../ui/Button.tsx';
 
 interface Props {
   spec: SceneSpec;
+  /** Latest attack animation; played once per new id. */
+  fx?: AttackFx | null;
   selectedKey: string | null;
   focusKey?: string | null;
   onHover: (key: string | null) => void;
@@ -13,6 +16,7 @@ interface Props {
 
 export function SceneView({
   spec,
+  fx,
   selectedKey,
   focusKey,
   onHover,
@@ -55,6 +59,15 @@ export function SceneView({
   useEffect(() => {
     if (focusKey) sceneRef.current?.focus(focusKey);
   }, [focusKey]);
+
+  // Play each attack once. Runs after the spec effect above, so the scene already
+  // shows the post-attack state (lingering tokens cover units killed by this shot).
+  const playedFx = useRef(0);
+  useEffect(() => {
+    if (!fx || fx.id === playedFx.current) return;
+    playedFx.current = fx.id;
+    sceneRef.current?.playAttack(fx);
+  }, [fx]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
