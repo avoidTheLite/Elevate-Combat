@@ -1,15 +1,17 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as engine from '@iron-ridge/engine';
 import './index.css';
 import App from './App.tsx';
+import { useGameStore } from './stores/useGameStore.ts';
 
-const queryClient = new QueryClient();
+// Dev-only hook for automated smoke tests and console debugging.
+if (import.meta.env.DEV) {
+  (window as unknown as { __ironRidge: unknown }).__ironRidge = { store: useGameStore, engine };
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <App />
   </StrictMode>,
 );
