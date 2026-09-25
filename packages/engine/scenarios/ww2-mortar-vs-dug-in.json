@@ -1,0 +1,35 @@
+{
+  "name": "ww2-mortar-vs-dug-in",
+  "description": "Two mortars and a rifle squad crack two rifle squads dug in at fortification L2.",
+  "era": "ww2",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "ww2_mortar",
+        "count": 2
+      },
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 1
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 2
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "forts": {
+    "level": 2
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "attacker"
+  }
+}

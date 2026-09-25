@@ -8,13 +8,14 @@ import { hexDistance, parseKey } from '../hex.ts';
 import type { GameAction } from '../actions.ts';
 import type { BattleContext } from '../battleMap.ts';
 import { deploymentZone, h, liveUnits, refreshOccupancy } from '../battleMap.ts';
-import { MAX_FORT, previewAttack } from '../combat.ts';
+import { previewAttack } from '../combat.ts';
 import { reachable } from '../movement.ts';
 import { contextFor, holdsCaptureZone, warnedRangeCells } from '../tactical.ts';
 import type { Battle, BattleUnit, GameState, Team } from '../types.ts';
 import { otherTeam } from '../types.ts';
+import { mechanics } from '../rules.ts';
 import { unitType } from '../units.ts';
-import { canSee, visibleCells, revealedEnemies } from '../visibility.ts';
+import { canSee, visibleCells, revealedEnemies, withVisionCache } from '../visibility.ts';
 
 interface Shot {
   cell: HexKey;
@@ -142,6 +143,10 @@ function cellScore(
 }
 
 export function tacticalAiStep(state: GameState): GameAction {
+  return withVisionCache(() => decide(state));
+}
+
+function decide(state: GameState): GameAction {
   const battle = state.battle!;
   const ctx = contextFor(state);
 
@@ -153,7 +158,7 @@ export function tacticalAiStep(state: GameState): GameAction {
       const zone = new Set(deploymentZone(ctx, battle, team));
       const origin = ctx.world.mainByKey.get(battle.origin)!.center;
       const cells = [...warnedRangeCells(ctx, battle)]
-        .filter((k) => (battle.forts[k] ?? 0) < MAX_FORT)
+        .filter((k) => (battle.forts[k] ?? 0) < mechanics().MAX_FORT)
         .sort((a, b) => {
           const s = (k: HexKey): number =>
             h(ctx, k) * 1.5 -
@@ -214,7 +219,7 @@ export function tacticalAiStep(state: GameState): GameAction {
       const lvl = battle.forts[u.pos!] ?? 0;
       const exposed = enemies.some((e) => hexDistance(parseKey(u.pos!), parseKey(e.pos!)) <= 2);
       if (
-        lvl < MAX_FORT &&
+        lvl < mechanics().MAX_FORT &&
         !exposed &&
         (team === battle.defender ? inContested : inContested || battle.round > 4)
       )
@@ -231,7 +236,12 @@ export function tacticalAiStep(state: GameState): GameAction {
     }
     const shot = bestShot(ctx, battle, u, enemies);
     if (shot) return { type: 'attack', unitId: u.id, cell: shot.cell };
-    if (t.engineer && u.moved && (battle.forts[u.pos!] ?? 0) < MAX_FORT && team === battle.defender)
+    if (
+      t.engineer &&
+      u.moved &&
+      (battle.forts[u.pos!] ?? 0) < mechanics().MAX_FORT &&
+      team === battle.defender
+    )
       return { type: 'dig', unitId: u.id };
   }
   return { type: 'endBattleTurn' };

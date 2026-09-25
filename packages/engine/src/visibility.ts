@@ -33,13 +33,61 @@ export function canSee(ctx: BattleContext, viewer: BattleUnit, target: HexKey): 
   return los.status !== 'blocked';
 }
 
+// Per-viewer vision memo, only active inside `withVisionCache` (the tactical AI
+// evaluates thousands of hypothetical positions per decision). Within one scope
+// the terrain and battle cells are fixed, so a viewer's visible cells depend only
+// on (position, vision range, eye height). Results are identical to the uncached
+// path, including Set insertion order.
+let visionMemo: WeakMap<BattleContext, Map<string, HexKey[]>> | null = null;
+
+/** Run `fn` with vision memoised per viewer position. Synchronous, nesting-safe. */
+export function withVisionCache<T>(fn: () => T): T {
+  if (visionMemo) return fn();
+  visionMemo = new WeakMap();
+  try {
+    return fn();
+  } finally {
+    visionMemo = null;
+  }
+}
+
+function viewerCells(ctx: BattleContext, pos: HexKey, range: number, eye: number): HexKey[] {
+  const origin = parseKey(pos);
+  const out: HexKey[] = [];
+  for (const c of spiral(origin, range)) {
+    const k = hexKey(c);
+    if (!ctx.cells.has(k)) continue;
+    if (k === pos || lineOfSight(origin, c, ctx.heightOf, eye).status !== 'blocked') out.push(k);
+  }
+  return out;
+}
+
 /** Cells this team can see via LOS from any live unit. */
 export function visibleCells(ctx: BattleContext, battle: Battle, team: Team): Set<HexKey> {
   const out = new Set<HexKey>();
+  let memo: Map<string, HexKey[]> | undefined;
+  if (visionMemo) {
+    memo = visionMemo.get(ctx);
+    if (!memo) {
+      memo = new Map();
+      visionMemo.set(ctx, memo);
+    }
+  }
   for (const u of liveUnits(battle, team)) {
-    const origin = parseKey(u.pos!);
     const eye = unitType(u.typeId).eye;
-    for (const c of spiral(origin, visionRange(ctx, u))) {
+    const range = visionRange(ctx, u);
+    if (memo) {
+      const key = `${u.pos}|${range}|${eye}`;
+      let cells = memo.get(key);
+      if (!cells) {
+        cells = viewerCells(ctx, u.pos!, range, eye);
+        memo.set(key, cells);
+      }
+      for (const k of cells) out.add(k);
+      continue;
+    }
+    const origin = parseKey(u.pos!);
+    for (const c of spiral(origin, range)) {
       const k = hexKey(c);
       if (!ctx.cells.has(k) || out.has(k)) continue;
       if (k === u.pos || lineOfSight(origin, c, ctx.heightOf, eye).status !== 'blocked') out.add(k);

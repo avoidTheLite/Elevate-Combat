@@ -8,7 +8,7 @@ import type { World } from './grid.ts';
 import { mainNeighbors } from './grid.ts';
 import type { BattleContext } from './battleMap.ts';
 import { buildContext, deploymentZone, h, liveUnits, refreshOccupancy } from './battleMap.ts';
-import { MAX_FORT, bestFacing, resolveAttack } from './combat.ts';
+import { bestFacing, resolveAttack } from './combat.ts';
 import type { AttackOutcome } from './combat.ts';
 import { costField, pathTo, reachable } from './movement.ts';
 import type { Rng } from './rng.ts';
@@ -23,6 +23,7 @@ import type {
   Team,
 } from './types.ts';
 import { TEAM_NAME, otherTeam } from './types.ts';
+import { mechanics } from './rules.ts';
 import { unitType } from './units.ts';
 
 export const WARNED_CAP = { placements: 4, range: 6 } as const;
@@ -207,7 +208,7 @@ export function placeWarnedFort(ctx: BattleContext, battle: Battle, key: HexKey)
   if (battle.warnedPlacements <= 0) return { ok: false, error: 'No warned placements left' };
   if (!warnedRangeCells(ctx, battle).has(key))
     return { ok: false, error: 'Outside warned placement range' };
-  if ((battle.forts[key] ?? 0) >= MAX_FORT)
+  if ((battle.forts[key] ?? 0) >= mechanics().MAX_FORT)
     return { ok: false, error: 'Already at max fortification' };
   battle.forts[key] = (battle.forts[key] ?? 0) + 1;
   battle.warnedPlacements -= 1;
@@ -466,7 +467,7 @@ export function digIn(battle: Battle, unitId: string): ActionResult {
   if (!unitType(u.typeId).engineer) return { ok: false, error: 'Only engineers can dig in' };
   if (u.acted) return { ok: false, error: 'Unit already acted' };
   const lvl = battle.forts[u.pos!] ?? 0;
-  if (lvl >= MAX_FORT) return { ok: false, error: 'Fortification already at max' };
+  if (lvl >= mechanics().MAX_FORT) return { ok: false, error: 'Fortification already at max' };
   battle.forts[u.pos!] = lvl + 1;
   u.acted = true;
   u.mp = 0;

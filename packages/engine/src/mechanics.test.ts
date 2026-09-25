@@ -393,7 +393,7 @@ describe('movement costs / occupancy', () => {
   });
 });
 
-function buildWorldStub() {
+function buildWorldStub(): ReturnType<typeof buildWorld> {
   return buildWorld({ mainCols: 3, mainRows: 3, subRadius: 2 });
 }
 

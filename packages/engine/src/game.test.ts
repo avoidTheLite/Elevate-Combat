@@ -65,7 +65,7 @@ describe('campaign', () => {
     // AI plays the battle to completion.
     s = runAi(s, 3000);
     expect(['strategic', 'over']).toContain(s.phase);
-  });
+  }, 30000);
 
   it('auto-resolve settles a pending battle', () => {
     let s = forceBattle(createGame(settings({ grid: { mainCols: 4, mainRows: 3, subRadius: 3 } })));

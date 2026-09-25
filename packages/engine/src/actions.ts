@@ -33,6 +33,7 @@ import {
   setUp,
 } from './tactical.ts';
 import type { GameState } from './types.ts';
+import { withRules } from './rules.ts';
 
 export type GameAction =
   | { type: 'moveArmy'; armyId: string; dest: HexKey }
@@ -64,7 +65,12 @@ export interface ApplyResult {
   outcome: AttackOutcome | null;
 }
 
+/** Every action runs under the game's own rules override (settings.rules). */
 export function apply(prev: GameState, action: GameAction): ApplyResult {
+  return withRules(prev.settings.rules, () => applyAction(prev, action));
+}
+
+function applyAction(prev: GameState, action: GameAction): ApplyResult {
   const state = structuredClone(prev);
   const rng = createRng(state.rng);
   let res: { ok: boolean; error?: string; outcome?: AttackOutcome } = {

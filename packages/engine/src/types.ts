@@ -1,6 +1,7 @@
 import type { HexKey } from './hex.ts';
 import type { GridConfig } from './grid.ts';
 import type { Era } from './units.ts';
+import type { RulesOverride } from './rules.ts';
 
 export type Team = 'A' | 'B';
 
@@ -134,6 +135,8 @@ export interface GameSettings {
   battleRounds: number;
   /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
   battleObjective?: Partial<BattleObjective>;
+  /** Runtime unit/mechanics overrides (balance lab). Absent = baseline rules. */
+  rules?: RulesOverride;
 }
 
 export interface StrategicLogEntry {

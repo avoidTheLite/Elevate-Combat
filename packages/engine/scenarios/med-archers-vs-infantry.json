@@ -1,0 +1,28 @@
+{
+  "name": "med-archers-vs-infantry",
+  "description": "Three infantry close on three archers who get a first-strike volley.",
+  "era": "medieval",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "med_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "med_archers",
+        "count": 3
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "even"
+  }
+}
