@@ -3,6 +3,8 @@ import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import { GRID_LIMITS, clusterSize, defaultSettings } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { withActiveRules } from '../../balance/store.ts';
+import { LabEntry } from '../balance/LabEntry.tsx';
 
 function NumberField(props: {
   label: string;
@@ -76,15 +78,17 @@ export function SetupScreen(): React.ReactElement {
   const setGrid = (patch: Partial<GameSettings['grid']>): void =>
     setSettings({ ...settings, grid: { ...settings.grid, ...patch } });
 
-  const start = (): void => {
+  const configured = (): GameSettings => {
     const controllers: Record<'A' | 'B', Controller> =
       mode === 'ai'
         ? { A: 'human', B: 'ai' }
         : mode === 'hotseat'
           ? { A: 'human', B: 'human' }
           : { A: 'ai', B: 'ai' };
-    newGame({ ...settings, controllers });
+    return { ...settings, controllers };
   };
+  // Balance-lab overrides (if applied) ride along in settings.rules.
+  const start = (): void => newGame(withActiveRules(configured()));
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 scanlines">
@@ -205,6 +209,7 @@ export function SetupScreen(): React.ReactElement {
             </Button>
           )}
         </div>
+        <LabEntry settings={configured} />
       </div>
 
       <div className="text-[10px] text-[hsl(var(--muted-foreground))] max-w-[560px] text-center leading-4">
