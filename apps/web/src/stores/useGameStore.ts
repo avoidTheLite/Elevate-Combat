@@ -1,10 +1,28 @@
 import { create } from 'zustand';
 import type { AttackOutcome, GameAction, GameSettings, GameState, Team } from '@iron-ridge/engine';
-import { actingTeam, aiStep, apply, createGame, isAiTurn } from '@iron-ridge/engine';
+import {
+  actingTeam,
+  aiStep,
+  apply,
+  createGame,
+  deserializeSave,
+  isAiTurn,
+  serializeSave,
+  validateGameState,
+} from '@iron-ridge/engine';
 import type { AttackFx } from '../render/effects.ts';
 import { effectVisibility, planAttackFx } from '../render/effects.ts';
-
-const SAVE_KEY = 'iron-ridge-save-v0.9';
+import type { SlotId, SlotInfo } from './saveSlots.ts';
+import {
+  SLOT_IDS,
+  exportFilename,
+  migrateLegacyStorage,
+  readSlot,
+  removeSlot,
+  slotInfo,
+  slotName,
+  writeSlot,
+} from './saveSlots.ts';
 
 export interface UiState {
   selectedMain: string | null;
@@ -37,9 +55,27 @@ interface GameStore {
   aiSpeed: number;
   /** Quit dialog: choose abandon vs save-and-quit. */
   quitPrompt: boolean;
+  /** Last save/load failure, shown on the setup screen (never thrown). */
+  loadError: string | null;
+  /** Short confirmation / migration note after a save or load. */
+  saveNotice: string | null;
+  /** Bumps whenever a slot is written or deleted (lets slot lists re-read storage). */
+  saveRev: number;
   newGame: (settings: GameSettings) => void;
+  /** Continue: load the autosave slot. */
   loadSaved: () => boolean;
   hasSave: () => boolean;
+  saveToSlot: (slot: SlotId, label?: string) => boolean;
+  loadSlot: (slot: SlotId) => boolean;
+  deleteSlot: (slot: SlotId) => void;
+  listSlots: () => SlotInfo[];
+  /** Current game as save-file text plus a suggested download filename. */
+  exportSave: () => { text: string; filename: string } | null;
+  /** Load save-file text (from an imported .json) into the game and autosave. */
+  importSave: (text: string) => boolean;
+  /** Move a V0.9 autosave into the V1 autosave slot (runs once at startup). */
+  migrateLegacy: () => boolean;
+  clearLoadError: () => void;
   requestQuit: () => void;
   cancelQuit: () => void;
   /** Keep autosave and return to setup. */
@@ -56,34 +92,15 @@ interface GameStore {
   setAiSpeed: (ms: number) => void;
 }
 
+/** Autosave (best-effort; storage may be unavailable in private mode / previews). */
 function save(game: GameState | null): void {
-  try {
-    if (game) localStorage.setItem(SAVE_KEY, JSON.stringify(game));
-    else localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // Storage may be unavailable (private mode, previews) — saving is best-effort.
-  }
+  if (game) writeSlot('autosave', game, 'Autosave');
+  else removeSlot('autosave');
 }
 
-/** Lightweight structural guard — accepts unknown extra fields. */
+/** Structural guard for a (current-schema) GameState — delegates to the engine. */
 export function isValidSave(raw: unknown): raw is GameState {
-  if (!raw || typeof raw !== 'object') return false;
-  const g = raw as Record<string, unknown>;
-  if (typeof g.version !== 'string' || !g.version.startsWith('0.9')) return false;
-  if (!g.settings || typeof g.settings !== 'object') return false;
-  const settings = g.settings as Record<string, unknown>;
-  if (typeof settings.era !== 'string' || !settings.grid || typeof settings.grid !== 'object')
-    return false;
-  if (!settings.controllers || typeof settings.controllers !== 'object') return false;
-  if (typeof g.phase !== 'string') return false;
-  if (typeof g.turn !== 'number' || typeof g.active !== 'string') return false;
-  if (!g.cp || typeof g.cp !== 'object') return false;
-  if (!g.hq || typeof g.hq !== 'object') return false;
-  if (!g.hexes || typeof g.hexes !== 'object') return false;
-  if (!Array.isArray(g.armies)) return false;
-  if (!g.forts || typeof g.forts !== 'object') return false;
-  if (typeof g.rng !== 'number' || typeof g.nextId !== 'number') return false;
-  return true;
+  return validateGameState(raw).length === 0;
 }
 
 function clearSession(): Pick<
@@ -99,6 +116,17 @@ function clearSession(): Pick<
     fx: null,
     fxBusyUntil: 0,
     quitPrompt: false,
+  };
+}
+
+/** Store fields for entering a loaded game: fresh session + hotseat hand-off. */
+function enterGame(game: GameState, notes: string[] = []): Partial<GameStore> {
+  return {
+    ...clearSession(),
+    game,
+    handoff: hotseatHandoff(game),
+    loadError: null,
+    saveNotice: notes.length ? notes.join(' · ') : null,
   };
 }
 
@@ -158,6 +186,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   handoff: null,
   aiSpeed: 220,
   quitPrompt: false,
+  loadError: null,
+  saveNotice: null,
+  saveRev: 0,
 
   newGame: (settings) => {
     const game = createGame(settings);
@@ -170,60 +201,86 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...clearSession(),
       game,
       handoff: first,
+      loadError: null,
+      saveNotice: null,
     });
   },
 
   hasSave: () => {
-    try {
-      return localStorage.getItem(SAVE_KEY) !== null;
-    } catch {
-      return false;
-    }
+    migrateLegacyStorage();
+    return readSlot('autosave') !== null;
   },
 
-  loadSaved: () => {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return false;
-      const parsed: unknown = JSON.parse(raw);
-      if (!isValidSave(parsed)) {
-        localStorage.removeItem(SAVE_KEY);
-        return false;
-      }
-      // Older saves may lack battle.objective — fill defaults when a battle is mid-flight.
-      if (parsed.battle && !parsed.battle.objective) {
-        parsed.battle.objective = {
-          kind: 'capture_point',
-          captureRadius: 1,
-          extractionAtOrigin: true,
-        };
-        parsed.battle.extracted = parsed.battle.extracted ?? false;
-      }
-      // Rename legacy BattleUnit.revealed → exposed (FOW terminology realign).
-      if (parsed.battle?.units) {
-        for (const u of parsed.battle.units as unknown as Array<Record<string, unknown>>) {
-          if (!('exposed' in u) && 'revealed' in u) {
-            u.exposed = Boolean(u.revealed);
-            delete u.revealed;
-          }
-          if (typeof u.exposed !== 'boolean') u.exposed = false;
-        }
-      }
-      set({
-        ...clearSession(),
-        game: parsed,
-        handoff: hotseatHandoff(parsed),
-      });
-      return true;
-    } catch {
-      try {
-        localStorage.removeItem(SAVE_KEY);
-      } catch {
-        /* ignore */
-      }
+  loadSaved: () => get().loadSlot('autosave'),
+
+  loadSlot: (slot) => {
+    migrateLegacyStorage();
+    const text = readSlot(slot);
+    if (text === null) {
+      if (slot !== 'autosave') set({ loadError: `${slotName(slot)} is empty` });
       return false;
     }
+    const r = deserializeSave(text);
+    if (!r.ok) {
+      removeSlot(slot);
+      set({
+        loadError: `Save was corrupted and has been removed (${slotName(slot)}): ${r.error}`,
+        saveRev: get().saveRev + 1,
+      });
+      return false;
+    }
+    if (slot !== 'autosave' || r.migrated.length) save(r.save.state);
+    set({ ...enterGame(r.save.state, r.migrated), saveRev: get().saveRev + 1 });
+    return true;
   },
+
+  saveToSlot: (slot, label) => {
+    const { game } = get();
+    if (!game) return false;
+    const ok = writeSlot(slot, game, label);
+    set({
+      saveNotice: ok ? `Saved to ${slotName(slot)}` : null,
+      error: ok ? get().error : 'Could not save — browser storage is unavailable or full',
+      saveRev: get().saveRev + 1,
+    });
+    return ok;
+  },
+
+  deleteSlot: (slot) => {
+    removeSlot(slot);
+    set({ saveRev: get().saveRev + 1 });
+  },
+
+  listSlots: () => {
+    migrateLegacyStorage();
+    return SLOT_IDS.map(slotInfo);
+  },
+
+  exportSave: () => {
+    const { game } = get();
+    if (!game) return null;
+    return { text: serializeSave(game), filename: exportFilename(game) };
+  },
+
+  importSave: (text) => {
+    const r = deserializeSave(text);
+    if (!r.ok) {
+      set({ loadError: `Import failed: ${r.error}` });
+      return false;
+    }
+    save(r.save.state);
+    set({ ...enterGame(r.save.state, r.migrated), saveRev: get().saveRev + 1 });
+    return true;
+  },
+
+  migrateLegacy: () => {
+    const r = migrateLegacyStorage();
+    if (r.error) set({ loadError: r.error });
+    if (r.migrated || r.error) set({ saveRev: get().saveRev + 1 });
+    return r.migrated;
+  },
+
+  clearLoadError: () => set({ loadError: null }),
 
   requestQuit: () => set({ quitPrompt: true }),
   cancelQuit: () => set({ quitPrompt: false }),
@@ -295,3 +352,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   dismissHandoff: () => set({ handoff: null }),
   setAiSpeed: (ms) => set({ aiSpeed: ms }),
 }));
+
+// First run after the V1.0 upgrade: carry the V0.9 autosave over.
+useGameStore.getState().migrateLegacy();

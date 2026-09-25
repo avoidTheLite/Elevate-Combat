@@ -29,7 +29,7 @@ import type {
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { STARTING_ARMY, unitType } from './units.ts';
 
-export const ENGINE_VERSION = '0.9.0';
+export const ENGINE_VERSION = '1.0.0';
 
 export const ECONOMY = {
   startingCp: 20,
