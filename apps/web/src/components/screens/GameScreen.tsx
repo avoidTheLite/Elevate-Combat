@@ -3,23 +3,22 @@ import type { GameState, Team } from '@iron-ridge/engine';
 import {
   TEAM_NAME,
   actingTeam,
-  armiesAt,
   attackCost,
   autoResolveOdds,
-  canMoveTo,
   isAiTurn,
   liveUnits,
   previewAttack,
   reachable,
   unitType,
   revealedEnemies,
-  worldOf,
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene } from '../../render/buildScene.ts';
 import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
 import { OverlayBar } from '../game/OverlayBar.tsx';
 import { SceneView } from '../game/SceneView.tsx';
 import { useViewStore } from '../../stores/useViewStore.ts';
+import { seenHolders } from '../../lib/holders.ts';
+import { strategicClick } from '../../lib/strategicClick.ts';
 import { StrategicSidebar } from '../game/StrategicSidebar.tsx';
 import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
 import { Button } from '../ui/Button.tsx';
@@ -92,8 +91,9 @@ export function GameScreen(): React.ReactElement {
       const u = game.battle!.units.find((x) => x.id === (ui.selectedUnit ?? ui.deployPick));
       return u?.pos ?? null;
     }
-    return null;
-  }, [inBattle, game.battle, ui.selectedUnit, ui.deployPick]);
+    // Strategic: ring the selected holder's sub-hex (if the viewer can see it).
+    return seenHolders(game, view).find((a) => a.id === ui.selectedArmy)?.pos ?? null;
+  }, [inBattle, game, view, ui.selectedUnit, ui.deployPick, ui.selectedArmy]);
 
   const onHover = useCallback((key: string | null) => setUi({ hoverCell: key }), [setUi]);
 
@@ -104,6 +104,7 @@ export function GameScreen(): React.ReactElement {
     if (button === 2 || !key) {
       s.setUi({
         selectedArmy: null,
+        checkedUnits: [],
         selectedUnit: null,
         selectedMain: null,
         deployPick: null,
@@ -116,27 +117,7 @@ export function GameScreen(): React.ReactElement {
     const human = act !== null && !isAiTurn(g) && g.settings.controllers[act] === 'human';
 
     if (g.phase === 'strategic' || g.phase === 'battle-pending' || g.phase === 'over') {
-      const { world } = worldOf(g);
-      const main = world.subByKey.get(key)?.main;
-      if (!main) return;
-      const army = u.selectedArmy ? g.armies.find((a) => a.id === u.selectedArmy) : null;
-      if (
-        human &&
-        g.phase === 'strategic' &&
-        army &&
-        army.team === g.active &&
-        canMoveTo(g, army, main).ok
-      ) {
-        s.dispatch({ type: 'moveArmy', armyId: army.id, dest: main });
-        const moved = s.game!.armies.find((a) => a.id === army.id);
-        s.setUi({
-          selectedMain: main,
-          selectedArmy: moved && moved.movesLeft > 0 ? moved.id : null,
-        });
-        return;
-      }
-      const own = armiesAt(g, main).find((a) => a.team === g.active && (!v || v === a.team));
-      s.setUi({ selectedMain: main, selectedArmy: own && human ? own.id : null });
+      strategicClick(key);
       return;
     }
 
@@ -425,10 +406,14 @@ function Help({ onClose }: { onClose: () => void }): React.ReactElement {
           </p>
           <p>
             <b className="text-[hsl(var(--primary))]">Campaign:</b> each large hex is a main hex
-            made of sub-hexes. Select an army and click a green hex to move (fast all-mobile armies
-            move 2). Moving onto an enemy army opens a battle. CP buys units at HQ, fortifies your
-            hexes, and pays to open deployments. Enemy armies adjacent to your hexes start a warning
-            clock that grants the defender warned-category sandbags when attacked.
+            made of sub-hexes. Commanders march on the sub-hexes: select one and click a green cell
+            to move (about one main hex of steps per turn; all-fast commanders march double). Click
+            a red-marked enemy within engage range to open a battle. Recruits join your HQ garrison
+            — click the HQ, tick units and form a NEW COMMANDER or TRANSFER them to a nearby holder.
+            You only see enemy holders your commanders and garrisons have line of sight to, or that
+            stand next to your territory. CP buys units, fortifies your hexes, and pays to open
+            deployments. Enemy holders next to or inside your hexes start a warning clock that
+            grants the defender warned-category sandbags when attacked.
           </p>
           <p>
             <b className="text-[hsl(var(--primary))]">Battle:</b> fought on the sub-hex grid of the

@@ -1,11 +1,19 @@
 // ── GameState + UI selection → SceneSpec ─────────────────────────────────────
 
-import type { Battle, BattleContext, BattleUnit, GameState, Team, World } from '@iron-ridge/engine';
+import type {
+  Army,
+  Battle,
+  BattleContext,
+  BattleUnit,
+  GameState,
+  Team,
+  World,
+} from '@iron-ridge/engine';
 import {
   actionPoints,
   arcClearance,
+  COMMAND,
   buildContext,
-  canMoveTo,
   deploymentZone,
   edgeSegment,
   generateTerrain,
@@ -14,19 +22,18 @@ import {
   lineOfSight,
   liveUnits,
   mainBoundary,
-  neighbor,
   parseKey,
   pathTo,
   previewAttack,
   reachable,
   unitType,
-  visibleArmies,
   visibleCells,
   revealedEnemies,
   warnedRangeCells,
   worldOf,
 } from '@iron-ridge/engine';
 import type { UiState } from '../stores/useGameStore.ts';
+import { commandHighlights, reachPath, seenHolders } from '../lib/holders.ts';
 import type {
   BorderLayer,
   Segment3,
@@ -99,6 +106,13 @@ export function mainOutline(
 
 const OUTLINE_LIFT = 0.03;
 
+/** Commander cluster scale: the model fits (roughly) one sub-hex. */
+export const COMMANDER_SCALE = 0.75;
+/** Strategic highlight colours: reachable cells, engageable enemies, transfer receivers. */
+export const REACH_COLOR = 0x66ff99;
+export const ENGAGE_COLOR = 0xff3344;
+export const TRANSFER_COLOR = 0xffb020;
+
 /** Local-frame heading from one sub-hex to another (see TokenSpec.yaw). */
 function yawToward(from: { q: number; r: number }, to: { q: number; r: number }): number {
   const a = hexToWorld(from);
@@ -151,27 +165,15 @@ export function buildStrategicScene(
     });
   }
 
-  const army = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
-  if (army) {
-    const moves: string[] = [];
-    const attacks: string[] = [];
-    for (const m of world.mains) {
-      const chk = canMoveTo(game, army, m.key);
-      if (chk.ok) (chk.battle ? attacks : moves).push(m.key);
-    }
-    borders.push({
-      segments: mainOutline(world, moves, hOf, () => true),
-      color: 0x66ff99,
-      width: 3,
-      opacity: 0.95,
-    });
-    borders.push({
-      segments: mainOutline(world, attacks, hOf, () => true),
-      color: 0xff4455,
-      width: 3.5,
-      opacity: 1,
-    });
-  }
+  const overlays: OverlaySpec[] = [];
+  let path: string[] = [];
+  const selected = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
+  const hl = commandHighlights(game, ui.selectedArmy, ui.checkedUnits, view);
+  for (const [k] of hl.reach) overlays.push({ key: k, color: REACH_COLOR, opacity: 0.22 });
+  for (const t of hl.engage) overlays.push({ key: t.pos, color: ENGAGE_COLOR, opacity: 0.55 });
+  for (const t of hl.transfer) overlays.push({ key: t.pos, color: TRANSFER_COLOR, opacity: 0.5 });
+  if (selected && ui.hoverCell && hl.reach.has(ui.hoverCell))
+    path = reachPath(game, hl.reach, selected.pos, ui.hoverCell);
   if (ui.selectedMain) {
     borders.push({
       segments: mainOutline(world, [ui.selectedMain], hOf, () => true),
@@ -182,63 +184,77 @@ export function buildStrategicScene(
 
   const tokens: TokenSpec[] = [];
   const tokenScale = Math.max(1.2, game.settings.grid.subRadius * 0.55);
+  const seen = seenHolders(game, view);
+  // Token badges mirror the map highlights: ⚔ attackable now, ⇄ can take the ticked units.
+  const mark = (a: Army): string | undefined =>
+    hl.engage.some((t) => t.id === a.id)
+      ? '⚔'
+      : hl.transfer.some((t) => t.id === a.id)
+        ? '⇄'
+        : undefined;
   for (const team of ['A', 'B'] as Team[]) {
     const hq = world.mainByKey.get(game.hq[team])!;
-    if (game.hexes[hq.key]?.owner === team)
-      tokens.push({
-        id: `hq-${team}`,
-        key: hexKey(hq.center),
-        kind: 'hq',
-        team,
-        label: `◈ ${team === 'A' ? 'ALPHA' : 'BRAVO'} HQ`,
-        era: game.settings.era,
-        yaw: yawToward(hq.center, world.mainByKey.get(game.hq[team === 'A' ? 'B' : 'A'])!.center),
-        scale: tokenScale,
-      });
+    if (game.hexes[hq.key]?.owner !== team) continue;
+    // The garrison's count rides on the HQ label when the viewer can see it.
+    const garrison = seen.find((a) => a.kind === 'garrison' && a.team === team);
+    tokens.push({
+      id: `hq-${team}`,
+      key: hexKey(hq.center),
+      kind: 'hq',
+      team,
+      label: `◈ ${team === 'A' ? 'ALPHA' : 'BRAVO'} HQ`,
+      badge: garrison
+        ? [mark(garrison), garrisonBadge(garrison, view)].filter(Boolean).join(' ')
+        : undefined,
+      selected: !!garrison && garrison.id === ui.selectedArmy,
+      era: game.settings.era,
+      yaw: yawToward(hq.center, world.mainByKey.get(game.hq[team === 'A' ? 'B' : 'A'])!.center),
+      scale: tokenScale,
+    });
   }
-  const armies = view ? visibleArmies(game, view) : game.armies;
-  for (const a of armies) {
-    // V1 garrisons live in the HQ building (drawn above); only commanders get army tokens.
+  for (const a of seen) {
+    // Garrisons live in the HQ building (drawn above); commanders stand on their sub-hex.
     if (a.kind !== 'commander') continue;
-    const m = world.mainByKey.get(a.at)!;
-    // Offset from the centre so the HQ and army token don't overlap.
-    let spotHex = m.center;
-    for (let i = 0; i < Math.max(1, game.settings.grid.subRadius - 1); i++)
-      spotHex = neighbor(spotHex, 4);
-    const spot = hexKey(spotHex);
+    const here = world.subByKey.get(a.pos)!.hex;
     const hp = a.units.reduce((s, u) => s + u.hp, 0);
     const max = a.units.reduce((s, u) => s + unitType(u.typeId).hp, 0);
+    const mine = a.team === game.active;
     tokens.push({
       id: a.id,
-      key: world.subByKey.has(spot) ? spot : hexKey(m.center),
+      key: a.pos,
       kind: 'army',
       team: a.team,
-      label: `ARMY ×${a.units.length}`,
-      sub:
-        a.team === game.active && a.movesLeft > 0
-          ? `${a.movesLeft} move${a.movesLeft > 1 ? 's' : ''}`
-          : undefined,
+      label: `CMDR ×${a.units.length}`,
+      badge: mark(a),
+      sub: mine && a.movesLeft > 0 ? `${a.movesLeft} step${a.movesLeft > 1 ? 's' : ''}` : undefined,
       hpFrac: max ? hp / max : 1,
       selected: a.id === ui.selectedArmy,
-      spent: a.team === game.active && a.movesLeft === 0,
-      ready: a.team === game.active && a.movesLeft > 0,
+      spent: mine && a.movesLeft === 0,
+      ready: mine && a.movesLeft > 0,
       army: { era: game.settings.era, units: a.units.map((u) => u.typeId) },
-      yaw: yawToward(m.center, world.mainByKey.get(game.hq[a.team === 'A' ? 'B' : 'A'])!.center),
-      scale: tokenScale,
+      yaw: yawToward(here, world.mainByKey.get(game.hq[a.team === 'A' ? 'B' : 'A'])!.center),
+      scale: COMMANDER_SCALE,
     });
   }
 
   return {
     terrainId: `strat:${game.settings.seed}:${world.subs.length}`,
     cells,
-    overlays: [],
+    overlays,
     borders,
     tokens,
-    path: [],
+    path,
     trajectory: null,
     worldRotation: world.mainAxisAngle,
     fireView: null,
   };
+}
+
+/** Garrison badge on the HQ label: owner sees count/cap, others only the count. */
+function garrisonBadge(g: Army, view: Team | null): string {
+  return view === null || view === g.team
+    ? `⚑${g.units.length}/${COMMAND.garrisonCap}`
+    : `⚑${g.units.length}`;
 }
 
 export interface TacticalView {

@@ -11,15 +11,34 @@ import {
   defaultSettings,
   mainNeighbors,
   worldOf,
+  COMMAND,
+  commanderReach,
 } from '@iron-ridge/engine';
-import { buildStrategicScene, buildTacticalScene, mainOutline } from './buildScene.ts';
-import type { Segment3, TokenSpec } from './spec.ts';
+import {
+  COMMANDER_SCALE,
+  ENGAGE_COLOR,
+  REACH_COLOR,
+  TRANSFER_COLOR,
+  buildStrategicScene,
+  buildTacticalScene,
+  mainOutline,
+} from './buildScene.ts';
+import type { SceneSpec, Segment3, TokenSpec } from './spec.ts';
+import {
+  alphaGarrison,
+  bravoInRange,
+  commanderOf,
+  strategicGame,
+  withRecruits,
+} from '../lib/testGames.ts';
 import { topY } from './spec.ts';
+import type { UiState } from '../stores/useGameStore.ts';
 import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
 
-const UI = {
+const UI: UiState = {
   selectedMain: null,
   selectedArmy: null,
+  checkedUnits: [],
   selectedUnit: null,
   hoverCell: null,
   deployPick: null,
@@ -261,5 +280,105 @@ describe('scene building', () => {
       tokens.find((t) => t.team === 'B')!.yaw!,
     ];
     expect(Math.abs(Math.cos(ya - yb) + 1)).toBeLessThan(0.3);
+  });
+});
+
+describe('command layer on the strategic map', () => {
+  const ui = (patch: Partial<UiState>): UiState => ({ ...UI, ...patch });
+
+  it('commanders stand on their own sub-hex at sub-hex scale', () => {
+    const s = strategicGame(false);
+    const tokens = buildStrategicScene(s, UI, null).tokens.filter((t) => t.kind === 'army');
+    const commanders = s.armies.filter((a) => a.kind === 'commander');
+    expect(tokens).toHaveLength(commanders.length);
+    for (const c of commanders) {
+      const t = tokens.find((x) => x.id === c.id)!;
+      expect(t.key).toBe(c.pos);
+      expect(t.scale).toBe(COMMANDER_SCALE);
+    }
+    // A moved commander's token follows its pos.
+    const a = commanderOf(s, 'A');
+    const dest = [...commanderReach(s, a).entries()].find(([, n]) => n === 2)![0];
+    const moved = apply(s, { type: 'moveCommander', armyId: a.id, dest }).state;
+    const t = buildStrategicScene(moved, UI, null).tokens.find((x) => x.id === a.id)!;
+    expect(t.key).toBe(dest);
+  });
+
+  it('the HQ label carries the garrison count: owner sees the cap, fog hides the enemy', () => {
+    const s = withRecruits(strategicGame(true), 2);
+    const hq = (spec: SceneSpec, team: 'A' | 'B'): TokenSpec =>
+      spec.tokens.find((t) => t.id === `hq-${team}`)!;
+    const asA = buildStrategicScene(s, UI, 'A');
+    expect(hq(asA, 'A').badge).toBe(`⚑2/${COMMAND.garrisonCap}`);
+    expect(hq(asA, 'B').badge).toBeUndefined(); // Bravo's garrison is far out of sight
+    const open = buildStrategicScene(s, UI, null);
+    expect(hq(open, 'B').badge).toBe(`⚑0/${COMMAND.garrisonCap}`);
+    // Selecting the garrison marks its HQ label.
+    const sel = buildStrategicScene(s, ui({ selectedArmy: alphaGarrison(s).id }), 'A');
+    expect(hq(sel, 'A').selected).toBe(true);
+  });
+
+  it('a selected commander highlights its reach (green) and a hover path', () => {
+    const s = strategicGame(true);
+    const a = commanderOf(s, 'A');
+    const reach = commanderReach(s, a);
+    reach.delete(a.pos);
+    const spec = buildStrategicScene(s, ui({ selectedArmy: a.id }), 'A');
+    const green = spec.overlays.filter((o) => o.color === REACH_COLOR).map((o) => o.key);
+    expect(new Set(green)).toEqual(new Set(reach.keys()));
+    expect(green).not.toContain(a.pos);
+    const far = [...reach.entries()].find(([, n]) => n === 3)![0];
+    const hovered = buildStrategicScene(s, ui({ selectedArmy: a.id, hoverCell: far }), 'A');
+    expect(hovered.path).toHaveLength(4);
+    expect(hovered.path[0]).toBe(a.pos);
+    expect(hovered.path[3]).toBe(far);
+  });
+
+  it('enemies in engage range are marked red; nothing shows for a side the viewer is not', () => {
+    const s = bravoInRange(strategicGame(false));
+    const a = commanderOf(s, 'A');
+    const b = commanderOf(s, 'B');
+    const spec = buildStrategicScene(s, ui({ selectedArmy: a.id }), null);
+    const red = spec.overlays.filter((o) => o.color === ENGAGE_COLOR).map((o) => o.key);
+    expect(red).toEqual([b.pos]);
+    // Hotseat: Bravo's view gets no highlight for Alpha's commander.
+    const hot = structuredClone(s);
+    hot.settings.controllers.B = 'human';
+    hot.settings.fog = true;
+    expect(buildStrategicScene(hot, ui({ selectedArmy: a.id }), 'B').overlays).toHaveLength(0);
+  });
+
+  it('ticked units highlight eligible transfer receivers (amber)', () => {
+    const s = withRecruits(strategicGame(true), 1);
+    const g = alphaGarrison(s);
+    const a = commanderOf(s, 'A');
+    const none = buildStrategicScene(s, ui({ selectedArmy: g.id }), 'A');
+    expect(none.overlays.filter((o) => o.color === TRANSFER_COLOR)).toHaveLength(0);
+    const spec = buildStrategicScene(
+      s,
+      ui({ selectedArmy: g.id, checkedUnits: [g.units[0]!.id] }),
+      'A',
+    );
+    expect(spec.overlays.filter((o) => o.color === TRANSFER_COLOR).map((o) => o.key)).toEqual([
+      a.pos,
+    ]);
+  });
+});
+
+describe('command badges', () => {
+  it('an engageable enemy token carries ⚔; a transfer receiver carries ⇄', () => {
+    const s = bravoInRange(strategicGame(false));
+    const a = commanderOf(s, 'A');
+    const b = commanderOf(s, 'B');
+    const spec = buildStrategicScene(s, { ...UI, selectedArmy: a.id }, null);
+    expect(spec.tokens.find((t) => t.id === b.id)!.badge).toBe('⚔');
+    const r = withRecruits(strategicGame(true), 1);
+    const g = alphaGarrison(r);
+    const tx = buildStrategicScene(
+      r,
+      { ...UI, selectedArmy: g.id, checkedUnits: [g.units[0]!.id] },
+      'A',
+    );
+    expect(tx.tokens.find((t) => t.id === commanderOf(r, 'A').id)!.badge).toBe('⇄');
   });
 });
