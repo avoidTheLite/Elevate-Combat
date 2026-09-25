@@ -1,19 +1,18 @@
 import type { GameState, Team } from '@iron-ridge/engine';
 import {
+  COMMAND,
   ECONOMY,
   TEAM_NAME,
-  armiesAt,
-  armyStrength,
-  attackCost,
+  garrisonOf,
   hexFortLevel,
-  unitType,
   unitsForEra,
-  visibleArmies,
   worldOf,
 } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { holderName, seenHolders } from '../../lib/holders.ts';
+import { ContentsPanel } from './ContentsPanel.tsx';
 
 export function StrategicSidebar({
   game,
@@ -31,13 +30,13 @@ export function StrategicSidebar({
   const team = game.active;
   const main = ui.selectedMain ? world.mainByKey.get(ui.selectedMain) : null;
   const hexState = main ? game.hexes[main.key] : null;
-  const seenArmies = view ? visibleArmies(game, view) : game.armies;
-  const armiesHere = main ? armiesAt(game, main.key).filter((a) => seenArmies.includes(a)) : [];
-  const army = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
-  const hqArmy = armiesAt(game, game.hq[team]).find((a) => a.team === team);
+  const holdersHere = main ? seenHolders(game, view).filter((a) => a.at === main.key) : [];
+  const garrison = garrisonOf(game, team);
+  const garrisonFull = (garrison?.units.length ?? 0) >= COMMAND.garrisonCap;
+  const n = game.settings.grid.subRadius;
 
   return (
-    <PanelStack priority={['campaign-log', 'hex', 'recruit', 'army', 'command']}>
+    <PanelStack priority={['campaign-log', 'hex', 'recruit', 'contents', 'command']}>
       <Panel id="command" title="COMMAND">
         <Stat
           label="Command Points"
@@ -58,8 +57,12 @@ export function StrategicSidebar({
           </Button>
         </div>
         <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-          Select an army, then click a green hex to move or a red hex to attack (costs{' '}
-          {ECONOMY.attackBaseCost} + {ECONOMY.attackPerUnitCost}/unit CP to open a deployment).
+          Select a commander: green cells are reachable this turn ({COMMAND.commandMove(n)} sub-hex
+          steps, double when every unit is fast). Red marks an enemy within engage range (
+          {COMMAND.engageRange(n)} sub-hexes) — click it to attack for {ECONOMY.attackBaseCost} +{' '}
+          {ECONOMY.attackPerUnitCost}/unit CP. Your holders see enemies within{' '}
+          {COMMAND.sightRange(n)} sub-hexes with clear line of sight. Click your HQ to manage its
+          garrison.
         </div>
       </Panel>
 
@@ -104,58 +107,36 @@ export function StrategicSidebar({
                 FORTIFY (−{ECONOMY.fortifyCost} CP)
               </Button>
             )}
-            {armiesHere.map((a) => (
+            {holdersHere.map((a) => (
               <Button
                 key={a.id}
                 size="sm"
                 variant={a.id === ui.selectedArmy ? 'default' : 'ghost'}
-                onClick={() => setUi({ selectedArmy: a.team === team ? a.id : null })}
+                onClick={() => setUi({ selectedArmy: a.id, checkedUnits: [] })}
               >
-                {TEAM_NAME[a.team]} ARMY ×{a.units.length}
+                {TEAM_NAME[a.team]} {holderName(a)} ×{a.units.length}
               </Button>
             ))}
           </>
         )}
       </Panel>
 
-      <Panel
-        id="army"
-        title={army ? `${TEAM_NAME[army.team]} ARMY` : 'ARMY'}
-        right={army ? <span>{army.movesLeft} move(s)</span> : undefined}
-      >
-        {!army ? (
-          <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
-            Click one of your armies to give it orders.
-          </div>
-        ) : (
-          <>
-            <Stat label="Strength" value={armyStrength(army).toFixed(1)} />
-            <Stat label="Attack deployment cost" value={`${attackCost(army)} CP`} />
-            <ul className="text-[11px] flex flex-col gap-0.5 max-h-44 overflow-auto">
-              {army.units.map((u) => {
-                const t = unitType(u.typeId);
-                return (
-                  <li key={u.id} className="flex justify-between">
-                    <span>
-                      {u.label}{' '}
-                      <span className="text-[hsl(var(--muted-foreground))]">{t.name}</span>
-                    </span>
-                    <span className={u.hp < t.hp / 2 ? 'text-[hsl(var(--destructive))]' : ''}>
-                      {u.hp}/{t.hp}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </Panel>
+      <ContentsPanel game={game} view={view} />
 
       <Panel
         id="recruit"
-        title="RECRUIT @ HQ"
-        right={<span>{hqArmy ? `${hqArmy.units.length}/${ECONOMY.armyCap}` : 'new army'}</span>}
+        title="RECRUIT → HQ GARRISON"
+        right={
+          <span data-testid="garrison-count">
+            {garrison?.units.length ?? 0}/{COMMAND.garrisonCap}
+          </span>
+        }
       >
+        <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
+          Recruits join the HQ garrison ({garrison?.units.length ?? 0}/{COMMAND.garrisonCap}). Click
+          the HQ and use NEW COMMANDER to field them.
+          {garrisonFull && <span className="text-[hsl(var(--destructive))]"> Garrison full.</span>}
+        </div>
         <div className="grid grid-cols-1 gap-1">
           {unitsForEra(game.settings.era).map((t) => (
             <Button
@@ -164,9 +145,7 @@ export function StrategicSidebar({
               variant="ghost"
               className="justify-between"
               onClick={() => dispatch({ type: 'recruit', typeId: t.id })}
-              disabled={
-                !canAct || game.cp[team] < t.cost || (hqArmy?.units.length ?? 0) >= ECONOMY.armyCap
-              }
+              disabled={!canAct || game.cp[team] < t.cost || !garrison || garrisonFull}
               title={`${t.role}\n${t.armorClass} · ${t.damageType} · ${t.attackType} · ${t.placementCategory}`}
             >
               <span>{t.name}</span>

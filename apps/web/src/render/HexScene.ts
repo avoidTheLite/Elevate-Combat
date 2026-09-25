@@ -59,6 +59,8 @@ interface TokenObj {
   labelEl: HTMLDivElement;
   target: THREE.Vector3;
   kindSig: string;
+  /** Cell a click on this token's model selects (commander clusters, HQ buildings). */
+  pickKey?: string;
   /** Part of the body that stays planted while the rest bobs (the HQ wall). */
   still?: THREE.Object3D;
   /** Scene time the token left the spec; it lingers briefly then fades (kills stay visible until impact). */
@@ -70,8 +72,10 @@ const TOKEN_LINGER = 1.3;
 const TOKEN_FADE = 0.45;
 /** Unit models are authored ~0.65 tall; scale them up to read at tactical zoom. */
 const UNIT_MODEL_SCALE = 1.3;
-/** Army clusters span ~2 units before scaling; keep them inside their main hex. */
+/** Army clusters span ~2.4 units before scaling; the token scale fits them to one sub-hex. */
 const ARMY_MODEL_SCALE = 1.15;
+/** Local x of the cluster's visual centre (before scaling). */
+const ARMY_MODEL_CENTER = 0.4;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -373,13 +377,14 @@ export class HexScene {
   // ── Terrain ──
 
   private buildTerrain(cells: CellSpec[]): void {
+    // Geometry and material both (a map switch rebuilds them).
     if (this.terrainMesh) {
       this.world.remove(this.terrainMesh);
-      this.terrainMesh.geometry.dispose();
+      disposeObject3D(this.terrainMesh);
     }
     if (this.outline) {
       this.world.remove(this.outline);
-      this.outline.geometry.dispose();
+      disposeObject3D(this.outline);
     }
     this.cellIndex.clear();
     cells.forEach((c, i) => this.cellIndex.set(c.key, i));
@@ -563,9 +568,22 @@ export class HexScene {
     if (t.army) {
       // Commander cluster: command vehicle / mounted commander + escort sample.
       const model = buildArmyModel(t.army.era, t.army.units, { color, opacity: t.spent ? 0.5 : 1 });
-      model.rotation.y = -(t.yaw ?? 0);
+      // The cluster spans x ≈ −0.8…1.6 (escorts ahead); centre it on the cell.
+      model.position.x = -ARMY_MODEL_CENTER * ARMY_MODEL_SCALE;
       model.scale.setScalar(ARMY_MODEL_SCALE);
-      g.add(model);
+      const heading = new THREE.Group();
+      heading.rotation.y = -(t.yaw ?? 0);
+      heading.userData.pickable = true;
+      heading.add(model);
+      // Invisible click target covering the cell, so the small cluster is easy to hit.
+      const proxy = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.85, 0.85, 1.4, 6),
+        new THREE.MeshBasicMaterial(),
+      );
+      proxy.position.y = 0.7;
+      proxy.visible = false;
+      heading.add(proxy);
+      g.add(heading);
     } else if (t.model && hasUnitModel(t.model)) {
       // Detailed unit model; its own shape shows which way it faces.
       const model = buildUnitModel(t.model, { color, opacity: t.spent ? 0.5 : 1 });
@@ -601,6 +619,7 @@ export class HexScene {
     if (t.era) {
       const hq = buildHqModel(t.era, { color, opacity: 1 });
       hq.rotation.y = -(t.yaw ?? 0);
+      hq.userData.pickable = true;
       root.add(hq);
     }
     return root;
@@ -669,6 +688,7 @@ export class HexScene {
         obj.kindSig = sig;
       }
       obj.target.copy(pos);
+      obj.pickKey = t.kind === 'army' || t.kind === 'hq' ? t.key : undefined;
       const s = t.scale ?? 1;
       obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 1.6 : 1.25) * s, 0);
       const teamHex = `#${TEAM_COLOR[t.team].toString(16).padStart(6, '0')}`;
@@ -705,7 +725,7 @@ export class HexScene {
   private buildFx(spec: SceneSpec): void {
     for (const child of [...this.fxGroup.children]) {
       this.fxGroup.remove(child);
-      (child as THREE.Mesh).geometry?.dispose();
+      disposeObject3D(child); // geometry and material (path line, trajectory, dot)
     }
     if (spec.path.length > 1) {
       const pts = spec.path.map((k) => this.cellPos(k).add(new THREE.Vector3(0, 0.15, 0)));
@@ -854,10 +874,40 @@ export class HexScene {
   private pickKey(): string | null {
     if (!this.terrainMesh) return null;
     this.raycaster.setFromCamera(this.pointer, this.activeCamera());
+    const tokenKey = this.pickToken();
+    if (tokenKey) return tokenKey;
     const hits = this.raycaster.intersectObject(this.terrainMesh, false);
     const hit = hits[0];
     if (!hit || hit.instanceId === undefined) return null;
     return this.cells[hit.instanceId]?.key ?? null;
+  }
+
+  /**
+   * A click on a commander cluster or HQ building selects the cell it stands on,
+   * even when the ray would reach the ground on a cell behind the model. Only
+   * solid meshes of models flagged `pickable` count (not glows, labels or walls).
+   */
+  private pickToken(): string | null {
+    const roots: THREE.Object3D[] = [];
+    const keyOf = new Map<THREE.Object3D, string>();
+    for (const obj of this.tokens.values()) {
+      if (!obj.pickKey || obj.leftAt !== undefined) continue;
+      obj.body.traverse((o) => {
+        if (o.userData.pickable) {
+          roots.push(o);
+          keyOf.set(o, obj.pickKey!);
+        }
+      });
+    }
+    if (!roots.length) return null;
+    for (const hit of this.raycaster.intersectObjects(roots, true)) {
+      if (!(hit.object as THREE.Mesh).isMesh) continue;
+      for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
+        const k = keyOf.get(o);
+        if (k) return k;
+      }
+    }
+    return null;
   }
 
   private pick(): void {

@@ -8,7 +8,10 @@ const SAVE_KEY = 'iron-ridge-save-v0.9';
 
 export interface UiState {
   selectedMain: string | null;
+  /** Selected strategic holder (commander or garrison) — own or a visible enemy. */
   selectedArmy: string | null;
+  /** Units ticked in the Contents panel (ids inside the selected holder). */
+  checkedUnits: string[];
   selectedUnit: string | null;
   hoverCell: string | null;
   deployPick: string | null;
@@ -18,6 +21,7 @@ export interface UiState {
 const EMPTY_UI: UiState = {
   selectedMain: null,
   selectedArmy: null,
+  checkedUnits: [],
   selectedUnit: null,
   hoverCell: null,
   deployPick: null,
@@ -257,6 +261,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Leaving a battle / phase change invalidates tactical selection.
     if (res.state.phase !== game.phase)
       patch.ui = { ...get().ui, selectedUnit: null, deployPick: null, placingFort: false };
+    // A new side on turn (hotseat) must not inherit the previous side's selection.
+    if (res.state.active !== game.active)
+      patch.ui = { ...(patch.ui ?? get().ui), selectedArmy: null, checkedUnits: [] };
+    // Ticked units that left the selected holder (transfer, battle) are unticked.
+    const ui = patch.ui ?? get().ui;
+    const held = res.state.armies.find((a) => a.id === ui.selectedArmy);
+    const checked = ui.checkedUnits.filter((id) => held?.units.some((u) => u.id === id));
+    if (checked.length !== ui.checkedUnits.length) patch.ui = { ...ui, checkedUnits: checked };
     set(patch);
     return true;
   },
