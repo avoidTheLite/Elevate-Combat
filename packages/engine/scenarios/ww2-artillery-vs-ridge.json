@@ -1,0 +1,32 @@
+{
+  "name": "ww2-artillery-vs-ridge",
+  "description": "Artillery plus three rifle squads assault three rifle squads holding a ridge crest.",
+  "era": "ww2",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "ww2_artillery",
+        "count": 1
+      },
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "ridge"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "even"
+  }
+}
