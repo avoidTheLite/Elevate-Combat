@@ -6,7 +6,9 @@ import { buildWorld } from './grid.ts';
 import { hexKey, spiral } from './hex.ts';
 import type { Rng } from './rng.ts';
 import { generateTerrain } from './terrain.ts';
-import type { Battle, BattleUnit, Team } from './types.ts';
+import type { World } from './grid.ts';
+import { centerKey, freeSubNear, setHolderPos } from './strategic.ts';
+import type { Army, Battle, BattleUnit, GameState, Team } from './types.ts';
 import { unitType } from './units.ts';
 
 export function scriptedRng(rolls: number[]): Rng {
@@ -54,7 +56,10 @@ export function mkUnit(
 }
 
 /** Flat height-2 battlefield around the origin; occupancy refreshed. */
-export function flatBattle(units: BattleUnit[], extras: Partial<Battle> = {}): {
+export function flatBattle(
+  units: BattleUnit[],
+  extras: Partial<Battle> = {},
+): {
   ctx: BattleContext;
   battle: Battle;
 } {
@@ -88,7 +93,9 @@ export function flatBattle(units: BattleUnit[], extras: Partial<Battle> = {}): {
     warnedRange: 0,
     objective: {
       kind: 'capture_point',
-      captureKey: hexKey(world.mains.find((m) => m.key === (extras.contested ?? world.mains[0]!.key))!.center),
+      captureKey: hexKey(
+        world.mains.find((m) => m.key === (extras.contested ?? world.mains[0]!.key))!.center,
+      ),
       captureRadius: 1,
       extractionAtOrigin: true,
     },
@@ -99,4 +106,13 @@ export function flatBattle(units: BattleUnit[], extras: Partial<Battle> = {}): {
   } as Battle;
   refreshOccupancy(ctx, battle);
   return { ctx, battle };
+}
+
+/** Test helper: park a holder on the free cell nearest a main hex's centre (keeps `at` = main of `pos`). */
+export function placeHolder(state: GameState, world: World, army: Army, main: string): void {
+  setHolderPos(world, army, freeSubNear(state, world, centerKey(world, main), main, army.id)!);
+}
+
+export function commanderOf(state: GameState, team: Team): Army {
+  return state.armies.find((a) => a.team === team && a.kind === 'commander')!;
 }

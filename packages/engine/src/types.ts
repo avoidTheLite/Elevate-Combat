@@ -19,13 +19,41 @@ export interface ArmyUnit {
   hp: number;
 }
 
+/** A strategic unit holder: a mobile commander, or a garrison bound to a building. */
+export type HolderKind = 'commander' | 'garrison';
+
+/** Buildings that host a garrison. V1.0 has only the HQ. */
+export type BuildingKind = 'hq';
+
+/**
+ * A strategic holder of units. Commanders move on the sub-hex grid; garrisons sit
+ * on their building's sub-hex and never move. (Named `Army` for V0.9 continuity.)
+ */
 export interface Army {
   id: string;
   team: Team;
-  at: HexKey; // main hex key
+  kind: HolderKind;
+  /** Sub-hex the holder stands on. */
+  pos: HexKey;
+  /** Main hex containing `pos` — always kept in sync via `setHolderPos`. */
+  at: HexKey;
+  /** Garrisons only: the building they belong to. */
+  building?: BuildingKind;
   units: ArmyUnit[];
-  /** Strategic moves left this turn. */
+  /** Strategic sub-hex steps left this turn (always 0 for garrisons). */
   movesLeft: number;
+}
+
+/** V1 alias — the plan's name for commanders and garrisons alike. */
+export type Holder = Army;
+
+/**
+ * Who may swap units: holders within `radius` sub-hexes (null = no radius check)
+ * and/or in the same main hex. Both checks are on by default.
+ */
+export interface TransferRule {
+  radius: number | null;
+  sameMainHex: boolean;
 }
 
 // ── Tactical battle ──
@@ -134,6 +162,8 @@ export interface GameSettings {
   battleRounds: number;
   /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
   battleObjective?: Partial<BattleObjective>;
+  /** Optional transfer-rule override; omitted fields use `COMMAND.transferRule`. */
+  transferRule?: Partial<TransferRule>;
 }
 
 export interface StrategicLogEntry {

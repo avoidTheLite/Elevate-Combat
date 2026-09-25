@@ -198,6 +198,8 @@ export function buildStrategicScene(
   }
   const armies = view ? visibleArmies(game, view) : game.armies;
   for (const a of armies) {
+    // V1 garrisons live in the HQ building (drawn above); only commanders get army tokens.
+    if (a.kind !== 'commander') continue;
     const m = world.mainByKey.get(a.at)!;
     // Offset from the centre so the HQ and army token don't overlap.
     let spotHex = m.center;

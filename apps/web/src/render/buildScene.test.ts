@@ -33,10 +33,10 @@ function battleState(): GameState {
     controllers: { A: 'human', B: 'human' },
   });
   for (let i = 0; i < 40 && s.phase === 'strategic'; i++) {
-    const a = s.armies.find((x) => x.team === 'A' && x.movesLeft > 0);
+    const a = s.armies.find((x) => x.team === 'A' && x.kind === 'commander' && x.movesLeft > 0);
     if (s.active === 'A' && a) {
       const { world } = worldOf(s);
-      const b = s.armies.find((x) => x.team === 'B')!;
+      const b = s.armies.find((x) => x.team === 'B' && x.kind === 'commander')!;
       const tgt = world.mainByKey.get(b.at)!;
       const next = mainNeighbors(world, a.at).sort(
         (x, y) =>

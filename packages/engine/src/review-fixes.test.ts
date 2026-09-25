@@ -4,6 +4,7 @@ import { ECONOMY, createGame, defaultSettings, income, worldOf } from './strateg
 import { lineOfSight, arcClearance } from './los.ts';
 import { holdsCaptureZone, contextFor, secureObjective, extractFromBattle } from './tactical.ts';
 import { isHexRevealed } from './visibility.ts';
+import { commanderOf, placeHolder } from './testBattle.ts';
 
 describe('review fixes', () => {
   it('grants turn-1 income to the first player at createGame', () => {
@@ -32,10 +33,10 @@ describe('review fixes', () => {
     const { world } = worldOf(s);
     const target = world.mains.find((m) => m.col === 1 && m.row === 1)!;
     const origin = world.mains.find((m) => m.col === 0 && m.row === 1)!;
-    const att = s.armies.find((a) => a.team === 'A')!;
-    const def = s.armies.find((a) => a.team === 'B')!;
-    att.at = origin.key;
-    def.at = target.key;
+    const att = commanderOf(s, 'A');
+    const def = commanderOf(s, 'B');
+    placeHolder(s, world, att, origin.key);
+    placeHolder(s, world, def, target.key);
     s.hexes[target.key]!.owner = 'B';
     s.pending = {
       attackerArmyId: att.id,
@@ -66,10 +67,10 @@ describe('capture point objective', () => {
     const { world } = worldOf(s);
     const target = world.mains.find((m) => m.col === 1 && m.row === 1)!;
     const origin = world.mains.find((m) => m.col === 0 && m.row === 1)!;
-    const att = s.armies.find((a) => a.team === 'A')!;
-    const def = s.armies.find((a) => a.team === 'B')!;
-    att.at = origin.key;
-    def.at = target.key;
+    const att = commanderOf(s, 'A');
+    const def = commanderOf(s, 'B');
+    placeHolder(s, world, att, origin.key);
+    placeHolder(s, world, def, target.key);
     s.hexes[target.key]!.owner = 'B';
     s.pending = {
       attackerArmyId: att.id,
@@ -106,10 +107,10 @@ describe('capture point objective', () => {
     const { world } = worldOf(s);
     const target = world.mains.find((m) => m.col === 1 && m.row === 1)!;
     const origin = world.mains.find((m) => m.col === 0 && m.row === 1)!;
-    const att = s.armies.find((a) => a.team === 'A')!;
-    const def = s.armies.find((a) => a.team === 'B')!;
-    att.at = origin.key;
-    def.at = target.key;
+    const att = commanderOf(s, 'A');
+    const def = commanderOf(s, 'B');
+    placeHolder(s, world, att, origin.key);
+    placeHolder(s, world, def, target.key);
     s.hexes[target.key]!.owner = 'B';
     s.pending = {
       attackerArmyId: att.id,

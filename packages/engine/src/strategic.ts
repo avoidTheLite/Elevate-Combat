@@ -1,15 +1,17 @@
 // ── Strategic (campaign) layer ───────────────────────────────────────────────
-// Main hexes are territory. Armies move hex-to-hex; entering a hex held by an
-// enemy army triggers a battle (fought on the sub-hex grid, or auto-resolved).
+// Main hexes are territory. Units live in holders: commanders move on the
+// sub-hex grid (see command.ts), garrisons sit in their building. Engaging an
+// enemy holder triggers a battle (fought on the sub-hex grid, or auto-resolved).
 // Command Points (CP) are the single currency for recruiting, fortifying and
 // opening a deployment (attacking).
 
 import type { HexKey } from './hex.ts';
-import { hexDistance } from './hex.ts';
+import { hexDistance, hexKey, neighbors, parseKey } from './hex.ts';
 import type { World } from './grid.ts';
 import { buildWorld, mainDistance, mainNeighbors, validateConfig } from './grid.ts';
 import type { Terrain } from './terrain.ts';
 import { generateTerrain, heightAt } from './terrain.ts';
+import { lineOfSight } from './los.ts';
 import { createRng } from './rng.ts';
 import type { Rng } from './rng.ts';
 import { MAX_FORT } from './combat.ts';
@@ -22,6 +24,7 @@ import type {
   GameState,
   PendingBattle,
   Team,
+  TransferRule,
 } from './types.ts';
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { STARTING_ARMY, unitType } from './units.ts';
@@ -38,6 +41,27 @@ export const ECONOMY = {
   maxFortCellsPerHex: 6,
   armyCap: 8,
   maxTurns: 40,
+} as const;
+
+/**
+ * Command-layer tunables (V1.0). Distances are in sub-hex steps and are
+ * functions of the grid's sub-radius n, so every grid size keeps the same pace.
+ */
+export const COMMAND = {
+  /** Sub-hex steps per turn: 2n+1 ≈ one main hex, matching the V0.9 pace. */
+  commandMove: (subRadius: number): number => 2 * subRadius + 1,
+  /** Forced march: every unit has move ≥ this → steps are multiplied. */
+  forcedMarchMinMove: 5,
+  forcedMarchMult: 2,
+  /** A commander may engage an enemy holder within this many sub-hexes. */
+  engageRange: (subRadius: number): number => subRadius,
+  /** Holders see enemy holders within this many sub-hexes (with clear LOS). */
+  sightRange: (subRadius: number): number => 3 * subRadius,
+  /** Strategic observer eye height above the ground (tactical LOS model). */
+  sightEye: 1.5,
+  /** Default reassignment rule; `settings.transferRule` may switch either check off. */
+  transferRule: (subRadius: number): TransferRule => ({ radius: subRadius, sameMainHex: true }),
+  garrisonCap: 12,
 } as const;
 
 export type StratResult = { ok: true } | { ok: false; error: string };
@@ -68,19 +92,86 @@ function log(state: GameState, text: string, team: Team = state.active): void {
   if (state.log.length > 300) state.log.splice(0, state.log.length - 300);
 }
 
+/** Append to the campaign log (used by the command layer). */
+export const logStrategic = log;
+
 export function newId(state: GameState, prefix: string): string {
   return `${prefix}${state.nextId++}`;
 }
 
-function makeUnit(state: GameState, team: Team, typeId: string): ArmyUnit {
+export function makeUnit(state: GameState, team: Team, typeId: string): ArmyUnit {
   const t = unitType(typeId);
   const count = state.nextId;
   return { id: newId(state, `${team}u`), typeId, label: `${t.short}-${team}${count}`, hp: t.hp };
 }
 
-export function armyMoves(army: Army): number {
-  // Forced march: an army made only of fast units (move ≥ 5) moves 2 main hexes.
-  return army.units.length > 0 && army.units.every((u) => unitType(u.typeId).move >= 5) ? 2 : 1;
+/** Sub-hex steps a holder gets each turn (garrisons never move). */
+export function armyMoves(army: Army, subRadius: number): number {
+  if (army.kind !== 'commander') return 0;
+  const base = COMMAND.commandMove(subRadius);
+  // Forced march: a commander holding only fast units (move ≥ 5) doubles its steps.
+  const fast =
+    army.units.length > 0 &&
+    army.units.every((u) => unitType(u.typeId).move >= COMMAND.forcedMarchMinMove);
+  return fast ? base * COMMAND.forcedMarchMult : base;
+}
+
+// ── Holders (commanders + garrisons) ──
+
+/** Place a holder on a sub-hex, keeping `at` equal to the containing main hex. */
+export function setHolderPos(world: World, army: Army, pos: HexKey): void {
+  const s = world.subByKey.get(pos);
+  if (!s) throw new Error(`setHolderPos: ${pos} is off the map`);
+  army.pos = pos;
+  army.at = s.main;
+}
+
+/** A holder occupies its sub-hex while it has units — garrisons always do. */
+export function isPresent(army: Army): boolean {
+  return army.kind === 'garrison' || army.units.length > 0;
+}
+
+export function holderAt(state: GameState, subKey: HexKey): Army | undefined {
+  return state.armies.find((a) => isPresent(a) && a.pos === subKey);
+}
+
+export function occupiedSubs(state: GameState, exceptId?: string): Set<HexKey> {
+  return new Set(state.armies.filter((a) => isPresent(a) && a.id !== exceptId).map((a) => a.pos));
+}
+
+export function garrisonOf(state: GameState, team: Team): Army | undefined {
+  return state.armies.find((a) => a.team === team && a.kind === 'garrison' && a.building === 'hq');
+}
+
+/**
+ * Nearest unoccupied sub-hex to `from` (ties broken by sub index), optionally
+ * restricted to one main hex. `exceptId`'s own cell counts as free.
+ */
+export function freeSubNear(
+  state: GameState,
+  world: World,
+  from: HexKey,
+  main?: HexKey,
+  exceptId?: string,
+): HexKey | null {
+  const origin = world.subByKey.get(from)?.hex ?? parseKey(from);
+  const taken = occupiedSubs(state, exceptId);
+  const pool = main ? (world.mainByKey.get(main)?.subKeys ?? []) : world.subs.map((s) => s.key);
+  let best: HexKey | null = null;
+  let bestD = Infinity;
+  for (const k of pool) {
+    if (taken.has(k)) continue;
+    const d = hexDistance(origin, world.subByKey.get(k)!.hex);
+    if (d < bestD) {
+      bestD = d;
+      best = k;
+    }
+  }
+  return best;
+}
+
+export function centerKey(world: World, main: HexKey): HexKey {
+  return hexKey(world.mainByKey.get(main)!.center);
 }
 
 export function createGame(input: GameSettings): GameState {
@@ -114,17 +205,36 @@ export function createGame(input: GameSettings): GameState {
     state.hexes[m.key] = { owner, warning: 0 };
   }
   for (const team of ['A', 'B'] as Team[]) {
+    const hqCell = world.mainByKey.get(state.hq[team])!;
+    const enemyCentre = world.mainByKey.get(state.hq[otherTeam(team)])!.center;
+    // Starting commander: the cell next to the HQ centre that faces the enemy.
+    const startPos = neighbors(hqCell.center).sort(
+      (x, y) => hexDistance(x, enemyCentre) - hexDistance(y, enemyCentre),
+    )[0]!;
     const army: Army = {
       id: newId(state, `${team}army`),
       team,
-      at: state.hq[team],
+      kind: 'commander',
+      pos: hexKey(startPos),
+      at: hqCell.key,
       units: [],
       movesLeft: 0,
     };
     for (const typeId of STARTING_ARMY[settings.era])
       army.units.push(makeUnit(state, team, typeId));
-    army.movesLeft = armyMoves(army);
+    army.movesLeft = armyMoves(army, settings.grid.subRadius);
     state.armies.push(army);
+    // The HQ garrison starts empty on the HQ centre; recruits muster here.
+    state.armies.push({
+      id: newId(state, `${team}garrison`),
+      team,
+      kind: 'garrison',
+      building: 'hq',
+      pos: centerKey(world, hqCell.key),
+      at: hqCell.key,
+      units: [],
+      movesLeft: 0,
+    });
     // HQs start with a standing (automatic-category) fortification.
     autoFortify(state, world, generateTerrain(world, settings.seed), state.hq[team], team);
   }
@@ -158,20 +268,37 @@ export function hexFortLevel(state: GameState, world: World, key: HexKey): numbe
   return world.mainByKey.get(key)!.subKeys.reduce((s, k) => s + (state.forts[k] ?? 0), 0);
 }
 
-/** Strategic fog: enemy armies are seen when adjacent to your territory or armies. */
+/**
+ * Strategic line of sight between two holders: within `sightRange` sub-hexes and
+ * the tactical LOS ray (eye `sightEye`) not blocked by the height map.
+ */
+export function holderSees(world: World, terrain: Terrain, eye: Army, target: Army): boolean {
+  const a = world.subByKey.get(eye.pos);
+  const b = world.subByKey.get(target.pos);
+  if (!a || !b) return false;
+  if (hexDistance(a.hex, b.hex) > COMMAND.sightRange(world.config.subRadius)) return false;
+  const heightOf = (k: string): number => heightAt(world, terrain, k);
+  return lineOfSight(a.hex, b.hex, heightOf, COMMAND.sightEye).status !== 'blocked';
+}
+
+/**
+ * Strategic fog: own holders, plus enemy holders seen by any own holder (range +
+ * LOS) or standing within one main hex of owned territory (V0.9 adjacency vision).
+ * Empty garrisons (buildings) are included; empty commanders never exist.
+ */
 export function visibleArmies(state: GameState, team: Team): Army[] {
-  const { world } = worldOf(state);
-  if (!state.settings.fog) return state.armies.filter((a) => a.units.length > 0);
-  const eyes: HexKey[] = [
-    ...Object.entries(state.hexes)
-      .filter(([, v]) => v.owner === team)
-      .map(([k]) => k),
-    ...state.armies.filter((a) => a.team === team).map((a) => a.at),
-  ];
-  return state.armies.filter(
+  const present = state.armies.filter(isPresent);
+  if (!state.settings.fog) return present;
+  const { world, terrain } = worldOf(state);
+  const owned = Object.entries(state.hexes)
+    .filter(([, v]) => v.owner === team)
+    .map(([k]) => k);
+  const eyes = present.filter((a) => a.team === team);
+  return present.filter(
     (a) =>
-      a.units.length > 0 &&
-      (a.team === team || eyes.some((e) => mainDistance(world, e, a.at) <= 1)),
+      a.team === team ||
+      owned.some((e) => mainDistance(world, e, a.at) <= 1) ||
+      eyes.some((e) => holderSees(world, terrain, e, a)),
   );
 }
 
@@ -220,15 +347,16 @@ function autoFortify(
 function beginTurn(state: GameState, team: Team): void {
   const { world } = worldOf(state);
   state.cp[team] += income(state, team);
-  for (const a of state.armies) if (a.team === team) a.movesLeft = armyMoves(a);
-  // Warning clocks: consecutive turns an enemy army has sat adjacent to our hex.
+  const n = state.settings.grid.subRadius;
+  for (const a of state.armies) if (a.team === team) a.movesLeft = armyMoves(a, n);
+  // Warning clocks: consecutive turns an enemy holder has sat adjacent to (or inside) our hex.
   const enemyAt = state.armies
     .filter((a) => a.team !== team && a.units.length > 0)
     .map((a) => a.at);
   for (const m of world.mains) {
     const hs = state.hexes[m.key]!;
     if (hs.owner !== team) continue;
-    const threatened = enemyAt.some((e) => mainDistance(world, e, m.key) === 1);
+    const threatened = enemyAt.some((e) => mainDistance(world, e, m.key) <= 1);
     hs.warning = threatened ? hs.warning + 1 : 0;
   }
 }
@@ -283,7 +411,7 @@ function declareWinner(state: GameState, team: Team, reason: string): void {
   log(state, `★ ${TEAM_NAME[team]} WINS THE CAMPAIGN — ${reason}`, team);
 }
 
-function capture(
+export function capture(
   state: GameState,
   world: World,
   key: HexKey,
@@ -316,19 +444,13 @@ export function recruit(state: GameState, typeId: string): StratResult {
   const t = unitType(typeId);
   if (t.era !== state.settings.era) return { ok: false, error: 'Wrong era' };
   if (state.cp[team] < t.cost) return { ok: false, error: `Need ${t.cost} CP` };
-  const hq = state.hq[team];
-  let army = state.armies.find(
-    (a) => a.team === team && a.at === hq && a.units.length < ECONOMY.armyCap,
-  );
-  if (!army) {
-    if (armiesAt(state, hq).some((a) => a.team === team))
-      return { ok: false, error: 'HQ army is at capacity' };
-    army = { id: newId(state, `${team}army`), team, at: hq, units: [], movesLeft: 0 };
-    state.armies.push(army);
-  }
-  army.units.push(makeUnit(state, team, typeId));
+  const garrison = garrisonOf(state, team);
+  if (!garrison) return { ok: false, error: 'No HQ garrison' };
+  if (garrison.units.length >= COMMAND.garrisonCap)
+    return { ok: false, error: `HQ garrison is full (${COMMAND.garrisonCap})` };
+  garrison.units.push(makeUnit(state, team, typeId));
   state.cp[team] -= t.cost;
-  log(state, `Recruited ${t.name} at HQ (−${t.cost} CP)`);
+  log(state, `Recruited ${t.name} into the HQ garrison (−${t.cost} CP)`);
   return { ok: true };
 }
 
@@ -344,64 +466,6 @@ export function fortify(state: GameState, key: HexKey): StratResult {
     return { ok: false, error: 'Hex is fully fortified' };
   state.cp[team] -= ECONOMY.fortifyCost;
   log(state, `Fortified ${key} (−${ECONOMY.fortifyCost} CP)`);
-  return { ok: true };
-}
-
-export function canMoveTo(
-  state: GameState,
-  army: Army,
-  dest: HexKey,
-): StratResult & { battle?: boolean } {
-  if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
-  if (army.team !== state.active) return { ok: false, error: 'Not your army' };
-  if (army.movesLeft <= 0) return { ok: false, error: 'Army has no moves left this turn' };
-  const { world } = worldOf(state);
-  if (!world.mainByKey.has(dest)) return { ok: false, error: 'Off map' };
-  if (mainDistance(world, army.at, dest) !== 1)
-    return { ok: false, error: 'Armies move one main hex at a time' };
-  const here = armiesAt(state, dest);
-  const enemy = here.find((a) => a.team !== army.team);
-  if (enemy) {
-    if (state.cp[army.team] < attackCost(army))
-      return { ok: false, error: `Opening a deployment costs ${attackCost(army)} CP` };
-    return { ok: true, battle: true };
-  }
-  const friend = here.find((a) => a.team === army.team);
-  if (friend && friend.units.length + army.units.length > ECONOMY.armyCap)
-    return { ok: false, error: `Merged army would exceed ${ECONOMY.armyCap} units` };
-  return { ok: true, battle: false };
-}
-
-export function moveArmy(state: GameState, armyId: string, dest: HexKey): StratResult {
-  const army = state.armies.find((a) => a.id === armyId);
-  if (!army) return { ok: false, error: 'No such army' };
-  const chk = canMoveTo(state, army, dest);
-  if (!chk.ok) return chk;
-  const { world } = worldOf(state);
-  if (chk.battle) {
-    const enemy = armiesAt(state, dest).find((a) => a.team !== army.team)!;
-    state.pending = {
-      attackerArmyId: army.id,
-      defenderArmyId: enemy.id,
-      origin: army.at,
-      target: dest,
-    };
-    state.phase = 'battle-pending';
-    log(state, `${TEAM_NAME[army.team]} army ${army.id} assaults ${dest}!`);
-    return { ok: true };
-  }
-  army.at = dest;
-  army.movesLeft -= 1;
-  const friend = state.armies.find(
-    (a) => a.team === army.team && a.at === dest && a.id !== army.id,
-  );
-  if (friend) {
-    friend.units.push(...army.units);
-    friend.movesLeft = Math.min(friend.movesLeft, army.movesLeft);
-    army.units = [];
-    state.armies = state.armies.filter((a) => a.id !== army.id);
-  }
-  capture(state, world, dest, army.team, false);
   return { ok: true };
 }
 
@@ -538,46 +602,57 @@ function applyBattleOutcome(
   if (att) att.movesLeft = 0;
 
   if (att && winner === att.team) {
-    // Defender survivors fall back to adjacent friendly ground, or are lost.
-    if (def && def.units.length) {
-      const fallback = mainNeighbors(world, p.target).find(
-        (m) =>
-          state.hexes[m.key]?.owner === def.team &&
-          !armiesAt(state, m.key).some((a) => a.team !== def.team) &&
-          armiesAt(state, m.key)
-            .filter((a) => a.team === def.team)
-            .reduce((s, a) => s + a.units.length, 0) +
-            def.units.length <=
-            ECONOMY.armyCap,
-      );
+    if (def && def.units.length && def.kind === 'garrison') {
+      // A beaten garrison is emptied in place; the building (holder) remains.
+      log(state, `${TEAM_NAME[def.team]} garrison at ${def.at} is overrun`, def.team);
+      def.units = [];
+    } else if (def && def.units.length) {
+      // Defender survivors fall back to a free cell of adjacent friendly ground, or are lost.
+      const fallback = mainNeighbors(world, p.target)
+        .filter(
+          (m) =>
+            state.hexes[m.key]?.owner === def.team &&
+            !armiesAt(state, m.key).some((a) => a.team !== def.team),
+        )
+        .map((m) => freeSubNear(state, world, def.pos, m.key, def.id))
+        .find((k): k is HexKey => k !== null);
       if (fallback) {
-        const friend = armiesAt(state, fallback.key).find((a) => a.team === def.team);
-        if (friend) {
-          friend.units.push(...def.units);
-          def.units = [];
-        } else def.at = fallback.key;
-        log(state, `${TEAM_NAME[def.team]} survivors fall back to ${fallback.key}`, def.team);
+        setHolderPos(world, def, fallback);
+        log(state, `${TEAM_NAME[def.team]} survivors fall back to ${def.at}`, def.team);
       } else {
         log(state, `${TEAM_NAME[def.team]} survivors cut off and lost`, def.team);
         def.units = [];
       }
     }
     if (att.units.length) {
-      // EXTRACT returns to the origin deploy hex; SECURE / wipeout occupies the prize.
-      att.at = extracted ? p.origin : p.target;
-      capture(state, world, p.target, att.team, true);
-      if (extracted)
-        log(state, `${TEAM_NAME[att.team]} extracts to ${p.origin} after securing ${p.target}`, att.team);
+      if (armiesAt(state, p.target).some((a) => a.team !== att.team)) {
+        // Another enemy holder still stands in the prize: no capture, stay put.
+        log(state, `${TEAM_NAME[att.team]} wins, but ${p.target} is still held`, att.team);
+      } else {
+        // EXTRACT returns to the origin main hex; SECURE / wipeout occupies the prize.
+        const dest = extracted ? p.origin : p.target;
+        if (att.at !== dest) {
+          const cell = freeSubNear(state, world, att.pos, dest, att.id);
+          if (cell) setHolderPos(world, att, cell);
+        }
+        capture(state, world, p.target, att.team, true);
+        if (extracted)
+          log(
+            state,
+            `${TEAM_NAME[att.team]} extracts to ${p.origin} after securing ${p.target}`,
+            att.team,
+          );
+      }
     }
   }
-  state.armies = state.armies.filter((a) => a.units.length > 0);
+  state.armies = state.armies.filter(isPresent);
   checkElimination(state);
 }
 
 function checkElimination(state: GameState): void {
   if (state.winner) return;
   for (const team of ['A', 'B'] as Team[]) {
-    const hasArmy = state.armies.some((a) => a.team === team);
+    const hasArmy = state.armies.some((a) => a.team === team && a.units.length > 0);
     const cheapest = Math.min(
       ...Object.values(STARTING_ARMY[state.settings.era]).map((id) => unitType(id).cost),
     );

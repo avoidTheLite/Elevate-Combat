@@ -11,7 +11,6 @@ import {
   concludeBattle,
   endStrategicTurn,
   fortify,
-  moveArmy,
   recruit,
   startPendingBattle,
 } from './strategic.ts';
@@ -32,9 +31,15 @@ import {
   extractFromBattle,
   setUp,
 } from './tactical.ts';
+import { engage, formCommander, moveArmy, moveCommander, transferUnits } from './command.ts';
 import type { GameState } from './types.ts';
 
 export type GameAction =
+  | { type: 'moveCommander'; armyId: string; dest: HexKey }
+  | { type: 'engage'; armyId: string; targetId: string }
+  | { type: 'transferUnits'; fromId: string; toId: string; unitIds: string[] }
+  | { type: 'formCommander'; fromId: string; unitIds: string[] }
+  /** V0.9 adapter: `dest` is a main hex (engage there, or step into it). */
   | { type: 'moveArmy'; armyId: string; dest: HexKey }
   | { type: 'recruit'; typeId: string }
   | { type: 'fortify'; hex: HexKey }
@@ -78,6 +83,18 @@ export function apply(prev: GameState, action: GameAction): ApplyResult {
   };
 
   switch (action.type) {
+    case 'moveCommander':
+      res = moveCommander(state, action.armyId, action.dest);
+      break;
+    case 'engage':
+      res = engage(state, action.armyId, action.targetId);
+      break;
+    case 'transferUnits':
+      res = transferUnits(state, action.fromId, action.toId, action.unitIds);
+      break;
+    case 'formCommander':
+      res = formCommander(state, action.fromId, action.unitIds);
+      break;
     case 'moveArmy':
       res = moveArmy(state, action.armyId, action.dest);
       break;

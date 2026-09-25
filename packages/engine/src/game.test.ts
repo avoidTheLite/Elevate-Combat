@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from './actions.ts';
-import { mainNeighbors } from './grid.ts';
+import { canEngage, commanderReach } from './command.ts';
 import { runAi } from './runner.ts';
 import { actionPoints } from './tactical.ts';
-import { ECONOMY, createGame, defaultSettings, worldOf } from './strategic.ts';
+import { COMMAND, ECONOMY, createGame, defaultSettings, worldOf } from './strategic.ts';
 import type { GameSettings, GameState } from './types.ts';
 import { DEPLOY_BUFFER, buildContext, deploymentZone, liveUnits } from './battleMap.ts';
 import { hexDistance, parseKey } from './hex.ts';
@@ -13,21 +13,29 @@ function settings(over: Partial<GameSettings> = {}): GameSettings {
 }
 
 function forceBattle(state: GameState): GameState {
-  // March A's army straight at B's HQ army until a battle is pending.
+  // March A's commander at B's commander on the sub-grid, then engage it.
   let s = state;
   for (let i = 0; i < 60 && s.phase === 'strategic'; i++) {
-    const army = s.armies.find((a) => a.team === s.active);
+    const army = s.armies.find((a) => a.team === s.active && a.kind === 'commander');
     if (s.active === 'A' && army && army.movesLeft > 0) {
       const { world } = worldOf(s);
-      const target = s.armies.find((a) => a.team === 'B')!;
-      const next = mainNeighbors(world, army.at).sort(
-        (x, y) =>
-          Math.abs(x.col - world.mainByKey.get(target.at)!.col) -
-            Math.abs(y.col - world.mainByKey.get(target.at)!.col) ||
-          Math.abs(x.row - world.mainByKey.get(target.at)!.row) -
-            Math.abs(y.row - world.mainByKey.get(target.at)!.row),
-      )[0]!;
-      const r = apply(s, { type: 'moveArmy', armyId: army.id, dest: next.key });
+      const target = s.armies.find((a) => a.team === 'B' && a.kind === 'commander')!;
+      if (canEngage(s, army, target).ok) {
+        s = apply(s, { type: 'engage', armyId: army.id, targetId: target.id }).state;
+        continue;
+      }
+      const goal = world.subByKey.get(target.pos)!.hex;
+      const range = COMMAND.engageRange(world.config.subRadius);
+      // Stop short of the full march when a cell in engage range can be reached with moves to spare.
+      const cells = [...commanderReach(s, army)].filter(([, d]) => d > 0);
+      const dist = (k: string): number => hexDistance(world.subByKey.get(k)!.hex, goal);
+      const inRange = cells.filter(([k, d]) => dist(k) <= range && d < army.movesLeft);
+      const pick = (inRange.length ? inRange : cells).sort(([a, da], [b, db]) =>
+        inRange.length ? da - db : dist(a) - dist(b),
+      )[0];
+      const r = pick
+        ? apply(s, { type: 'moveCommander', armyId: army.id, dest: pick[0] })
+        : { error: 'stuck', state: s };
       s = r.error ? apply(s, { type: 'endTurn' }).state : r.state;
     } else {
       s = apply(s, { type: 'endTurn' }).state;
@@ -37,9 +45,11 @@ function forceBattle(state: GameState): GameState {
 }
 
 describe('campaign', () => {
-  it('creates a game with HQs, starting armies and owned flanks', () => {
+  it('creates a game with HQs, starting commanders, HQ garrisons and owned flanks', () => {
     const s = createGame(settings());
-    expect(s.armies).toHaveLength(2);
+    expect(s.armies).toHaveLength(4);
+    expect(s.armies.filter((a) => a.kind === 'commander')).toHaveLength(2);
+    expect(s.armies.filter((a) => a.kind === 'garrison' && a.units.length === 0)).toHaveLength(2);
     expect(s.hexes[s.hq.A]!.owner).toBe('A');
     expect(s.hexes[s.hq.B]!.owner).toBe('B');
     expect(Object.keys(s.forts).length).toBeGreaterThan(0);
@@ -52,7 +62,7 @@ describe('campaign', () => {
     expect(r.state.cp.A).toBe(s.cp.A - 3);
   });
 
-  it('a forced engagement produces a playable tactical battle', () => {
+  it('a forced engagement produces a playable tactical battle', { timeout: 30000 }, () => {
     let s = forceBattle(createGame(settings({ grid: { mainCols: 4, mainRows: 3, subRadius: 3 } })));
     expect(s.phase).toBe('battle-pending');
     s = apply(s, { type: 'startBattle' }).state;

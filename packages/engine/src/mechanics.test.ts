@@ -19,7 +19,7 @@ import {
   startTurn,
 } from './tactical.ts';
 import { generateTerrain } from './terrain.ts';
-import { flatBattle, mkUnit, scriptedRng } from './testBattle.ts';
+import { commanderOf, flatBattle, mkUnit, placeHolder, scriptedRng } from './testBattle.ts';
 import { unitType } from './units.ts';
 
 describe('melee specials (A24)', () => {
@@ -393,7 +393,7 @@ describe('movement costs / occupancy', () => {
   });
 });
 
-function buildWorldStub() {
+function buildWorldStub(): ReturnType<typeof buildWorld> {
   return buildWorld({ mainCols: 3, mainRows: 3, subRadius: 2 });
 }
 
@@ -407,17 +407,17 @@ describe('warning clocks → warned forts + dig-in writeback', () => {
     const { world } = worldOf(s);
     const aHq = s.hq.A;
     const adj = mainNeighbors(world, aHq)[0]!;
-    const bArmy = s.armies.find((a) => a.team === 'B')!;
-    bArmy.at = adj.key;
+    const bArmy = commanderOf(s, 'B');
+    placeHolder(s, world, bArmy, adj.key);
     // End A's turn → B begins (no A warning tick). End B → A begins and warning ticks.
     s = apply(s, { type: 'endTurn' }).state;
     s = apply(s, { type: 'endTurn' }).state;
     expect(s.hexes[aHq]!.warning).toBeGreaterThanOrEqual(1);
 
     // Force battle on a warned defender hex.
-    const att = s.armies.find((a) => a.team === 'A')!;
+    const att = commanderOf(s, 'A');
     const origin = mainNeighbors(world, adj.key).find((m) => m.key !== aHq) ?? world.mains[0]!;
-    att.at = origin.key;
+    placeHolder(s, world, att, origin.key);
     s.hexes[adj.key]!.owner = 'B';
     s.hexes[adj.key]!.warning = 2;
     s.pending = {
@@ -453,10 +453,10 @@ describe('warning clocks → warned forts + dig-in writeback', () => {
     const { world } = worldOf(s);
     const target = world.mains.find((m) => m.col === 1 && m.row === 1)!;
     const origin = world.mains.find((m) => m.col === 0 && m.row === 1)!;
-    const att = s.armies.find((a) => a.team === 'A')!;
-    const def = s.armies.find((a) => a.team === 'B')!;
-    att.at = origin.key;
-    def.at = target.key;
+    const att = commanderOf(s, 'A');
+    const def = commanderOf(s, 'B');
+    placeHolder(s, world, att, origin.key);
+    placeHolder(s, world, def, target.key);
     s.hexes[target.key]!.owner = 'B';
     s.pending = {
       attackerArmyId: att.id,

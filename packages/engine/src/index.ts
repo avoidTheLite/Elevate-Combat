@@ -11,6 +11,7 @@ export * from './visibility.ts';
 export * from './combat.ts';
 export * from './tactical.ts';
 export * from './strategic.ts';
+export * from './command.ts';
 export * from './actions.ts';
 export * from './ai/tacticalAi.ts';
 export * from './ai/strategicAi.ts';
