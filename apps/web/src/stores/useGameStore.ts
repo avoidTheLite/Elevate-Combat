@@ -8,6 +8,7 @@ import {
   deserializeSave,
   isAiTurn,
   serializeSave,
+  setAmbientRules,
   validateGameState,
 } from '@iron-ridge/engine';
 import type { AttackFx } from '../render/effects.ts';
@@ -367,3 +368,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
 // First run after the V1.0 upgrade: carry the V0.9 autosave over.
 useGameStore.getState().migrateLegacy();
+
+// Engine reads made while rendering (recruit costs, unit stats, previews) must see
+// the running game's rule overrides, exactly as apply() does.
+useGameStore.subscribe((s, prev) => {
+  if (s.game?.settings.rules !== prev.game?.settings.rules) setAmbientRules(s.game?.settings.rules);
+});

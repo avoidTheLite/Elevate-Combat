@@ -236,7 +236,15 @@ function simArmy(world: World, spec: BattleSpec, side: SimSide, at: HexKey): Arm
   }
   // Holder position is the main-hex centre; the tactical battle only reads `at`.
   const c = world.mainByKey.get(at)!.center;
-  return { id: `${team}army-sim`, kind: 'commander', team, at, pos: hexKey(c), units, movesLeft: 0 };
+  return {
+    id: `${team}army-sim`,
+    kind: 'commander',
+    team,
+    at,
+    pos: hexKey(c),
+    units,
+    movesLeft: 0,
+  };
 }
 
 function fortify(state: GameState, spec: BattleSpec): void {

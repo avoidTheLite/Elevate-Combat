@@ -57,7 +57,8 @@ function parseArgs(argv: string[]): Args {
 
 function readJson(path: string, what: string): unknown {
   const full = resolve(process.env.INIT_CWD ?? process.cwd(), path);
-  if (!existsSync(full)) throw new Error(`${what} not found: ${path}
+  if (!existsSync(full))
+    throw new Error(`${what} not found: ${path}
 ${USAGE}`);
   return JSON.parse(readFileSync(full, 'utf8'));
 }

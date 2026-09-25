@@ -191,7 +191,13 @@ describe('siege vs fort + HE splash', () => {
     ]);
     battle.forts['5,0'] = 2;
     // d20 hit; tank direct 3d6+3; siege-vs-soft variance d6; possible splash ring dice
-    resolveAttack(ctx, scriptedRng([20, 4, 4, 4, 3, 4, 4, 3, 4, 4, 3]), battle, battle.units[0]!, '5,0');
+    resolveAttack(
+      ctx,
+      scriptedRng([20, 4, 4, 4, 3, 4, 4, 3, 4, 4, 3]),
+      battle,
+      battle.units[0]!,
+      '5,0',
+    );
     expect(battle.forts['5,0']).toBe(1);
 
     // Rifle/MG (non-siege) cannot reduce fort even on a hit.
@@ -316,7 +322,10 @@ describe('battle end conditions', () => {
 
     // Attacker alone in contested.
     const win = flatBattle(
-      [mkUnit('a', 'ww2_rifle_infantry', 'A', inHex), mkUnit('b', 'ww2_rifle_infantry', 'B', outHex)],
+      [
+        mkUnit('a', 'ww2_rifle_infantry', 'A', inHex),
+        mkUnit('b', 'ww2_rifle_infantry', 'B', outHex),
+      ],
       { maxRounds: 1, contested, active: 'A', attacker: 'A', defender: 'B' },
     );
     // Mark B as outside contested main (already outHex). End A then B turn.

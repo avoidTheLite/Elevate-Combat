@@ -628,7 +628,12 @@ export function resolveAttack(
     if (attacker.hp > 0 && dt.braced && at.unitClass === 'cavalry') {
       spearStruck = true;
       const brace = M.SPEAR_BRACE_BONUS;
-      push(battle, log, `  ${defender.label} BRACED vs cavalry — strikes first (+${brace})`, 'info');
+      push(
+        battle,
+        log,
+        `  ${defender.label} BRACED vs cavalry — strikes first (+${brace})`,
+        'info',
+      );
       meleeStrike(rng, battle, log, defender, attacker, brace, '↳');
     }
     if (attacker.hp > 0) {

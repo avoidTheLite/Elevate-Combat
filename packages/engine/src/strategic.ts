@@ -27,6 +27,7 @@ import type {
   TransferRule,
 } from './types.ts';
 import { TEAM_NAME, otherTeam } from './types.ts';
+import { withRules } from './rules.ts';
 import { STARTING_ARMY, unitType } from './units.ts';
 
 export const ENGINE_VERSION = '1.0.0';
@@ -175,6 +176,11 @@ export function centerKey(world: World, main: HexKey): HexKey {
 }
 
 export function createGame(input: GameSettings): GameState {
+  // Starting units (hp, moves) must reflect the game's own rule overrides.
+  return withRules(input.rules, () => createGameUnderRules(input));
+}
+
+function createGameUnderRules(input: GameSettings): GameState {
   const settings: GameSettings = { ...input, grid: validateConfig(input.grid) };
   const world = buildWorld(settings.grid);
   const { mainCols, mainRows } = settings.grid;

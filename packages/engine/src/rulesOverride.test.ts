@@ -181,4 +181,15 @@ describe('validateRulesOverride', () => {
     expect(validateRulesOverride(null).ok).toBe(false);
     expect(validateRulesOverride([]).ok).toBe(false);
   });
+
+  it('createGame builds starting units under the game’s own rules', () => {
+    const rules: RulesOverride = { units: { ww2_rifle_infantry: { hp: 17 } } };
+    const g = createGame({ ...defaultSettings(), rules });
+    const rifles = g.armies
+      .flatMap((a) => a.units)
+      .filter((u) => u.typeId === 'ww2_rifle_infantry');
+    expect(rifles.length).toBeGreaterThan(0);
+    for (const u of rifles) expect(u.hp).toBe(17);
+    expect(activeRules()).toBeUndefined();
+  });
 });

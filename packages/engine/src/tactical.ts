@@ -34,7 +34,11 @@ export const DEFAULT_BATTLE_OBJECTIVE: BattleObjective = {
   extractionAtOrigin: true,
 };
 
-export function resolveBattleObjective(state: GameState, contested: HexKey, world: World): BattleObjective {
+export function resolveBattleObjective(
+  state: GameState,
+  contested: HexKey,
+  world: World,
+): BattleObjective {
   const center = world.mainByKey.get(contested)!.center;
   const override = state.settings.battleObjective ?? {};
   return {
@@ -47,7 +51,9 @@ export function resolveBattleObjective(state: GameState, contested: HexKey, worl
 
 /** Sub-hexes that make up the capture zone (point + radius), clipped to the battle map. */
 export function captureZoneCells(ctx: BattleContext, battle: Battle): Set<HexKey> {
-  const key = battle.objective.captureKey ?? `${ctx.world.mainByKey.get(battle.contested)!.center.q},${ctx.world.mainByKey.get(battle.contested)!.center.r}`;
+  const key =
+    battle.objective.captureKey ??
+    `${ctx.world.mainByKey.get(battle.contested)!.center.q},${ctx.world.mainByKey.get(battle.contested)!.center.r}`;
   const center = parseKey(key);
   const out = new Set<HexKey>();
   for (const c of spiral(center, battle.objective.captureRadius)) {
@@ -349,7 +355,8 @@ export function retreat(battle: Battle, team: Team): ActionResult {
  */
 export function secureObjective(ctx: BattleContext, battle: Battle): ActionResult {
   if (battle.phase !== 'combat') return { ok: false, error: 'Battle not in combat' };
-  if (battle.active !== battle.attacker) return { ok: false, error: 'Only the attacker can secure' };
+  if (battle.active !== battle.attacker)
+    return { ok: false, error: 'Only the attacker can secure' };
   if (!holdsCaptureZone(ctx, battle, battle.attacker))
     return { ok: false, error: 'Must hold the capture zone clear of defenders' };
   finish(
@@ -366,7 +373,8 @@ export function secureObjective(ctx: BattleContext, battle: Battle): ActionResul
  */
 export function extractFromBattle(ctx: BattleContext, battle: Battle): ActionResult {
   if (battle.phase !== 'combat') return { ok: false, error: 'Battle not in combat' };
-  if (battle.active !== battle.attacker) return { ok: false, error: 'Only the attacker can extract' };
+  if (battle.active !== battle.attacker)
+    return { ok: false, error: 'Only the attacker can extract' };
   if (!battle.objective.extractionAtOrigin)
     return { ok: false, error: 'This map has no extraction zone' };
   if (!holdsCaptureZone(ctx, battle, battle.attacker))

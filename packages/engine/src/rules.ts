@@ -116,6 +116,15 @@ export function activeRules(): RulesOverride | undefined {
 }
 
 /**
+ * Set the rules in effect *outside* any `withRules` scope — e.g. a UI that renders
+ * engine-derived numbers for the running game. Call only at top level (never
+ * inside `withRules`, which would restore over it).
+ */
+export function setAmbientRules(override: RulesOverride | undefined): void {
+  active = override;
+}
+
+/**
  * Run `fn` with `override` active (undefined = baseline, *not* "inherit").
  * Synchronous only — the previous override is restored in `finally`, so nesting
  * and throwing are safe. Do not pass async functions.

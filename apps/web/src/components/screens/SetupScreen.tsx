@@ -97,7 +97,7 @@ export function SetupScreen(): React.ReactElement {
       <div className="text-center">
         <div className="text-3xl font-bold tracking-[0.4em] text-glow">▲ IRON RIDGE</div>
         <div className="text-[hsl(var(--muted-foreground))] text-xs tracking-widest mt-1">
-          // TRAINING SIMULATION :: V0.9 :: STRATEGIC + TACTICAL
+          // TRAINING SIMULATION :: V1.0 :: STRATEGIC + TACTICAL
         </div>
       </div>
 

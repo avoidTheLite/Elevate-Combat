@@ -147,4 +147,23 @@ describe('Recruit panel', () => {
     expect(screen.getByText(/garrison full/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /rifle infantry/i })).toBeDisabled();
   });
+
+  it('recruit costs reflect the running game’s rule overrides', () => {
+    const s = strategicGame(true);
+    s.settings.rules = { units: { ww2_rifle_infantry: { cost: 1 } } };
+    load(s);
+    function Sidebar(): React.ReactElement {
+      const g = useGameStore((st) => st.game)!;
+      return <StrategicSidebar game={g} view="A" canAct />;
+    }
+    const { unmount } = render(<Sidebar />);
+    expect(screen.getByRole('button', { name: /rifle infantry/i })).toHaveTextContent('1');
+    const cp = game().cp.A;
+    fireEvent.click(screen.getByRole('button', { name: /rifle infantry/i }));
+    expect(game().cp.A).toBe(cp - 1);
+    unmount();
+    act(() => useGameStore.getState().quit());
+    // Leaving the game drops back to baseline rules for everything else.
+    expect(unitType('ww2_rifle_infantry').cost).toBe(3);
+  });
 });
