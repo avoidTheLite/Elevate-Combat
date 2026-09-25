@@ -3,7 +3,7 @@ import { apply } from './actions.ts';
 import { ECONOMY, createGame, defaultSettings, income, worldOf } from './strategic.ts';
 import { lineOfSight, arcClearance } from './los.ts';
 import { holdsCaptureZone, contextFor, secureObjective, extractFromBattle } from './tactical.ts';
-import { isSpotted } from './visibility.ts';
+import { isHexRevealed } from './visibility.ts';
 
 describe('review fixes', () => {
   it('grants turn-1 income to the first player at createGame', () => {
@@ -21,7 +21,7 @@ describe('review fixes', () => {
     expect(arc.status).toBe('blocked');
   });
 
-  it('treats revealed enemies as spotted for indirect fire', () => {
+  it('treats fire-exposed enemies as hex-revealed for indirect fire', () => {
     let s = createGame({
       ...defaultSettings(),
       grid: { mainCols: 4, mainRows: 3, subRadius: 2 },
@@ -50,9 +50,9 @@ describe('review fixes', () => {
     const battle = s.battle!;
     const ctx = contextFor(s);
     const enemy = battle.units.find((u) => u.team === 'B' && u.pos)!;
-    enemy.revealed = true;
-    // Even if no friendly canSee that hex, revelation spots it for HE.
-    expect(isSpotted(ctx, battle, 'A', enemy.pos!)).toBe(true);
+    enemy.exposed = true;
+    // Even if no friendly canSee that hex, exposure reveals it for HE.
+    expect(isHexRevealed(ctx, battle, 'A', enemy.pos!)).toBe(true);
   });
 });
 

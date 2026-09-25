@@ -12,7 +12,7 @@ import {
   previewAttack,
   reachable,
   unitType,
-  visibleEnemies,
+  revealedEnemies,
   worldOf,
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene } from '../../render/buildScene.ts';
@@ -82,7 +82,7 @@ export function GameScreen(): React.ReactElement {
   const seenIds = useMemo(() => {
     if (!tactical || !view || !game.battle) return null;
     const ids = new Set(liveUnits(game.battle, view).map((u) => u.id));
-    for (const e of visibleEnemies(tactical.ctx, game.battle, view)) ids.add(e.id);
+    for (const e of revealedEnemies(tactical.ctx, game.battle, view)) ids.add(e.id);
     return ids;
   }, [tactical, view, game.battle]);
 

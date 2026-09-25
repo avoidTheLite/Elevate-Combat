@@ -75,7 +75,7 @@ describe('scene building', () => {
     expect(spec.cells).toHaveLength(ctx.cells.size);
     for (const t of spec.tokens.filter((x) => x.team === 'B')) {
       const u = s.battle!.units.find((x) => x.id === t.id)!;
-      expect(visible!.has(u.pos!) || u.revealed).toBe(true);
+      expect(visible!.has(u.pos!) || u.exposed).toBe(true);
     }
     // Omniscient spectator sees everyone.
     const all = buildTacticalScene(s, UI, null).spec.tokens;

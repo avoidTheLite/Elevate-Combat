@@ -134,7 +134,7 @@ describe('action points', () => {
       acted: false,
       deployed: false,
       suppressed: false,
-      revealed: false,
+      exposed: false,
       firstStrikeUsed: false,
     };
     expect(actionPoints(base)).toEqual({ left: 2, max: 2 });

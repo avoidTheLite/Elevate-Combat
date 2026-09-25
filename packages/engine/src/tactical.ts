@@ -89,7 +89,7 @@ function toBattleUnit(army: Army, idx: number): BattleUnit {
     acted: false,
     deployed: false,
     suppressed: false,
-    revealed: false,
+    exposed: false,
     firstStrikeUsed: false,
   };
 }
@@ -284,7 +284,7 @@ export function startTurn(battle: Battle, team: Team): void {
     u.moved = false;
     u.movedDist = 0;
     u.acted = false;
-    u.revealed = false;
+    u.exposed = false;
     u.firstStrikeUsed = false;
   }
 }

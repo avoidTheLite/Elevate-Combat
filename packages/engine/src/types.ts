@@ -49,8 +49,12 @@ export interface BattleUnit {
   /** combat_fixed units: set up and able to fire, but cannot move. */
   deployed: boolean;
   suppressed: boolean;
-  /** Fired this turn/last enemy turn — visible to the enemy regardless of LOS. */
-  revealed: boolean;
+  /**
+   * Fire-exposed: shot recently, so the enemy player still has this unit
+   * *revealed* until the start of its own turn even without LOS.
+   * (Player-facing "do I know about them?" is computed via `revealedEnemies`.)
+   */
+  exposed: boolean;
   firstStrikeUsed: boolean;
 }
 
