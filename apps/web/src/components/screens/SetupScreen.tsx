@@ -3,6 +3,7 @@ import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import { GRID_LIMITS, clusterSize, defaultSettings } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { LoadList } from './LoadList.tsx';
 
 function NumberField(props: {
   label: string;
@@ -66,6 +67,7 @@ type Mode = 'ai' | 'hotseat' | 'spectate';
 export function SetupScreen(): React.ReactElement {
   const newGame = useGameStore((s) => s.newGame);
   const loadSaved = useGameStore((s) => s.loadSaved);
+  useGameStore((s) => s.saveRev); // re-render when a slot changes (CONTINUE visibility)
   const hasSave = useGameStore((s) => s.hasSave)();
   const [settings, setSettings] = useState<GameSettings>(defaultSettings());
   const [mode, setMode] = useState<Mode>('ai');
@@ -206,6 +208,8 @@ export function SetupScreen(): React.ReactElement {
           )}
         </div>
       </div>
+
+      <LoadList />
 
       <div className="text-[10px] text-[hsl(var(--muted-foreground))] max-w-[560px] text-center leading-4">
         Capture the enemy HQ. Move armies across the strategic hex map; attacking an occupied hex

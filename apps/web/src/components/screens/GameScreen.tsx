@@ -24,6 +24,7 @@ import { StrategicSidebar } from '../game/StrategicSidebar.tsx';
 import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Panel } from '../ui/Panel.tsx';
+import { SaveMenu } from '../game/SaveMenu.tsx';
 
 function teamClass(t: Team): string {
   return t === 'A' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--secondary))]';
@@ -301,6 +302,7 @@ function QuitDialog(): React.ReactElement {
       <div className="text-xs text-[hsl(var(--muted-foreground))] leading-4">
         Save &amp; Quit keeps CONTINUE on the setup screen. Abandon deletes the autosave.
       </div>
+      <SaveMenu />
       <div className="flex flex-wrap gap-2 justify-center">
         <Button size="lg" onClick={() => saveAndQuit()}>
           SAVE &amp; QUIT

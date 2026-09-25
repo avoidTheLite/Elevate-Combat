@@ -19,3 +19,4 @@ export * from './ai/tacticalAi.ts';
 export * from './ai/strategicAi.ts';
 export * from './runner.ts';
 export * from './sim/index.ts';
+export * from './save.ts';

@@ -1,6 +1,6 @@
 {
   "name": "@iron-ridge/engine",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sim": "node src/sim/cli.ts"
+    "sim": "node src/sim/cli.ts",
+    "fixtures:saves": "node scripts/make-save-fixtures.ts"
   },
   "devDependencies": {
     "@iron-ridge/tsconfig": "workspace:*",
