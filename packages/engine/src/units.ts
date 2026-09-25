@@ -6,6 +6,8 @@
 
 import unitsJson from './data/units.json' with { type: 'json' };
 import type { DicePool } from './rng.ts';
+import { activeRules, mechanics, mergeUnitStats } from './rules.ts';
+import type { RulesOverride } from './rules.ts';
 
 export type Era = 'medieval' | 'ww2';
 export type ArmorClass = 'unarmored' | 'light_armor' | 'heavy_armor';
@@ -363,19 +365,42 @@ for (const u of unitsJson.ww2.units as RawUnit[]) UNIT_TYPES[u.id] = toType(u, '
 UNIT_TYPES.med_engineer = toType(ENGINEERS[0]!, 'medieval');
 UNIT_TYPES.ww2_engineer = toType(ENGINEERS[1]!, 'ww2');
 
-export function unitType(id: string): UnitType {
+/** Merged unit types per override object (overrides are treated as immutable). */
+const overrideCache = new WeakMap<RulesOverride, Map<string, UnitType>>();
+
+/** Baseline stats, ignoring any active rules override. */
+export function baseUnitType(id: string): UnitType {
   const t = UNIT_TYPES[id];
   if (!t) throw new Error(`Unknown unit type ${id}`);
   return t;
 }
 
+/** Unit type with the active rules override (see rules.ts `withRules`) applied. */
+export function unitType(id: string): UnitType {
+  const base = baseUnitType(id);
+  const rules = activeRules();
+  const o = rules?.units?.[id];
+  if (!o) return base;
+  let cache = overrideCache.get(rules!);
+  if (!cache) {
+    cache = new Map();
+    overrideCache.set(rules!, cache);
+  }
+  let t = cache.get(id);
+  if (!t) {
+    t = mergeUnitStats(base, o);
+    cache.set(id, t);
+  }
+  return t;
+}
+
 export function unitsForEra(era: Era): UnitType[] {
-  return Object.values(UNIT_TYPES).filter((u) => u.era === era);
+  return Object.values(UNIT_TYPES)
+    .filter((u) => u.era === era)
+    .map((u) => unitType(u.id));
 }
 
 // ── Damage-type matrix (from units JSON) ──
-
-const EFFECT_MULT: Record<Effectiveness, number> = { high: 1, medium: 0.75, low: 0.5, none: 0 };
 
 export function effectiveness(dt: DamageType, ac: ArmorClass): Effectiveness {
   const table = unitsJson.damageTypes[dt].effectiveness as Record<string, string>;
@@ -383,7 +408,7 @@ export function effectiveness(dt: DamageType, ac: ArmorClass): Effectiveness {
 }
 
 export function effectivenessMultiplier(dt: DamageType, ac: ArmorClass): number {
-  return EFFECT_MULT[effectiveness(dt, ac)];
+  return mechanics().EFFECT_MULT[effectiveness(dt, ac)];
 }
 
 /** Siege vs a fortification — the only damage type that can reduce one. */

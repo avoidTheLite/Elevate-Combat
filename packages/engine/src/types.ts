@@ -1,6 +1,7 @@
 import type { HexKey } from './hex.ts';
 import type { GridConfig } from './grid.ts';
 import type { Era } from './units.ts';
+import type { RulesOverride } from './rules.ts';
 
 export type Team = 'A' | 'B';
 
@@ -164,6 +165,8 @@ export interface GameSettings {
   battleObjective?: Partial<BattleObjective>;
   /** Optional transfer-rule override; omitted fields use `COMMAND.transferRule`. */
   transferRule?: Partial<TransferRule>;
+  /** Runtime unit/mechanics overrides (balance lab). Absent = baseline rules. */
+  rules?: RulesOverride;
 }
 
 export interface StrategicLogEntry {

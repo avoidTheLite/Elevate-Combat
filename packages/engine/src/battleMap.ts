@@ -17,9 +17,31 @@ export interface BattleContext {
   unitAt: Map<HexKey, BattleUnit>;
 }
 
+/** Replaces procedural terrain for battle contexts (simulator only; default off). */
+export type TerrainOverride = (world: World, seed: number) => Terrain;
+
+let terrainOverride: TerrainOverride | undefined;
+
+/**
+ * Run `fn` with battle contexts built from `override` instead of
+ * `generateTerrain(world, settings.seed)`. Synchronous and nesting-safe, like
+ * `withRules`. Used by the micro combat simulator for flat/slope/ridge maps.
+ */
+export function withTerrainOverride<T>(override: TerrainOverride | undefined, fn: () => T): T {
+  const prev = terrainOverride;
+  terrainOverride = override;
+  try {
+    return fn();
+  } finally {
+    terrainOverride = prev;
+  }
+}
+
 export function buildContext(settings: GameSettings, battle: Battle): BattleContext {
   const world = buildWorld(settings.grid);
-  const terrain = generateTerrain(world, settings.seed);
+  const terrain = terrainOverride
+    ? terrainOverride(world, settings.seed)
+    : generateTerrain(world, settings.seed);
   const cells = new Set<HexKey>();
   for (const mk of battle.mains) for (const sk of world.mainByKey.get(mk)!.subKeys) cells.add(sk);
   const heightOf: HeightFn = (key) => {

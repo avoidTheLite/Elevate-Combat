@@ -14,25 +14,20 @@ import { poolAverage, poolLabel, rollPool } from './rng.ts';
 import type { ArmorClass, RangeProfile, UnitType } from './units.ts';
 import { damagesFortification, effectivenessMultiplier, unitType } from './units.ts';
 import type { Battle, BattleLogEntry, BattleUnit } from './types.ts';
+import { DEFAULT_MECHANICS, mechanics } from './rules.ts';
 import { isHexRevealed, revealedEnemies } from './visibility.ts';
 
+// Baseline constants. Combat code reads the *live* values through `mechanics()`
+// (rules.ts) so runtime overrides apply; these exports stay for callers/tests.
 // §1 base to-hit TN by target size/exposure
-export const BASE_TN: Record<ArmorClass, number> = {
-  heavy_armor: 7,
-  light_armor: 10,
-  unarmored: 15,
-};
+export const BASE_TN: Readonly<Record<ArmorClass, number>> = DEFAULT_MECHANICS.BASE_TN;
 // §2 splash threshold
-export const SPLASH_TN = 10;
+export const SPLASH_TN = DEFAULT_MECHANICS.SPLASH_TN;
 // §7 armor rating
-export const ARMOR_RATING: Record<ArmorClass, number> = {
-  unarmored: 0,
-  light_armor: 3,
-  heavy_armor: 6,
-};
+export const ARMOR_RATING: Readonly<Record<ArmorClass, number>> = DEFAULT_MECHANICS.ARMOR_RATING;
 // §5 blind fire
-export const BLIND_FIRE_TN = 6;
-export const MAX_FORT = 3;
+export const BLIND_FIRE_TN = DEFAULT_MECHANICS.BLIND_FIRE_TN;
+export const MAX_FORT = DEFAULT_MECHANICS.MAX_FORT;
 
 interface Band {
   name: string;
@@ -86,11 +81,8 @@ export function inDepressionDeadZone(dist: number, shooterH: number, targetH: nu
 export type FacingArc = 'front' | 'side' | 'rear';
 
 // §7a facing
-export const FACING_MODS: Record<FacingArc, { tn: number; dmg: number }> = {
-  front: { tn: 2, dmg: -2 },
-  rear: { tn: 1, dmg: 2 },
-  side: { tn: -1, dmg: 0 },
-};
+export const FACING_MODS: Readonly<Record<FacingArc, { tn: number; dmg: number }>> =
+  DEFAULT_MECHANICS.FACING_MODS;
 
 export function facingArc(defender: HexKey, facing: number, attacker: HexKey): FacingArc {
   const d = hexToWorld(parseKey(defender));
@@ -179,7 +171,7 @@ export function pAtLeast(tn: number): number {
 function pSplashBand(tn: number): number {
   // Rolls in [SPLASH_TN, tn-1], excluding the natural-20 auto-hit.
   const hi = Math.min(tn - 1, 19);
-  const lo = Math.max(SPLASH_TN, 2);
+  const lo = Math.max(mechanics().SPLASH_TN, 2);
   return hi >= lo ? (hi - lo + 1) / 20 : 0;
 }
 
@@ -237,7 +229,7 @@ export function expectedHitDamage(
   bonus = 0,
 ): number {
   const raw = (poolAverage(pool) + bonus) * damageMultiplier(attacker, defender);
-  return Math.max(0, raw - ARMOR_RATING[defender.armorClass] + facingDmg);
+  return Math.max(0, raw - mechanics().ARMOR_RATING[defender.armorClass] + facingDmg);
 }
 
 export function previewAttack(
@@ -246,6 +238,7 @@ export function previewAttack(
   attacker: BattleUnit,
   targetKey: HexKey,
 ): AttackPreview {
+  const M = mechanics();
   const at = unitType(attacker.typeId);
   const kind: AttackKind =
     at.attackType === 'melee' ? 'melee' : at.attackType === 'indirect' ? 'indirect' : 'direct';
@@ -291,17 +284,17 @@ export function previewAttack(
       );
     los = lineOfSight(a, b, ctx.heightOf, at.eye);
     if (los.status === 'blocked') return illegal(kind, targetKey, target, 'Line of sight blocked');
-    if (los.status === 'marginal') mods.push({ label: 'Marginal LOS', value: 2 });
+    if (los.status === 'marginal') mods.push({ label: 'Marginal LOS', value: M.MARGINAL_LOS_TN });
   } else {
     los = arcClearance(a, b, ctx.heightOf, at.eye);
     if (los.status === 'blocked') return illegal(kind, targetKey, target, 'Arc clipped by terrain');
     blind = !isHexRevealed(ctx, battle, attacker.team, targetKey);
-    if (blind) mods.push({ label: 'Blind fire (no spotter)', value: BLIND_FIRE_TN });
+    if (blind) mods.push({ label: 'Blind fire (no spotter)', value: M.BLIND_FIRE_TN });
   }
 
   const defType = target ? unitType(target.typeId) : null;
   const armor: ArmorClass = defType?.armorClass ?? 'unarmored';
-  const baseTn = BASE_TN[armor];
+  const baseTn = M.BASE_TN[armor];
   const er = kind === 'melee' ? 1 : effectiveRange(dist, ha, hb);
   const band = rangeBand(er);
   const bandMod = band.mod[at.profile];
@@ -311,7 +304,9 @@ export function previewAttack(
 
   if (kind === 'direct') {
     mods.push(
-      attacker.moved ? { label: 'Moved then fired', value: 3 } : { label: 'Braced', value: -2 },
+      attacker.moved
+        ? { label: 'Moved then fired', value: M.MOVED_FIRE_TN }
+        : { label: 'Braced', value: M.BRACED_FIRE_TN },
     );
   }
 
@@ -319,8 +314,8 @@ export function previewAttack(
   let facingDamage = 0;
   if (target && armor !== 'unarmored') {
     arc = facingArc(targetKey, target.facing, attacker.pos);
-    mods.push({ label: `${arc} armor`, value: FACING_MODS[arc].tn });
-    facingDamage = FACING_MODS[arc].dmg;
+    mods.push({ label: `${arc} armor`, value: M.FACING_MODS[arc].tn });
+    facingDamage = M.FACING_MODS[arc].dmg;
   }
 
   const fort = battle.forts[targetKey] ?? 0;
@@ -328,18 +323,19 @@ export function previewAttack(
     const cover = kind === 'indirect' ? Math.floor(fort / 2) : fort;
     if (cover > 0) mods.push({ label: `Fortified cover L${fort}`, value: cover });
   }
-  if (attacker.suppressed) mods.push({ label: 'Suppressed', value: 2 });
+  if (attacker.suppressed) mods.push({ label: 'Suppressed', value: M.SUPPRESSED_TN });
 
   const tn = baseTn + mods.reduce((s, m) => s + m.value, 0);
   const he = isHE(at);
-  const splashTn = he && !blind && tn > SPLASH_TN ? SPLASH_TN : null;
+  const splashTn = he && !blind && tn > M.SPLASH_TN ? M.SPLASH_TN : null;
   const pDirect = pAtLeast(tn);
   const pSplash = splashTn !== null ? pSplashBand(tn) : 0;
 
   let expectedDamage = 0;
   if (defType) {
     let bonus = 0;
-    if (at.charge && attacker.movedDist >= 3 && !defType.braced) bonus += 2;
+    if (at.charge && attacker.movedDist >= M.CHARGE_MIN_MOVE && !defType.braced)
+      bonus += M.CHARGE_BONUS;
     const direct = expectedHitDamage(at, defType, at.direct, facingDamage, bonus);
     const splash = at.splash ? expectedHitDamage(at, defType, at.splash, facingDamage) : 0;
     expectedDamage = pDirect * direct + pSplash * splash;
@@ -425,7 +421,7 @@ function applyHit(rng: Rng, battle: Battle, log: BattleLogEntry[], spec: HitSpec
     mult = row.mult;
     note = `×${mult} (variance d6=${v}: ${row.label})`;
   }
-  const armor = ARMOR_RATING[dt.armorClass];
+  const armor = mechanics().ARMOR_RATING[dt.armorClass];
   const facing = dt.armorClass === 'unarmored' ? 0 : spec.facingDmg;
   const dmg = Math.max(0, Math.round(raw * mult) - armor + facing);
   spec.defender.hp = Math.max(0, spec.defender.hp - dmg);
@@ -451,17 +447,18 @@ function meleePointBlank(
   victim: BattleUnit,
   battle: Battle,
 ): { tn: number; facingDmg: number } {
+  const M = mechanics();
   const vt = unitType(victim.typeId);
-  let tn = BASE_TN[vt.armorClass] - 5; // point-blank
+  let tn = M.BASE_TN[vt.armorClass] + M.MELEE_TN; // point-blank
   let facingDmg = 0;
   if (vt.armorClass !== 'unarmored' && striker.pos && victim.pos) {
     const arc = facingArc(victim.pos, victim.facing, striker.pos);
-    tn += FACING_MODS[arc].tn;
-    facingDmg = FACING_MODS[arc].dmg;
+    tn += M.FACING_MODS[arc].tn;
+    facingDmg = M.FACING_MODS[arc].dmg;
   }
   const fort = victim.pos ? (battle.forts[victim.pos] ?? 0) : 0;
   tn += fort;
-  if (striker.suppressed) tn += 2;
+  if (striker.suppressed) tn += M.SUPPRESSED_TN;
   return { tn, facingDmg };
 }
 
@@ -550,7 +547,7 @@ function rangedShot(
           attacker: shooter,
           defender: u,
           pool: at.splash,
-          facingDmg: arc ? FACING_MODS[arc].dmg : 0,
+          facingDmg: arc ? mechanics().FACING_MODS[arc].dmg : 0,
           bonus: 0,
           tag: `Splash r${hexDistance(c, centre)}`,
         });
@@ -572,7 +569,8 @@ function rangedShot(
   // Machine-gun suppression: hits or near misses pin unarmored targets.
   if (at.suppresses && pv.target && pv.target.hp > 0) {
     const tt = unitType(pv.target.typeId);
-    if (tt.armorClass === 'unarmored' && (result !== 'miss' || roll >= pv.tn - 4)) {
+    const margin = mechanics().MG_SUPPRESS_MARGIN;
+    if (tt.armorClass === 'unarmored' && (result !== 'miss' || roll >= pv.tn - margin)) {
       pv.target.suppressed = true;
       push(battle, log, `  ${pv.target.label} SUPPRESSED (half move, +2 TN next turn)`, 'info');
     }
@@ -590,6 +588,7 @@ export function resolveAttack(
   const pv = previewAttack(ctx, battle, attacker, targetKey);
   if (!pv.legal) return { error: pv.reason ?? 'Illegal attack' };
   const log: BattleLogEntry[] = [];
+  const M = mechanics();
   const at = unitType(attacker.typeId);
   const before = new Map(battle.units.map((u) => [u.id, u.hp]));
 
@@ -610,7 +609,7 @@ export function resolveAttack(
 
     // Archers' first strike — denied if cavalry closed at speed.
     if (dt.firstStrike && !defender.firstStrikeUsed) {
-      const fast = at.charge && attacker.movedDist >= 4;
+      const fast = at.charge && attacker.movedDist >= M.FIRST_STRIKE_DENY_MOVE;
       if (fast)
         push(
           battle,
@@ -628,12 +627,15 @@ export function resolveAttack(
     let spearStruck = false;
     if (attacker.hp > 0 && dt.braced && at.unitClass === 'cavalry') {
       spearStruck = true;
-      push(battle, log, `  ${defender.label} BRACED vs cavalry — strikes first (+3)`, 'info');
-      meleeStrike(rng, battle, log, defender, attacker, 3, '↳');
+      const brace = M.SPEAR_BRACE_BONUS;
+      push(battle, log, `  ${defender.label} BRACED vs cavalry — strikes first (+${brace})`, 'info');
+      meleeStrike(rng, battle, log, defender, attacker, brace, '↳');
     }
     if (attacker.hp > 0) {
-      const chargeBonus = at.charge && attacker.movedDist >= 3 && !dt.braced ? 2 : 0;
-      if (chargeBonus) push(battle, log, `  Charge bonus +2 (moved ${attacker.movedDist})`, 'info');
+      const chargeBonus =
+        at.charge && attacker.movedDist >= M.CHARGE_MIN_MOVE && !dt.braced ? M.CHARGE_BONUS : 0;
+      if (chargeBonus)
+        push(battle, log, `  Charge bonus +${chargeBonus} (moved ${attacker.movedDist})`, 'info');
       const dmg = meleeStrike(rng, battle, log, attacker, defender, chargeBonus, '↳');
       damage += dmg;
       result = dmg > 0 ? 'direct' : 'miss';

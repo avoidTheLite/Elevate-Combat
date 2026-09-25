@@ -5,6 +5,7 @@ import { apply } from './actions.ts';
 import { aiPendingDecision, strategicAiStep } from './ai/strategicAi.ts';
 import { tacticalAiStep } from './ai/tacticalAi.ts';
 import type { GameState, Team } from './types.ts';
+import { withRules } from './rules.ts';
 
 /** The team whose input the game is waiting on, or null when the game is over. */
 export function actingTeam(state: GameState): Team | null {
@@ -32,9 +33,11 @@ export function isAiTurn(state: GameState): boolean {
 }
 
 export function aiStep(state: GameState): GameAction {
-  if (state.phase === 'battle-pending') return aiPendingDecision();
-  if (state.phase === 'battle') return tacticalAiStep(state);
-  return strategicAiStep(state);
+  return withRules(state.settings.rules, () => {
+    if (state.phase === 'battle-pending') return aiPendingDecision();
+    if (state.phase === 'battle') return tacticalAiStep(state);
+    return strategicAiStep(state);
+  });
 }
 
 /**
