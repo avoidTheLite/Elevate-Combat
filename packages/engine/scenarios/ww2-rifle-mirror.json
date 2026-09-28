@@ -1,0 +1,28 @@
+{
+  "name": "ww2-rifle-mirror",
+  "description": "Three rifle squads each side on open flat ground.",
+  "era": "ww2",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "even"
+  }
+}

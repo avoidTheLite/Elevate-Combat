@@ -1,0 +1,28 @@
+{
+  "name": "ww2-mg-vs-3-rifles",
+  "description": "Three rifle squads (9 CP) rush a single machine-gun nest (4 CP); suppression should even the odds.",
+  "era": "ww2",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "ww2_rifle_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "ww2_machine_gun",
+        "count": 1
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "even"
+  }
+}

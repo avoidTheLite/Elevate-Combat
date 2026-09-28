@@ -1,0 +1,585 @@
+{
+ "format": "iron-ridge-save",
+ "schema": 2,
+ "engineVersion": "1.0.0",
+ "savedAt": "2026-01-01T00:00:00.000Z",
+ "label": "Hotseat · medieval battle",
+ "state": {
+  "version": "1.0.0",
+  "settings": {
+   "era": "medieval",
+   "grid": {
+    "mainCols": 5,
+    "mainRows": 3,
+    "subRadius": 2
+   },
+   "seed": 99,
+   "controllers": {
+    "A": "human",
+    "B": "human"
+   },
+   "fog": true,
+   "battleRounds": 6,
+   "battleObjective": {
+    "kind": "capture_point",
+    "captureRadius": 1,
+    "extractionAtOrigin": true
+   }
+  },
+  "phase": "battle",
+  "turn": 4,
+  "active": "A",
+  "cp": {
+   "A": 40,
+   "B": 37
+  },
+  "hq": {
+   "A": "0,1",
+   "B": "4,1"
+  },
+  "hexes": {
+   "0,0": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,0": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,0": {
+    "owner": "A",
+    "warning": 0
+   },
+   "3,0": {
+    "owner": "A",
+    "warning": 0
+   },
+   "4,0": {
+    "owner": "A",
+    "warning": 1
+   },
+   "0,1": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "4,1": {
+    "owner": "B",
+    "warning": 1
+   },
+   "-1,2": {
+    "owner": "A",
+    "warning": 0
+   },
+   "0,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "1,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,2": {
+    "owner": "B",
+    "warning": 0
+   }
+  },
+  "armies": [
+   {
+    "id": "Aarmy1",
+    "team": "A",
+    "kind": "commander",
+    "pos": "10,10",
+    "at": "4,0",
+    "units": [
+     {
+      "id": "Au2",
+      "typeId": "med_infantry",
+      "label": "INF-A2",
+      "hp": 12
+     },
+     {
+      "id": "Au3",
+      "typeId": "med_infantry",
+      "label": "INF-A3",
+      "hp": 12
+     },
+     {
+      "id": "Au4",
+      "typeId": "med_spearman",
+      "label": "SPR-A4",
+      "hp": 12
+     },
+     {
+      "id": "Au5",
+      "typeId": "med_archers",
+      "label": "ARC-A5",
+      "hp": 8
+     },
+     {
+      "id": "Au6",
+      "typeId": "med_horseman",
+      "label": "CAV-A6",
+      "hp": 12
+     },
+     {
+      "id": "Au7",
+      "typeId": "med_engineer",
+      "label": "ENG-A7",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 4
+   },
+   {
+    "id": "Agarrison8",
+    "team": "A",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "-2,5",
+    "at": "0,1",
+    "units": [],
+    "movesLeft": 0
+   },
+   {
+    "id": "Barmy9",
+    "team": "B",
+    "kind": "commander",
+    "pos": "10,12",
+    "at": "4,1",
+    "units": [
+     {
+      "id": "Bu10",
+      "typeId": "med_infantry",
+      "label": "INF-B10",
+      "hp": 12
+     },
+     {
+      "id": "Bu11",
+      "typeId": "med_infantry",
+      "label": "INF-B11",
+      "hp": 12
+     },
+     {
+      "id": "Bu12",
+      "typeId": "med_spearman",
+      "label": "SPR-B12",
+      "hp": 12
+     },
+     {
+      "id": "Bu13",
+      "typeId": "med_archers",
+      "label": "ARC-B13",
+      "hp": 8
+     },
+     {
+      "id": "Bu14",
+      "typeId": "med_horseman",
+      "label": "CAV-B14",
+      "hp": 12
+     },
+     {
+      "id": "Bu15",
+      "typeId": "med_engineer",
+      "label": "ENG-B15",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 5
+   },
+   {
+    "id": "Bgarrison16",
+    "team": "B",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "10,13",
+    "at": "4,1",
+    "units": [],
+    "movesLeft": 0
+   }
+  ],
+  "forts": {
+   "0,5": 2,
+   "8,13": 2
+  },
+  "pending": {
+   "attackerArmyId": "Aarmy1",
+   "defenderArmyId": "Barmy9",
+   "origin": "4,0",
+   "target": "4,1"
+  },
+  "battle": {
+   "id": "battle-17",
+   "era": "medieval",
+   "attacker": "A",
+   "defender": "B",
+   "attackerArmyId": "Aarmy1",
+   "defenderArmyId": "Barmy9",
+   "contested": "4,1",
+   "origin": "4,0",
+   "mains": [
+    "4,1",
+    "4,0",
+    "3,1",
+    "3,2"
+   ],
+   "phase": "combat",
+   "deployTeam": "A",
+   "round": 1,
+   "maxRounds": 6,
+   "active": "A",
+   "units": [
+    {
+     "id": "Au2",
+     "typeId": "med_infantry",
+     "label": "INF-A2",
+     "team": "A",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "12,8",
+     "facing": 5,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Au3",
+     "typeId": "med_infantry",
+     "label": "INF-A3",
+     "team": "A",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "13,8",
+     "facing": 4,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Au4",
+     "typeId": "med_spearman",
+     "label": "SPR-A4",
+     "team": "A",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "11,8",
+     "facing": 5,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Au5",
+     "typeId": "med_archers",
+     "label": "ARC-A5",
+     "team": "A",
+     "hp": 8,
+     "maxHp": 8,
+     "pos": "10,8",
+     "facing": 5,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Au6",
+     "typeId": "med_horseman",
+     "label": "CAV-A6",
+     "team": "A",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "14,8",
+     "facing": 4,
+     "mp": 7,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Au7",
+     "typeId": "med_engineer",
+     "label": "ENG-A7",
+     "team": "A",
+     "hp": 8,
+     "maxHp": 8,
+     "pos": "13,7",
+     "facing": 5,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu10",
+     "typeId": "med_infantry",
+     "label": "INF-B10",
+     "team": "B",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "8,13",
+     "facing": 1,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu11",
+     "typeId": "med_infantry",
+     "label": "INF-B11",
+     "team": "B",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "9,13",
+     "facing": 1,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu12",
+     "typeId": "med_spearman",
+     "label": "SPR-B12",
+     "team": "B",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "9,14",
+     "facing": 1,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu13",
+     "typeId": "med_archers",
+     "label": "ARC-B13",
+     "team": "B",
+     "hp": 8,
+     "maxHp": 8,
+     "pos": "8,14",
+     "facing": 1,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu14",
+     "typeId": "med_horseman",
+     "label": "CAV-B14",
+     "team": "B",
+     "hp": 12,
+     "maxHp": 12,
+     "pos": "8,15",
+     "facing": 1,
+     "mp": 7,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    },
+    {
+     "id": "Bu15",
+     "typeId": "med_engineer",
+     "label": "ENG-B15",
+     "team": "B",
+     "hp": 8,
+     "maxHp": 8,
+     "pos": "10,13",
+     "facing": 2,
+     "mp": 4,
+     "moved": false,
+     "movedDist": 0,
+     "acted": false,
+     "deployed": false,
+     "suppressed": false,
+     "exposed": false,
+     "firstStrikeUsed": false
+    }
+   ],
+   "forts": {
+    "8,13": 3,
+    "9,13": 1
+   },
+   "warningTurns": 1,
+   "warnedPlacements": 0,
+   "warnedRange": 3,
+   "objective": {
+    "kind": "capture_point",
+    "captureKey": "10,13",
+    "captureRadius": 1,
+    "extractionAtOrigin": true
+   },
+   "extracted": false,
+   "log": [
+    {
+     "round": 0,
+     "team": "B",
+     "text": "BATTLE for 4,1: ALPHA attacks from 4,0. BRAVO had 1 turn(s) of warning — 2 warned fortification(s) within 3 MP. Capture point 10,13 (r1): hold it clear of defenders to SECURE or EXTRACT.",
+     "kind": "system"
+    },
+    {
+     "round": 0,
+     "team": "B",
+     "text": "Sandbags placed at 8,13 (L3)",
+     "kind": "info"
+    },
+    {
+     "round": 0,
+     "team": "B",
+     "text": "Sandbags placed at 9,13 (L1)",
+     "kind": "info"
+    },
+    {
+     "round": 0,
+     "team": "B",
+     "text": "BRAVO deployment complete",
+     "kind": "system"
+    },
+    {
+     "round": 0,
+     "team": "A",
+     "text": "ALPHA deployment complete",
+     "kind": "system"
+    },
+    {
+     "round": 1,
+     "team": "A",
+     "text": "ROUND 1 — ALPHA to move",
+     "kind": "system"
+    }
+   ],
+   "winner": null,
+   "endReason": null
+  },
+  "log": [
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Campaign start — MEDIEVAL era, 5×3 main grid, sub-radius 2"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "ALPHA takes 2,0"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "Turn 1: BRAVO (+6 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "Turn 2: ALPHA (+7 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "ALPHA takes 3,0"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "Turn 2: BRAVO (+6 CP)"
+   },
+   {
+    "turn": 3,
+    "team": "A",
+    "text": "Turn 3: ALPHA (+8 CP)"
+   },
+   {
+    "turn": 3,
+    "team": "A",
+    "text": "ALPHA takes 4,0 from BRAVO"
+   },
+   {
+    "turn": 3,
+    "team": "B",
+    "text": "Turn 3: BRAVO (+5 CP)"
+   },
+   {
+    "turn": 4,
+    "team": "A",
+    "text": "Turn 4: ALPHA (+9 CP)"
+   },
+   {
+    "turn": 4,
+    "team": "A",
+    "text": "ALPHA commander Aarmy1 assaults 4,1!"
+   },
+   {
+    "turn": 4,
+    "team": "A",
+    "text": "Deployment opened (−10 CP). Tactical battle begins at 4,1."
+   }
+  ],
+  "winner": null,
+  "rng": 796135283,
+  "nextId": 18
+ }
+}

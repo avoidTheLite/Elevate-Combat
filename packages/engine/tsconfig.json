@@ -1,0 +1,16 @@
+{
+  "extends": "@iron-ridge/tsconfig/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": false,
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
+}

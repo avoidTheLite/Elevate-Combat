@@ -1,0 +1,239 @@
+{
+ "format": "iron-ridge-save",
+ "schema": 2,
+ "engineVersion": "1.0.0",
+ "savedAt": "2026-01-01T00:00:00.000Z",
+ "label": "Corrupt",
+ "state": {
+  "version": "1.0.0",
+  "settings": {
+   "era": "ww2",
+   "grid": {
+    "mainCols": 5,
+    "mainRows": 3,
+    "subRadius": 2
+   },
+   "seed": 4242,
+   "controllers": {
+    "A": "human",
+    "B": "ai"
+   },
+   "fog": true,
+   "battleRounds": 6,
+   "battleObjective": {
+    "kind": "capture_point",
+    "captureRadius": 1,
+    "extractionAtOrigin": true
+   }
+  },
+  "phase": "battle",
+  "turn": 1,
+  "active": "A",
+  "cp": {
+   "A": -50,
+   "B": 20
+  },
+  "hq": {
+   "A": "0,1",
+   "B": "4,1"
+  },
+  "hexes": {
+   "0,0": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,0": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,0": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,0": {
+    "owner": null,
+    "warning": 0
+   },
+   "4,0": {
+    "owner": "B",
+    "warning": 0
+   },
+   "0,1": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "4,1": {
+    "owner": "B",
+    "warning": 0
+   },
+   "-1,2": {
+    "owner": "A",
+    "warning": 0
+   },
+   "0,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "1,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,2": {
+    "owner": "B",
+    "warning": 0
+   }
+  },
+  "armies": [
+   {
+    "id": "Aarmy1",
+    "team": "A",
+    "kind": "commander",
+    "pos": "nowhere",
+    "at": "0,1",
+    "units": [
+     {
+      "id": "Au2",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A2",
+      "hp": 10
+     },
+     {
+      "id": "Au3",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A3",
+      "hp": 10
+     },
+     {
+      "id": "Au4",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-A4",
+      "hp": 10
+     },
+     {
+      "id": "Au5",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-A5",
+      "hp": 8
+     },
+     {
+      "id": "Au6",
+      "typeId": "ww2_tank",
+      "label": "TNK-A6",
+      "hp": 18
+     },
+     {
+      "id": "Au7",
+      "typeId": "ww2_engineer",
+      "label": "ENG-A7",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 5
+   },
+   {
+    "id": "Agarrison8",
+    "team": "A",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "-2,5",
+    "at": "0,1",
+    "units": [
+     {
+      "id": 7,
+      "typeId": "laser_tank",
+      "hp": -3
+     }
+    ],
+    "movesLeft": 0
+   },
+   {
+    "id": "Barmy9",
+    "team": "B",
+    "kind": "commander",
+    "pos": "10,12",
+    "at": "4,1",
+    "units": [
+     {
+      "id": "Bu10",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-B10",
+      "hp": 10
+     },
+     {
+      "id": "Bu11",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-B11",
+      "hp": 10
+     },
+     {
+      "id": "Bu12",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-B12",
+      "hp": 10
+     },
+     {
+      "id": "Bu13",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-B13",
+      "hp": 8
+     },
+     {
+      "id": "Bu14",
+      "typeId": "ww2_tank",
+      "label": "TNK-B14",
+      "hp": 18
+     },
+     {
+      "id": "Bu15",
+      "typeId": "ww2_engineer",
+      "label": "ENG-B15",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 5
+   },
+   {
+    "id": "Bgarrison16",
+    "team": "B",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "10,13",
+    "at": "4,1",
+    "units": [],
+    "movesLeft": 0
+   }
+  ],
+  "forts": {
+   "-2,5": 2,
+   "10,11": 2
+  },
+  "pending": null,
+  "battle": null,
+  "log": [
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Campaign start — WW2 era, 5×3 main grid, sub-radius 2"
+   }
+  ],
+  "winner": null,
+  "rng": 3007215346,
+  "nextId": 17
+ }
+}

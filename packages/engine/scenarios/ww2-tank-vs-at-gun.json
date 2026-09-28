@@ -1,0 +1,28 @@
+{
+  "name": "ww2-tank-vs-at-gun",
+  "description": "A lone tank assaults a set-up anti-tank gun covering the approach.",
+  "era": "ww2",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "ww2_tank",
+        "count": 1
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "ww2_at_gun",
+        "count": 1
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "defender"
+  }
+}

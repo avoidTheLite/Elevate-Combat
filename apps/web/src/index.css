@@ -3,28 +3,30 @@
 :root {
   color-scheme: dark;
 
-  /* HSL design tokens — neon-punk dark theme */
+  /* HSL design tokens — neon-punk training-simulation theme */
   --background: 210 100% 3%;
-  --foreground: 190 100% 55%;
+  --foreground: 190 100% 62%;
+  --panel: 210 90% 5%;
 
-  --primary: 190 100% 50%;
+  --primary: 188 100% 50%;
   --primary-foreground: 210 100% 3%;
 
-  --secondary: 340 100% 59%;
+  --secondary: 345 100% 60%;
   --secondary-foreground: 210 100% 3%;
 
-  --accent: 70 100% 50%;
+  --accent: 70 100% 55%;
   --accent-foreground: 210 100% 3%;
 
   --muted: 210 50% 10%;
-  --muted-foreground: 195 60% 30%;
+  --muted-foreground: 195 45% 45%;
 
   --border: 210 80% 10%;
+  --border-bright: 195 80% 18%;
   --ring: 190 100% 50%;
 
-  --success: 145 100% 50%;
-  --warning: 38 100% 65%;
-  --destructive: 345 100% 60%;
+  --success: 145 100% 55%;
+  --warning: 38 100% 62%;
+  --destructive: 350 100% 62%;
 }
 
 *,
@@ -38,4 +40,81 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: 'Courier New', monospace;
+}
+
+.text-glow {
+  text-shadow: 0 0 8px hsl(var(--primary) / 0.7);
+}
+
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 170, 255, 0.025) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+.scanlines {
+  position: relative;
+}
+
+/* CSS2D token labels rendered over the 3D scene */
+.ir-token-label {
+  font:
+    bold 10px 'Courier New',
+    monospace;
+  text-align: center;
+  pointer-events: none;
+  text-shadow:
+    0 0 3px #000810,
+    0 0 3px #000810,
+    0 0 6px #000810;
+  white-space: nowrap;
+}
+.ir-token-label .ir-sub {
+  font-size: 8px;
+  color: #6fb6c8;
+}
+.ir-token-label .ir-badge {
+  font-size: 8px;
+  color: #ffb020;
+}
+.ir-token-label .ir-hp {
+  margin: 2px auto 0;
+  width: 28px;
+  height: 3px;
+  background: #111a22;
+}
+.ir-token-label .ir-hp > div {
+  height: 100%;
+}
+
+/* Floating combat numbers (attack effects) — neutral highlight colours only */
+.ir-fx-label {
+  font:
+    bold 12px 'Courier New',
+    monospace;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+  text-shadow:
+    0 0 3px #000810,
+    0 0 6px #000810,
+    0 0 10px rgba(255, 192, 64, 0.35);
+}
+.ir-fx-damage {
+  color: #ffe066;
+}
+.ir-fx-kill {
+  color: #ffa030;
+  font-size: 13px;
+}
+.ir-fx-miss,
+.ir-fx-noeffect {
+  color: #9fb8c4;
+  font-size: 10px;
 }

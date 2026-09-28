@@ -13,8 +13,8 @@
     "jsx": "react-jsx",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
+    "resolveJsonModule": true
   },
-  "include": ["src"],
-  "references": [{ "path": "../../packages/types" }]
+  "include": ["src"]
 }

@@ -1,0 +1,436 @@
+{
+ "format": "iron-ridge-save",
+ "schema": 2,
+ "engineVersion": "1.0.0",
+ "savedAt": "2026-01-01T00:00:00.000Z",
+ "label": "Rules override · turn 3",
+ "state": {
+  "version": "1.0.0",
+  "settings": {
+   "era": "ww2",
+   "grid": {
+    "mainCols": 5,
+    "mainRows": 3,
+    "subRadius": 2
+   },
+   "seed": 31,
+   "controllers": {
+    "A": "human",
+    "B": "ai"
+   },
+   "fog": true,
+   "battleRounds": 6,
+   "battleObjective": {
+    "kind": "capture_point",
+    "captureRadius": 1,
+    "extractionAtOrigin": true
+   },
+   "rules": {
+    "units": {
+     "ww2_rifle_infantry": {
+      "cost": 2,
+      "hp": 12
+     },
+     "ww2_tank": {
+      "move": 5
+     }
+    },
+    "mechanics": {
+     "MELEE_TN": -1
+    }
+   }
+  },
+  "phase": "strategic",
+  "turn": 3,
+  "active": "A",
+  "cp": {
+   "A": 16,
+   "B": 0
+  },
+  "hq": {
+   "A": "0,1",
+   "B": "4,1"
+  },
+  "hexes": {
+   "0,0": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,0": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,0": {
+    "owner": "B",
+    "warning": 0
+   },
+   "3,0": {
+    "owner": "B",
+    "warning": 1
+   },
+   "4,0": {
+    "owner": "B",
+    "warning": 0
+   },
+   "0,1": {
+    "owner": "A",
+    "warning": 0
+   },
+   "1,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,1": {
+    "owner": "A",
+    "warning": 1
+   },
+   "3,1": {
+    "owner": null,
+    "warning": 0
+   },
+   "4,1": {
+    "owner": "B",
+    "warning": 0
+   },
+   "-1,2": {
+    "owner": "A",
+    "warning": 0
+   },
+   "0,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "1,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "2,2": {
+    "owner": null,
+    "warning": 0
+   },
+   "3,2": {
+    "owner": "B",
+    "warning": 0
+   }
+  },
+  "armies": [
+   {
+    "id": "Aarmy1",
+    "team": "A",
+    "kind": "commander",
+    "pos": "6,8",
+    "at": "2,1",
+    "units": [
+     {
+      "id": "Au2",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A2",
+      "hp": 10
+     },
+     {
+      "id": "Au3",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A3",
+      "hp": 10
+     },
+     {
+      "id": "Au4",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-A4",
+      "hp": 10
+     },
+     {
+      "id": "Au5",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-A5",
+      "hp": 8
+     },
+     {
+      "id": "Au6",
+      "typeId": "ww2_tank",
+      "label": "TNK-A6",
+      "hp": 18
+     },
+     {
+      "id": "Au7",
+      "typeId": "ww2_engineer",
+      "label": "ENG-A7",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 5
+   },
+   {
+    "id": "Agarrison8",
+    "team": "A",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "-2,5",
+    "at": "0,1",
+    "units": [
+     {
+      "id": "Au21",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A21",
+      "hp": 12
+     },
+     {
+      "id": "Au25",
+      "typeId": "ww2_light_armored_vehicle",
+      "label": "LAV-A25",
+      "hp": 14
+     }
+    ],
+    "movesLeft": 0
+   },
+   {
+    "id": "Barmy9",
+    "team": "B",
+    "kind": "commander",
+    "pos": "7,5",
+    "at": "2,0",
+    "units": [
+     {
+      "id": "Bu10",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-B10",
+      "hp": 10
+     },
+     {
+      "id": "Bu11",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-B11",
+      "hp": 10
+     },
+     {
+      "id": "Bu12",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-B12",
+      "hp": 10
+     },
+     {
+      "id": "Bu13",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-B13",
+      "hp": 8
+     },
+     {
+      "id": "Bu14",
+      "typeId": "ww2_tank",
+      "label": "TNK-B14",
+      "hp": 18
+     },
+     {
+      "id": "Bu15",
+      "typeId": "ww2_engineer",
+      "label": "ENG-B15",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 0
+   },
+   {
+    "id": "Bgarrison16",
+    "team": "B",
+    "kind": "garrison",
+    "building": "hq",
+    "pos": "10,13",
+    "at": "4,1",
+    "units": [
+     {
+      "id": "Bu22",
+      "typeId": "ww2_tank",
+      "label": "TNK-B22",
+      "hp": 18
+     },
+     {
+      "id": "Bu23",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-B23",
+      "hp": 8
+     },
+     {
+      "id": "Bu24",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-B24",
+      "hp": 10
+     },
+     {
+      "id": "Bu27",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-B27",
+      "hp": 12
+     },
+     {
+      "id": "Bu28",
+      "typeId": "ww2_at_gun",
+      "label": "ATG-B28",
+      "hp": 12
+     },
+     {
+      "id": "Bu29",
+      "typeId": "ww2_light_armored_vehicle",
+      "label": "LAV-B29",
+      "hp": 14
+     }
+    ],
+    "movesLeft": 0
+   },
+   {
+    "id": "Aarmy26",
+    "team": "A",
+    "kind": "commander",
+    "pos": "-3,5",
+    "at": "0,1",
+    "units": [
+     {
+      "id": "Au17",
+      "typeId": "ww2_rifle_infantry",
+      "label": "RIF-A17",
+      "hp": 12
+     },
+     {
+      "id": "Au18",
+      "typeId": "ww2_at_infantry",
+      "label": "BAZ-A18",
+      "hp": 8
+     },
+     {
+      "id": "Au19",
+      "typeId": "ww2_machine_gun",
+      "label": "MG-A19",
+      "hp": 10
+     },
+     {
+      "id": "Au20",
+      "typeId": "ww2_mortar",
+      "label": "MOR-A20",
+      "hp": 8
+     }
+    ],
+    "movesLeft": 5
+   }
+  ],
+  "forts": {
+   "-2,5": 2,
+   "8,13": 2
+  },
+  "pending": null,
+  "battle": null,
+  "log": [
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Campaign start — WW2 era, 5×3 main grid, sub-radius 2"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Recruited Rifle Infantry into the HQ garrison (−2 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Recruited AT Infantry (Bazooka/Rockets) into the HQ garrison (−4 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Recruited Machine Gun Team into the HQ garrison (−4 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Recruited Mortar Team into the HQ garrison (−5 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "Recruited Rifle Infantry into the HQ garrison (−2 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "A",
+    "text": "ALPHA takes 2,0"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "Turn 1: BRAVO (+6 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "Recruited Tank into the HQ garrison (−10 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "Recruited AT Infantry (Bazooka/Rockets) into the HQ garrison (−4 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "Recruited Machine Gun Team into the HQ garrison (−4 CP)"
+   },
+   {
+    "turn": 1,
+    "team": "B",
+    "text": "BRAVO takes 3,0"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "Turn 2: ALPHA (+7 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "Recruited Light Armored Vehicle (LAV) into the HQ garrison (−7 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "ALPHA takes 2,1"
+   },
+   {
+    "turn": 2,
+    "team": "A",
+    "text": "New commander Aarmy26 formed with 4 unit(s)"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "Turn 2: BRAVO (+7 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "Recruited Rifle Infantry into the HQ garrison (−2 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "Recruited AT Gun into the HQ garrison (−6 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "Recruited Light Armored Vehicle (LAV) into the HQ garrison (−7 CP)"
+   },
+   {
+    "turn": 2,
+    "team": "B",
+    "text": "BRAVO takes 2,0 from ALPHA"
+   },
+   {
+    "turn": 3,
+    "team": "A",
+    "text": "Turn 3: ALPHA (+7 CP)"
+   }
+  ],
+  "winner": null,
+  "rng": 683129967,
+  "nextId": 30
+ }
+}

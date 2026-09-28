@@ -1,0 +1,28 @@
+{
+  "name": "med-infantry-mirror",
+  "description": "Three infantry each side on open flat ground.",
+  "era": "medieval",
+  "attacker": {
+    "units": [
+      {
+        "typeId": "med_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "defender": {
+    "units": [
+      {
+        "typeId": "med_infantry",
+        "count": 3
+      }
+    ]
+  },
+  "terrain": {
+    "kind": "flat"
+  },
+  "maxRounds": 10,
+  "expect": {
+    "winner": "even"
+  }
+}
