@@ -1,0 +1,11 @@
+{
+  "product": "Elevate-Combat",
+  "dkr_sha": "2e16a0725c9c672432cb29a53d600d716fc8574e",
+  "mode": "implement",
+  "refs": [
+    "PDE-DOTFILES-SCAFFOLD-UC-041"
+  ],
+  "twin_pr": null,
+  "dkr_sync_sha": null,
+  "product_pr": null
+}
