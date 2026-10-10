@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Idempotent Cursor Cloud Agent bootstrap for dotfiles-generated (and apply-target) repos.
 # Clones avoidTheLite/dotfiles + avoidTheLite/DKR when missing, fast-forwards when present,
-# ensures Node 24, then runs `dotfiles setup --non-interactive`.
+# ensures Node 24, runs `dotfiles setup --non-interactive`, then hydrates this product repo's
+# sparse `dkr/` checkout (`dotfiles install-dkr`) when the repo is paired, and prints the
+# `agent-env doctor` report so the install log says whether the agent is READY.
 # Both repos are private and a cloud agent's own install token is usually scoped to the product
 # repo only, so before cloning this mints ONE credential that covers dotfiles AND DKR (GitHub App
 # installation token from DKR_APP_ID + DKR_APP_PRIVATE_KEY, else GH_CLAUDE_SECRET / GH_TOKEN) via
@@ -251,6 +253,23 @@ DOTFILES_CLI="${DOTFILES_HOME}/scripts/dotfiles"
 
 log "running dotfiles setup --non-interactive"
 "${DOTFILES_CLI}" setup --non-interactive
+
+# Hydrate the product's sparse dkr/ (paired repos only). A fresh clone has the gitlink but no
+# checkout; ~/DKR is a separate full clone and is not what agents should read. Not fatal: the
+# doctor report below says what is missing, and the agent rules say to stop and report.
+if [ -e "${PRODUCT_ROOT}/dkr/.git" ]; then
+  log "dkr/: already hydrated"
+elif [ -f "${PRODUCT_ROOT}/.dkr/config.json" ] && grep -q '"paired"' "${PRODUCT_ROOT}/.dkr/config.json"; then
+  log "dkr/: hydrating the sparse DKR checkout (dotfiles install-dkr)"
+  if ! (cd "${PRODUCT_ROOT}" && "${DOTFILES_CLI}" install-dkr "${PRODUCT_ROOT}"); then
+    log "WARNING: install-dkr failed; dkr/ is not hydrated. See the doctor report below."
+  fi
+else
+  log "dkr/: this repo is not paired (.dkr/config.json has no \"paired\" section); run 'dotfiles install-dkr' to pair it"
+fi
+
+log "agent-env doctor"
+"${DOTFILES_CLI}" agent-env doctor "${PRODUCT_ROOT}" || log "doctor reported NOT READY (details above)"
 
 cli_version="$("${DOTFILES_CLI}" --version 2>/dev/null || true)"
 dkr_sha="$(git -C "${DKR_HOME}" rev-parse HEAD)"
