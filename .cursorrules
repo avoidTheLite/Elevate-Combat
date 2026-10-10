@@ -4,7 +4,7 @@
 ## Paired workspace (product ↔ DKR)
 
 This repository is one half of a **paired multi-repo workspace**. Application code lives here
-(`avoidTheLite/Elevate-Combat`). Domain knowledge lives in `avoidTheLite/DKR`, checked out as a sparse git
+(`avoidTheLite/elevate-combat`). Domain knowledge lives in `avoidTheLite/DKR`, checked out as a sparse git
 submodule at `dkr/`. Both halves are one unit of work.
 
 Canonical knowledge and the full agent audit live **in the DKR checkout** (do not duplicate them

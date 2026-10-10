@@ -30,6 +30,7 @@ sibling_checkout() {
 }
 
 DOTFILES_HOME="${DOTFILES_HOME:-$(sibling_checkout dotfiles)}"
+DKR_HOME_EXPLICIT="${DKR_HOME:-}"
 DKR_HOME="${DKR_HOME:-$(sibling_checkout DKR)}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/avoidTheLite/dotfiles.git}"
 DKR_REPO="${DKR_REPO:-https://github.com/avoidTheLite/DKR.git}"
@@ -236,10 +237,25 @@ ensure_repo() {
   log "${label}: cloned at $(git -C "${dest}" rev-parse --short HEAD)"
 }
 
+product_paired() {
+  [ -f "${PRODUCT_ROOT}/.dkr/config.json" ] && grep -q '"paired"' "${PRODUCT_ROOT}/.dkr/config.json"
+}
+
 ensure_node24
 mint_credential
 ensure_repo "${DOTFILES_REPO}" "${DOTFILES_HOME}" "dotfiles" "${DOTFILES_REF:-}"
-ensure_repo "${DKR_REPO}" "${DKR_HOME}" "DKR" "${DKR_REF:-}"
+
+# A paired product repo reads its DKR through the sparse dkr/ submodule (hydrated below), so a
+# second full clone of the DKR in ~/DKR would only put other products' trees on disk. Keep it
+# for unpaired repos, for Claude cloud (its "attach the DKR" flow relies on the clone), and when
+# DKR_HOME was set explicitly.
+DKR_CLONED=""
+if product_paired && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ -z "${DKR_HOME_EXPLICIT}" ]; then
+  log "DKR: paired product repo; hydrating dkr/ instead of cloning a full ${DKR_HOME}"
+else
+  ensure_repo "${DKR_REPO}" "${DKR_HOME}" "DKR" "${DKR_REF:-}"
+  DKR_CLONED="1"
+fi
 
 # Keep the historical ~/dotfiles path used by project-template lint paths.
 if [ "${DOTFILES_HOME}" != "${HOME}/dotfiles" ]; then
@@ -259,7 +275,7 @@ log "running dotfiles setup --non-interactive"
 # doctor report below says what is missing, and the agent rules say to stop and report.
 if [ -e "${PRODUCT_ROOT}/dkr/.git" ]; then
   log "dkr/: already hydrated"
-elif [ -f "${PRODUCT_ROOT}/.dkr/config.json" ] && grep -q '"paired"' "${PRODUCT_ROOT}/.dkr/config.json"; then
+elif product_paired; then
   log "dkr/: hydrating the sparse DKR checkout (dotfiles install-dkr)"
   if ! (cd "${PRODUCT_ROOT}" && "${DOTFILES_CLI}" install-dkr "${PRODUCT_ROOT}"); then
     log "WARNING: install-dkr failed; dkr/ is not hydrated. See the doctor report below."
@@ -272,12 +288,20 @@ log "agent-env doctor"
 "${DOTFILES_CLI}" agent-env doctor "${PRODUCT_ROOT}" || log "doctor reported NOT READY (details above)"
 
 cli_version="$("${DOTFILES_CLI}" --version 2>/dev/null || true)"
-dkr_sha="$(git -C "${DKR_HOME}" rev-parse HEAD)"
 dotfiles_sha="$(git -C "${DOTFILES_HOME}" rev-parse HEAD)"
+
+# Report the DKR the agent actually reads: the hydrated dkr/ checkout, not a side clone.
+if [ -e "${PRODUCT_ROOT}/dkr/.git" ]; then
+  dkr_line="$(git -C "${PRODUCT_ROOT}/dkr" rev-parse HEAD 2>/dev/null || echo unknown) (dkr/, pinned checkout)"
+elif [ -n "${DKR_CLONED}" ]; then
+  dkr_line="$(git -C "${DKR_HOME}" rev-parse HEAD 2>/dev/null || echo unknown) (${DKR_HOME}, full clone; dkr/ not hydrated)"
+else
+  dkr_line="not hydrated (dkr/ missing; see the doctor report above)"
+fi
 
 echo "cloud-agent bootstrap: OK"
 echo "  dotfiles CLI: ${cli_version}"
 echo "  dotfiles SHA: ${dotfiles_sha}"
-echo "  DKR SHA:      ${dkr_sha}"
+echo "  DKR SHA:      ${dkr_line}"
 echo "  DOTFILES_HOME: ${DOTFILES_HOME}"
-echo "  DKR_HOME:      ${DKR_HOME}"
+[ -z "${DKR_CLONED}" ] || echo "  DKR_HOME:      ${DKR_HOME}"

@@ -1,6 +1,6 @@
 {
   "name": "iron-ridge",
-  "install": "bash .cursor/bootstrap.sh",
+  "install": "DOTFILES_AGENT_PLATFORM=cursor bash .cursor/bootstrap.sh",
   "repositoryDependencies": [
     "github.com/avoidTheLite/dotfiles",
     "github.com/avoidTheLite/DKR"
