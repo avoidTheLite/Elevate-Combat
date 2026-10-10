@@ -1,0 +1,4 @@
+[submodule "dkr"]
+	path = dkr
+	url = https://github.com/avoidTheLite/DKR.git
+	update = none

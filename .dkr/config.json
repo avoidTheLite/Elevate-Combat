@@ -1,0 +1,42 @@
+{
+  "paired": {
+    "repo": "avoidTheLite/DKR",
+    "url": "https://github.com/avoidTheLite/DKR.git",
+    "ref": "main",
+    "path": "dkr",
+    "submoduleName": "dkr",
+    "productPath": null,
+    "sparse": {
+      "global": [
+        "domains/pde/dkr/features/outputs",
+        "domains/pde/dkr/features/pipeline"
+      ],
+      "system": [
+        "domains/pde/dkr/features/lifecycle",
+        "domains/pde/dotfiles"
+      ]
+    },
+    "branch": {
+      "pattern": "^(feature|fix|chore|docs|refactor|test|cursor|claude)/([A-Z][A-Z0-9]*-[0-9]+-)?[a-z0-9][a-z0-9-]*$",
+      "examples": [
+        "feature/add-login",
+        "fix/PROJ-42-null-session",
+        "docs/paired-workspace",
+        "cursor/dkr-agent-review-checklist-f61f",
+        "claude/dotfiles-paired-multi-repo-pcz9u9"
+      ],
+      "protected": [
+        "main",
+        "master",
+        "develop"
+      ]
+    },
+    "rulesTemplate": "domains/pde/dotfiles/features/paired/templates/PRODUCT_AGENT_RULES.md",
+    "rulesFiles": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".cursorrules",
+      ".github/copilot-instructions.md"
+    ]
+  }
+}
