@@ -1,6 +1,6 @@
 {
   "product": "Elevate-Combat",
-  "dkr_sha": "2825eeb8af6140d51e7dc07a771e7b509d4660bc",
+  "dkr_sha": "c76f74f050398aa2c13f792b18a115761dec3947",
   "mode": "amend",
   "refs": [
     "GAMES-ELEVATE-WORLD-UC-001",
@@ -13,6 +13,6 @@
     "GAMES-ELEVATE-SESSION-UC-002"
   ],
   "twin_pr": "https://github.com/avoidTheLite/DKR/pull/64",
-  "dkr_sync_sha": "7672143bf14df264f348d23f65b26a63bfb10f6c",
+  "dkr_sync_sha": "3a85316728c5f9e7a03b17a9cb62a0445962af35",
   "product_pr": null
 }
