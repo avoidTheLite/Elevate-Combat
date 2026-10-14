@@ -1,6 +1,6 @@
 {
   "product": "Elevate-Combat",
-  "dkr_sha": "53d6de4ba2378f4581ad58bb8f44727a61a22984",
+  "dkr_sha": "2825eeb8af6140d51e7dc07a771e7b509d4660bc",
   "mode": "amend",
   "refs": [
     "GAMES-ELEVATE-WORLD-UC-001",
@@ -13,6 +13,6 @@
     "GAMES-ELEVATE-SESSION-UC-002"
   ],
   "twin_pr": null,
-  "dkr_sync_sha": null,
+  "dkr_sync_sha": "837766fbd732f33cf96368269adec8384052656c",
   "product_pr": null
 }
