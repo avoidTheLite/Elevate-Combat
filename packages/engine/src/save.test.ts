@@ -36,7 +36,7 @@ function legacyOf(s: GameState): Record<string, unknown> {
   return g;
 }
 
-describe('serializeSave / deserializeSave', () => {
+describe('GAMES-ELEVATE-SESSION-UC-001: serializeSave / deserializeSave', () => {
   it('wraps the state in a versioned envelope', () => {
     const s = game();
     const text = serializeSave(s, 'My save', '2026-02-03T04:05:06.000Z');
@@ -98,7 +98,7 @@ describe('serializeSave / deserializeSave', () => {
   });
 });
 
-describe('validateGameState', () => {
+describe('GAMES-ELEVATE-SESSION-UC-001: validateGameState', () => {
   const broken = (fn: (g: any) => void): string[] => {
     const g = structuredClone(game()) as any;
     fn(g);
@@ -148,7 +148,7 @@ describe('validateGameState', () => {
   });
 });
 
-describe('migrateSave (schema 1 → 2)', () => {
+describe('GAMES-ELEVATE-SESSION-UC-001: migrateSave (schema 1 → 2)', () => {
   it('turns V0.9 armies into commanders on sub-hexes and adds HQ garrisons', () => {
     const s = game();
     const legacy = legacyOf(s);

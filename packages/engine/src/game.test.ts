@@ -44,7 +44,7 @@ function forceBattle(state: GameState): GameState {
   return s;
 }
 
-describe('campaign', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-001: campaign', () => {
   it('creates a game with HQs, starting commanders, HQ garrisons and owned flanks', () => {
     const s = createGame(settings());
     expect(s.armies).toHaveLength(4);
@@ -62,7 +62,7 @@ describe('campaign', () => {
     expect(r.state.cp.A).toBe(s.cp.A - 3);
   });
 
-  it('a forced engagement produces a playable tactical battle', { timeout: 30000 }, () => {
+  it('GAMES-ELEVATE-CAMPAIGN-UC-002: a forced engagement produces a playable tactical battle', { timeout: 30000 }, () => {
     let s = forceBattle(createGame(settings({ grid: { mainCols: 4, mainRows: 3, subRadius: 3 } })));
     expect(s.phase).toBe('battle-pending');
     s = apply(s, { type: 'startBattle' }).state;
@@ -77,7 +77,7 @@ describe('campaign', () => {
     expect(['strategic', 'over']).toContain(s.phase);
   });
 
-  it('auto-resolve settles a pending battle', () => {
+  it('GAMES-ELEVATE-TACTICAL-UC-001: auto-resolve settles a pending battle', () => {
     let s = forceBattle(createGame(settings({ grid: { mainCols: 4, mainRows: 3, subRadius: 3 } })));
     expect(s.phase).toBe('battle-pending');
     s = apply(s, { type: 'autoResolve' }).state;
@@ -107,7 +107,7 @@ describe('campaign', () => {
   });
 });
 
-describe('deployment zones', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: deployment zones', () => {
   for (const n of [2, 3, 4, 5, 6]) {
     it(`radius ${n}: both zones fit a full army and are separated by no-man's-land`, () => {
       let s = forceBattle(
@@ -127,7 +127,7 @@ describe('deployment zones', () => {
   }
 });
 
-describe('action points', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: action points', () => {
   it('counts one move point and one act point per turn', () => {
     const base = {
       id: 'u',

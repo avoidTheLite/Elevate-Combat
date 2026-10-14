@@ -22,7 +22,7 @@ import { spiral, hexKey } from './hex.ts';
 import { buildWorld } from './grid.ts';
 import { generateTerrain } from './terrain.ts';
 
-describe('unit data', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: unit data', () => {
   it('engine copy of the units JSON matches docs/iron-ridge-units.json', () => {
     const docs = JSON.parse(
       readFileSync(
@@ -40,7 +40,7 @@ describe('unit data', () => {
   });
 });
 
-describe('combat rules v1', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: combat rules v1', () => {
   it('§1 base TNs', () => {
     expect(BASE_TN).toEqual({ heavy_armor: 7, light_armor: 10, unarmored: 15 });
   });
@@ -80,7 +80,7 @@ describe('combat rules v1', () => {
   });
 });
 
-describe('line of sight', () => {
+describe('GAMES-ELEVATE-WORLD-UC-002: line of sight', () => {
   it('a ridge between shooter and target blocks direct fire', () => {
     const heights: Record<string, number> = { '0,0': 2, '1,0': 2, '2,0': 8, '3,0': 2, '4,0': 2 };
     const los = lineOfSight({ q: 0, r: 0 }, { q: 4, r: 0 }, (k) => heights[k]);
@@ -137,7 +137,7 @@ function flatContext(): { ctx: BattleContext; battle: Battle } {
   return { ctx, battle };
 }
 
-describe('attack preview', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: attack preview', () => {
   it('tank cannot fire point-blank (min range)', () => {
     const { ctx, battle } = flatContext();
     const pv = previewAttack(ctx, battle, battle.units[0]!, '1,0');

@@ -89,7 +89,7 @@ function winBattle(state: GameState, attId: string, defId: string, survivors = 0
   return apply(s, { type: 'concludeBattle' }).state;
 }
 
-describe('holders at game start', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-001: holders at game start', () => {
   it('each HQ has an empty garrison on its centre and a commander next to it', () => {
     const s = game();
     const { world } = worldOf(s);
@@ -108,7 +108,7 @@ describe('holders at game start', () => {
   });
 });
 
-describe('commander movement', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: commander movement', () => {
   it('reach is bounded by movesLeft sub-steps and spends steps on the move', () => {
     const s = game();
     const c = commanderOf(s, 'A');
@@ -192,7 +192,7 @@ describe('commander movement', () => {
   });
 });
 
-describe('engagement', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: engagement', () => {
   it('needs the target within engageRange sub-hexes', () => {
     const s = game();
     const n = s.settings.grid.subRadius;
@@ -280,7 +280,7 @@ describe('engagement', () => {
   });
 });
 
-describe('strategic line-of-sight fog', () => {
+describe('GAMES-ELEVATE-WORLD-UC-002: strategic line-of-sight fog', () => {
   function losGame(): GameState {
     const s = game({ fog: true, grid: { mainCols: 7, mainRows: 5, subRadius: 4 } });
     for (const k of Object.keys(s.hexes)) s.hexes[k]!.owner = null; // no territory vision
@@ -338,7 +338,7 @@ describe('strategic line-of-sight fog', () => {
   });
 });
 
-describe('garrisons and recruiting', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-001: garrisons and recruiting', () => {
   it('recruits join the HQ garrison and never spawn a commander', () => {
     let s = game();
     const before = s.armies.length;
@@ -379,7 +379,7 @@ describe('garrisons and recruiting', () => {
   }
 });
 
-describe('transfers', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: transfers', () => {
   it('holders must be within the radius AND in the same main hex (each check can be switched off)', () => {
     const s = game();
     const n = s.settings.grid.subRadius;

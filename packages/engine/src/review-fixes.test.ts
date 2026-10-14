@@ -57,7 +57,7 @@ describe('review fixes', () => {
   });
 });
 
-describe('capture point objective', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: capture point objective', () => {
   it('SECURE wins when the attacker alone holds the capture zone', () => {
     let s = createGame({
       ...defaultSettings(),

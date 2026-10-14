@@ -13,7 +13,7 @@ into product docs):
 | Topic | Start here |
 | --- | --- |
 | DKR entry / routing | `dkr/AGENTS.md` |
-| This product's folder | `dkr/(no product folder mapped yet)` |
+| This product's folder | `dkr/domains/games/Elevate-Combat/` |
 | Paired use cases | `dkr/domains/pde/dotfiles/features/paired/USE_CASES.md` |
 | Fail-closed agent checklist | `dkr/domains/pde/dotfiles/features/paired/AGENT_CHECKLIST.md` |
 | Twin-PR policy (when Kong truth changes) | `dkr/domains/pde/dotfiles/features/twin/` |
@@ -32,12 +32,13 @@ into product docs):
   ```
 
 - Start in the DKR at `dkr/AGENTS.md`. This product's knowledge is
-  `dkr/(no product folder mapped yet)`.
+  `dkr/domains/games/Elevate-Combat/`.
 - Only these DKR paths are checked out (sparse cone):
   - `dkr/domains/pde/dkr/features/outputs/`
   - `dkr/domains/pde/dkr/features/pipeline/`
   - `dkr/domains/pde/dkr/features/lifecycle/`
   - `dkr/domains/pde/dotfiles/`
+  - `dkr/domains/games/Elevate-Combat/`
   Do not widen the sparse checkout or read other products' trees. Re-run `dotfiles install-dkr`
   to refresh the profile.
 - The submodule has `update = none`. Do not run `git submodule update` on it; `dotfiles install-dkr`
@@ -71,6 +72,8 @@ dotfiles dkr intent --mode <implement|amend|declare-done|none> --refs <UC…> --
   been pushed.
 - Merge the companion DKR PR with a merge commit. Repoint only when the pointer left the DKR remote:
   `node .dkr/bin/paired-push.mjs --repoint` checks first and is a no-op otherwise.
+- If `dotfiles dkr validate` reports `dkr/pointer-mergeable` (another paired PR moved the pointer),
+  run `node .dkr/bin/paired-push.mjs --sync`, resolve any conflict it names, then push as above.
 
 ### Branch invariants
 
