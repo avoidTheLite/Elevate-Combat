@@ -22,7 +22,7 @@ import { generateTerrain } from './terrain.ts';
 import { commanderOf, flatBattle, mkUnit, placeHolder, scriptedRng } from './testBattle.ts';
 import { unitType } from './units.ts';
 
-describe('melee specials (A24)', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: melee specials', () => {
   it('archer first-strike fires a volley before contact', () => {
     const { ctx, battle } = flatBattle([
       mkUnit('cav', 'med_horseman', 'A', '0,0'),
@@ -86,7 +86,7 @@ describe('melee specials (A24)', () => {
   });
 });
 
-describe('machine-gun suppression (A25)', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: machine-gun suppression', () => {
   it('pins unarmored targets on hit or near-miss within 4 of TN', () => {
     const { ctx, battle } = flatBattle([
       { ...mkUnit('mg', 'ww2_machine_gun', 'A', '0,0'), deployed: true },
@@ -124,7 +124,7 @@ describe('machine-gun suppression (A25)', () => {
   });
 });
 
-describe('ranged modifiers in preview/resolve', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: ranged modifiers in preview/resolve', () => {
   it('blind fire adds +BLIND_FIRE_TN and clears splash band when unspotted', () => {
     const { ctx, battle } = flatBattle([
       { ...mkUnit('mor', 'ww2_mortar', 'A', '0,0'), deployed: true },
@@ -183,7 +183,7 @@ describe('ranged modifiers in preview/resolve', () => {
   });
 });
 
-describe('siege vs fort + HE splash', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: siege vs fort + HE splash', () => {
   it('siege direct hit reduces fortification; non-siege does not', () => {
     const { ctx, battle } = flatBattle([
       mkUnit('tank', 'ww2_tank', 'A', '0,0'),
@@ -236,7 +236,7 @@ describe('siege vs fort + HE splash', () => {
   });
 });
 
-describe('SET UP / PACK UP / DIG IN (A26/A27)', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: SET UP / PACK UP / DIG IN', () => {
   it('combat_fixed cannot fire until set up; move then set up consumes the act', () => {
     const { ctx, battle } = flatBattle([
       mkUnit('mg', 'ww2_machine_gun', 'A', '0,0'),
@@ -285,7 +285,7 @@ describe('SET UP / PACK UP / DIG IN (A26/A27)', () => {
   });
 });
 
-describe('battle end conditions', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: battle end conditions', () => {
   it('checkVictory: wipe attacker → defender; wipe defender → attacker; mutual → defender', () => {
     const a = flatBattle([
       mkUnit('a1', 'ww2_rifle_infantry', 'A', '0,0'),
@@ -406,7 +406,7 @@ function buildWorldStub(): ReturnType<typeof buildWorld> {
   return buildWorld({ mainCols: 3, mainRows: 3, subRadius: 2 });
 }
 
-describe('warning clocks → warned forts + dig-in writeback', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-001: warning clocks → warned forts + dig-in writeback', () => {
   it('increments warning when enemy adjacent and maps into warned fort budget', () => {
     let s = createGame({
       ...defaultSettings(),

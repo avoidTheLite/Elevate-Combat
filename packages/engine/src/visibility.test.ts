@@ -17,7 +17,7 @@ import { unitType } from './units.ts';
  * - revealed* — player knows about a unit/hex by any means (revealedEnemies, isHexRevealed)
  * - exposed   — fire-lingering flag that keeps a unit revealed without LOS
  */
-describe('FOW — visible (LOS) vs revealed (player-detected)', () => {
+describe('GAMES-ELEVATE-WORLD-UC-002: FOW — visible (LOS) vs revealed (player-detected)', () => {
   it('visionRange = base vision + floor(viewerHeight / 3)', () => {
     const { ctx, battle } = flatBattle([mkUnit('rif', 'ww2_rifle_infantry', 'A', '0,0')]);
     const u = battle.units[0]!;

@@ -93,7 +93,7 @@ function playN(s: GameState, n: number): GameState {
   return s;
 }
 
-describe('save fixtures', () => {
+describe('GAMES-ELEVATE-SESSION-UC-002: save fixtures', () => {
   it('includes the standard set', () => {
     for (const name of [
       'strategic-t1',

@@ -1,0 +1,195 @@
+{
+  "implementation_sha": "da6b485de53e925123c1165be1fa734b2168fcc5",
+  "entries": [
+    {
+      "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/grid.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-001: hierarchical grid \u2014 sub-hexes align across main hexes",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-001"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-WORLD-UC-002",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/visibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: FOW \u2014 visible (LOS) vs revealed (player-detected)",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic line-of-sight fog",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/rules.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: line of sight",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/game.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: campaign",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: holders at game start",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: garrisons and recruiting",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: commander movement",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: engagement",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/command.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: transfers",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/game.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: a forced engagement produces a playable tactical battle",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/game.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: deployment zones",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/game.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: action points",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/game.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: auto-resolve settles a pending battle",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: battle end conditions",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: SET UP / PACK UP / DIG IN",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: warning clocks \u2192 warned forts + dig-in writeback",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/review-fixes.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: capture point objective",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/rules.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: unit data",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/rules.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: combat rules v1",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/rules.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: attack preview",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: melee specials",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: machine-gun suppression",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: ranged modifiers in preview/resolve",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/mechanics.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: siege vs fort + HE splash",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/rulesOverride.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: runtime rules overrides",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-SESSION-UC-001",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/save.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: serializeSave / deserializeSave",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/save.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: validateGameState",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/save.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: migrateSave (schema 1 \u2192 2)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        }
+      ]
+    },
+    {
+      "use_case_id": "GAMES-ELEVATE-SESSION-UC-002",
+      "scenarios": [
+        {
+          "path": "packages/engine/src/journeys.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-002: save fixtures",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-002"
+        }
+      ]
+    }
+  ]
+}

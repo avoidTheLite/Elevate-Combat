@@ -6,7 +6,7 @@
     "ref": "main",
     "path": "dkr",
     "submoduleName": "dkr",
-    "productPath": null,
+    "productPath": "domains/games/Elevate-Combat",
     "sparse": {
       "global": [
         "domains/pde/dkr/features/outputs",

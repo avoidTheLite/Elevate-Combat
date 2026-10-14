@@ -17,7 +17,7 @@ const CONFIGS = [
   { mainCols: 5, mainRows: 4, subRadius: 3 },
 ];
 
-describe('hierarchical grid — sub-hexes align across main hexes', () => {
+describe('GAMES-ELEVATE-WORLD-UC-001: hierarchical grid — sub-hexes align across main hexes', () => {
   for (const n of [1, 2, 3, 4, 5, 6]) {
     it(`radius-${n} clusters tile the plane with no gaps or overlaps`, () => {
       // Every sub-hex in a big window has exactly one owning main hex, within distance n.

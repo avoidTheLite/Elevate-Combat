@@ -29,6 +29,7 @@ function resolveDotfilesCli(productRoot) {
   }
   const candidates = [
     process.env.DOTFILES_ROOT ? path.join(process.env.DOTFILES_ROOT, 'scripts', 'dotfiles') : null,
+    process.env.DOTFILES_HOME ? path.join(process.env.DOTFILES_HOME, 'scripts', 'dotfiles') : null,
     path.join(productRoot, '..', 'dotfiles', 'scripts', 'dotfiles'),
     path.join(productRoot, 'scripts', 'dotfiles'),
   ].filter(Boolean);
@@ -51,7 +52,7 @@ function resolveDotfilesCli(productRoot) {
 function runCatchUpBeforePush({ root, dkrDir, log, dryRun = false }) {
   const cli = resolveDotfilesCli(root);
   if (!cli) {
-    log('catch-up: skipped (dotfiles CLI not found; set DOTFILES_ROOT or put dotfiles on PATH)');
+    log('catch-up: skipped (dotfiles CLI not found; set DOTFILES_ROOT/DOTFILES_HOME or put dotfiles on PATH)');
     return;
   }
   const args = [
@@ -168,7 +169,7 @@ export function createAppJwt({ appId, privateKey, now = Math.floor(Date.now() / 
  * are all reachable with a single token when listed together.
  * @param {{ appId: string, privateKey: string, repo?: string | null, repos?: string[] | null,
  *   installationId?: string | null,
- *   access?: 'read' | 'write', apiUrl?: string, fetchImpl?: typeof fetch, now?: number }} input
+ *   access?: 'read' | 'write', permissions?: Record<string, string> | null (overrides `access`; the broker maps its own scopes to these), apiUrl?: string, fetchImpl?: typeof fetch, now?: number }} input
  * @returns {Promise<{ token: string, expiresAt: string }>}
  */
 export async function mintAppInstallationToken(input) {
@@ -179,6 +180,7 @@ export async function mintAppInstallationToken(input) {
     repos = null,
     installationId = null,
     access = 'read',
+    permissions = null,
     apiUrl = 'https://api.github.com',
     fetchImpl = fetch,
     now,
@@ -243,7 +245,7 @@ export async function mintAppInstallationToken(input) {
       );
     }
   }
-  const body = { permissions: appPermissions(access), ...(m ? { repositories: parsed.map((p) => p.name) } : {}) };
+  const body = { permissions: permissions ?? appPermissions(access), ...(m ? { repositories: parsed.map((p) => p.name) } : {}) };
   let minted;
   try {
     minted = await call('POST', `${base}/app/installations/${encodeURIComponent(id)}/access_tokens`, body);
@@ -303,7 +305,7 @@ export function mintAppInstallationTokenSync(input) {
  * Installation token from App credentials in `env`, or null when none are configured. Cached
  * until shortly before expiry. Throws when credentials are present but minting fails.
  * @param {NodeJS.ProcessEnv} env
- * @param {{ repo?: string | null, repos?: string[] | null, access?: 'read' | 'write', mint?: typeof mintAppInstallationTokenSync, now?: number }} [options]
+ * @param {{ repo?: string | null, repos?: string[] | null, access?: 'read' | 'write', permissions?: Record<string, string> | null, mint?: typeof mintAppInstallationTokenSync, now?: number }} [options]
  * @returns {{ token: string, expiresAt: string, cached: boolean } | null}
  */
 export function resolveAppToken(env = process.env, options = {}) {
@@ -318,7 +320,8 @@ export function resolveAppToken(env = process.env, options = {}) {
   const repos = options.repos?.length ? [...options.repos] : null;
   const repo = repos ? null : options.repo || envValue(env, APP_ENV.repo) || null;
   const installationId = envValue(env, APP_ENV.installation) || null;
-  const cacheKey = [envValue(env, APP_ENV.id), repo, (repos ?? []).join(','), installationId, access].join('|');
+  const permissions = options.permissions ?? null;
+  const cacheKey = [envValue(env, APP_ENV.id), repo, (repos ?? []).join(','), installationId, access, JSON.stringify(permissions)].join('|');
   const nowMs = options.now ?? Date.now();
   const hit = appTokenCache.get(cacheKey);
   if (hit && Date.parse(hit.expiresAt) - APP_REFRESH_SKEW_MS > nowMs) {
@@ -332,6 +335,7 @@ export function resolveAppToken(env = process.env, options = {}) {
     repos,
     installationId,
     access,
+    permissions,
     apiUrl: envValue(env, APP_ENV.api) || undefined,
   });
   appTokenCache.set(cacheKey, minted);
@@ -665,6 +669,180 @@ export function repointIfNeeded({ root, dkrDir, paired, log, authEnv = {} }) {
   return { repointed: true, from: recorded, to };
 }
 
+/** Commit the `relPath` gitlink names in `rev`, or null. */
+function gitlinkOf(cwd, rev, relPath) {
+  const entry = git(['ls-tree', rev, '--', relPath], { cwd, allowFail: true }).stdout;
+  return entry.match(/^160000 commit ([0-9a-f]{40})\t/)?.[1] ?? null;
+}
+
+function hasCommit(cwd, sha) {
+  return git(['cat-file', '-e', `${sha}^{commit}`], { cwd, allowFail: true }).ok;
+}
+
+function isAncestor(cwd, ancestor, descendant) {
+  return git(['merge-base', '--is-ancestor', ancestor, descendant], { cwd, allowFail: true }).ok;
+}
+
+function unmergedFiles(cwd) {
+  return git(['diff', '--name-only', '--diff-filter=U'], { cwd, allowFail: true })
+    .stdout.split('\n')
+    .filter(Boolean);
+}
+
+/**
+ * Will merging `base` into this branch conflict on the `dkr` pointer? (PDE-DOTFILES-PAIRED-UC-008)
+ * A pointer conflict happens only when both sides moved it to different commits. Git then
+ * fast-forwards the pointer by itself when the branch's commit contains the base's, so the
+ * branch is mergeable exactly when that holds. Reports instead of throwing; never blocks on what
+ * it cannot see (no base ref, DKR objects missing), which comes back as `applies: false`.
+ * @param {{ root: string, paired: Record<string, any>, base?: string }} input
+ * @returns {{ ok: boolean, applies: boolean, name: string, detail: string }}
+ */
+export function evaluatePointerMergeable({ root, paired, base = 'origin/main' }) {
+  const name = 'dkr/pointer-mergeable';
+  const skip = (detail) => ({ ok: true, applies: false, name, detail });
+  const dkrDir = path.join(root, paired.path);
+  const mergeBase = git(['merge-base', base, 'HEAD'], { cwd: root, allowFail: true }).stdout;
+  if (!mergeBase) return skip(`WARN no merge base with ${base}; not checked`);
+  const atBase = gitlinkOf(root, mergeBase, paired.path);
+  const onBase = gitlinkOf(root, base, paired.path);
+  const onBranch = gitlinkOf(root, 'HEAD', paired.path);
+  if (!onBase || !onBranch) return skip('no dkr pointer on one side; not checked');
+  if (onBase === atBase) return skip(`${base} has not moved the pointer since this branch started`);
+  if (onBranch === atBase) return skip('this branch has not moved the pointer');
+  if (onBase === onBranch) return { ok: true, applies: true, name, detail: 'both sides point at the same DKR commit' };
+  if (!hasCommit(dkrDir, onBase) || !hasCommit(dkrDir, onBranch)) {
+    return skip(`WARN ${paired.path}/ lacks ${onBase.slice(0, 12)} or ${onBranch.slice(0, 12)}; not checked (fetch the DKR)`);
+  }
+  if (isAncestor(dkrDir, onBase, onBranch)) {
+    return {
+      ok: true,
+      applies: true,
+      name,
+      detail: `branch pointer ${onBranch.slice(0, 12)} contains ${base}'s ${onBase.slice(0, 12)}; git fast-forwards it`,
+    };
+  }
+  return {
+    ok: false,
+    applies: true,
+    name,
+    detail:
+      `${base} moved the pointer to ${onBase.slice(0, 12)} and this branch's ${onBranch.slice(0, 12)} does not contain it, ` +
+      'so merging will conflict on the dkr pointer; run: node .dkr/bin/paired-push.mjs --sync',
+  };
+}
+
+/**
+ * Bring the branch up to date with both bases so the pointer merges cleanly (PDE-DOTFILES-PAIRED-UC-008):
+ * merge the DKR base into the DKR branch (so it contains the base's pointer), then merge the product
+ * base, taking the DKR checkout's commit as the pointer if git still reports a pointer conflict.
+ * Local only: commits nothing but merges; run `paired-push -m` afterwards to catch up and push. A real
+ * content conflict (in the DKR or the product) is left in place for you to resolve and the error
+ * names the files. Re-running after resolving continues where it stopped.
+ * @param {{ root: string, paired: Record<string, any>, dryRun?: boolean, log: (line: string) => void,
+ *   authEnv?: Record<string, string> }} input
+ * @returns {{ dkrMerged: boolean, productMerged: boolean }}
+ */
+export function syncWithBase({ root, paired, dryRun = false, log, authEnv = {} }) {
+  const dkrDir = path.join(root, paired.path);
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root }).stdout;
+  const verdict = checkBranch(branch, paired.branch ?? {});
+  if (!verdict.ok) throw new Error(`branch check failed: ${verdict.reason}`);
+  for (const [label, cwd] of [['product', root], [paired.path, dkrDir]]) {
+    if (git(['rev-parse', '--git-dir'], { cwd, allowFail: true }).ok === false) {
+      throw new Error(`${label} is not a git checkout`);
+    }
+    // The pointer itself is expected to differ from the checkout while resuming after a DKR merge.
+    const pathspec = cwd === root ? ['--', '.', `:(exclude)${paired.path}`] : [];
+    if (git(['status', '--porcelain', '--untracked-files=no', ...pathspec], { cwd }).stdout) {
+      throw new Error(`${label} has uncommitted changes; commit them first (paired-push -m "<summary>")`);
+    }
+  }
+  const productBase = `origin/${defaultBranch(root, 'main')}`;
+  const dkrBase = `origin/${paired.ref ?? 'main'}`;
+  git(['fetch', '--quiet', 'origin', productBase.replace(/^origin\//, '')], { cwd: root, allowFail: true, env: authEnv });
+  git(['fetch', '--quiet', '--prune', 'origin'], { cwd: dkrDir, allowFail: true, env: authEnv });
+  if (dryRun) {
+    const current = git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dkrDir }).stdout;
+    if (current !== branch) log(`dry-run: would switch ${paired.path}/ from ${current} to ${branch}`);
+  } else {
+    alignDkrBranch(dkrDir, branch, log, authEnv);
+  }
+
+  /** @param {string} cwd @param {string} rev */
+  const contains = (cwd, rev) => isAncestor(cwd, rev, 'HEAD');
+  const result = { dkrMerged: false, productMerged: false };
+
+  // 1. DKR: contain the DKR base, and whatever pointer the product base names.
+  const wanted = [dkrBase];
+  const basePointer = gitlinkOf(root, productBase, paired.path);
+  if (basePointer && hasCommit(dkrDir, basePointer)) wanted.push(basePointer);
+  for (const rev of wanted) {
+    if (contains(dkrDir, rev)) continue;
+    if (dryRun) {
+      log(`dry-run: would merge ${rev.slice(0, 12)} into the DKR branch ${branch}`);
+      result.dkrMerged = true;
+      continue;
+    }
+    const merged = git(
+      ['merge', '--no-edit', '-m', `Merge ${rev === dkrBase ? dkrBase : rev.slice(0, 12)} into ${branch}\n\nPaired-Branch: ${branch}`, rev],
+      { cwd: dkrDir, allowFail: true },
+    );
+    if (!merged.ok) {
+      const files = unmergedFiles(dkrDir);
+      if (files.length === 0) {
+        // Not a content conflict (for example no git identity): say what git said.
+        throw new Error(`merging ${rev} into the DKR branch failed: ${merged.stderr || merged.stdout}`);
+      }
+      throw new Error(
+        `merging ${rev} into the DKR branch conflicts in ${files.join(', ') || '(see git status)'}.\n` +
+          `  Resolve them in ${paired.path}/ (git -C ${paired.path} add … && git -C ${paired.path} commit), then re-run --sync.`,
+      );
+    }
+    log(`dkr: merged ${rev === dkrBase ? dkrBase : rev.slice(0, 12)} into ${branch}`);
+    result.dkrMerged = true;
+  }
+  if (!result.dkrMerged) log(`dkr: already contains ${dkrBase}`);
+
+  // 2. Product: merge the product base; the pointer fast-forwards or is taken from the DKR checkout.
+  if (contains(root, productBase)) {
+    log(`product: already contains ${productBase}`);
+    return result;
+  }
+  if (dryRun) {
+    log(`dry-run: would merge ${productBase} into ${branch}`);
+    return { ...result, productMerged: true };
+  }
+  const dkrHead = git(['rev-parse', 'HEAD'], { cwd: dkrDir }).stdout;
+  const merge = git(
+    ['merge', '--no-edit', '--no-commit', '--no-ff', productBase],
+    { cwd: root, allowFail: true },
+  );
+  if (!merge.ok) {
+    const conflicts = unmergedFiles(root);
+    const others = conflicts.filter((f) => f !== paired.path);
+    if (others.length > 0) {
+      throw new Error(
+        `merging ${productBase} conflicts in ${others.join(', ')}.\n` +
+          '  Resolve them (git add … && git commit), then run paired-push -m "<summary>".',
+      );
+    }
+    if (conflicts.length === 0) {
+      throw new Error(`merging ${productBase} failed: ${merge.stderr || merge.stdout}`);
+    }
+  }
+  if (unmergedFiles(root).includes(paired.path) || gitlinkOf(root, 'HEAD', paired.path) !== dkrHead) {
+    // The DKR checkout contains both sides (step 1), so it is the correct resolution.
+    git(['update-index', '--add', '--cacheinfo', `160000,${dkrHead},${paired.path}`], { cwd: root });
+  }
+  commitWithMessage(
+    root,
+    `Merge ${productBase} into ${branch}\n\nPaired-Branch: ${branch}\nPaired-DKR: ${dkrHead}`,
+  );
+  log(`product: merged ${productBase} into ${branch} (${paired.path} -> ${dkrHead.slice(0, 12)})`);
+  return { ...result, productMerged: true };
+}
+
 /**
  * @param {{
  *   cwd?: string,
@@ -673,6 +851,7 @@ export function repointIfNeeded({ root, dkrDir, paired, log, authEnv = {} }) {
  *   dryRun?: boolean,
  *   linksOnly?: boolean,
  *   repoint?: boolean,
+ *   sync?: boolean,
  *   log?: (line: string) => void,
  * }} options
  */
@@ -695,6 +874,15 @@ export function pairedPush(options = {}) {
     throw new Error(`branch check failed: ${verdict.reason}`);
   }
   log(`branch: ${verdict.reason}`);
+
+  if (options.sync) {
+    const syncAuth = githubAuthGitEnv(
+      resolveDkrAuthToken(process.env, { repo: paired.repo, access: 'write' }),
+    );
+    syncWithBase({ root, paired, dryRun: options.dryRun, log, authEnv: syncAuth });
+    log('next: node .dkr/bin/paired-push.mjs -m "<summary>"   (catch up the twin marker and push)');
+    return { branch, links: null, repointed: false };
+  }
 
   const productRemote = parseRemote(
     git(['remote', 'get-url', 'origin'], { cwd: root, allowFail: true }).stdout,
@@ -885,6 +1073,7 @@ Usage:
   node .dkr/bin/paired-push.mjs -m "<summary>" [--dkr-message "<summary>"] [--dry-run]
   node .dkr/bin/paired-push.mjs --links
   node .dkr/bin/paired-push.mjs --repoint   # only if the dkr pointer left the DKR remote
+  node .dkr/bin/paired-push.mjs --sync [--dry-run]   # merge DKR main, then product main, so the dkr pointer merges cleanly
   node .dkr/bin/paired-push.mjs --mint-token --repos owner/a,owner/b   # print a read credential
 
 Raw git push is blocked by the pre-push hook that dotfiles install-dkr installs.`);
@@ -909,7 +1098,7 @@ function main(argv) {
     return null;
   };
   if (argv.includes('--mint-token')) {
-    // Used by .cursor/bootstrap.sh before the dotfiles CLI exists: print one credential that can
+    // Used by .dkr/agent-env/bootstrap.sh before the dotfiles CLI exists: print one credential that can
     // read every listed repo (App installation token, else the first static secret). Token to
     // stdout only; the source *name* goes to stderr.
     const repos = (value('--repos') ?? '').split(',').map((r) => r.trim()).filter(Boolean);
@@ -930,6 +1119,7 @@ function main(argv) {
       dryRun: argv.includes('--dry-run'),
       linksOnly: argv.includes('--links'),
       repoint: argv.includes('--repoint'),
+      sync: argv.includes('--sync'),
     });
     return 0;
   } catch (error) {

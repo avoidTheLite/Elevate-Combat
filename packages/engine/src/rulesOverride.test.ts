@@ -14,7 +14,7 @@ const riflePair = (): ReturnType<typeof flatBattle> =>
     mkUnit('b', 'ww2_rifle_infantry', 'B', '2,0', 3),
   ]);
 
-describe('runtime rules overrides', () => {
+describe('GAMES-ELEVATE-TACTICAL-UC-002: runtime rules overrides', () => {
   it('unitType merges the active unit override (pools merge field by field)', () => {
     const base = unitType('ww2_tank');
     const o: RulesOverride = { units: { ww2_tank: { hp: 30, direct: { bonus: 9 } } } };
