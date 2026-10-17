@@ -1,0 +1,18 @@
+{
+  "product": "Elevate-Combat",
+  "dkr_sha": "0db6a72c6e3a654db14e0f2922a1f5caf8f1a190",
+  "mode": "amend",
+  "refs": [
+    "GAMES-ELEVATE-WORLD-UC-001",
+    "GAMES-ELEVATE-WORLD-UC-002",
+    "GAMES-ELEVATE-CAMPAIGN-UC-001",
+    "GAMES-ELEVATE-CAMPAIGN-UC-002",
+    "GAMES-ELEVATE-TACTICAL-UC-001",
+    "GAMES-ELEVATE-TACTICAL-UC-002",
+    "GAMES-ELEVATE-SESSION-UC-001",
+    "GAMES-ELEVATE-SESSION-UC-002"
+  ],
+  "twin_pr": "https://github.com/avoidTheLite/DKR/pull/80",
+  "dkr_sync_sha": "8bdbdbd4f3bd04ff38e7768cb298a9c942517e07",
+  "product_pr": null
+}
