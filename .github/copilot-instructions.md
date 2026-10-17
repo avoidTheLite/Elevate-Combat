@@ -39,6 +39,7 @@ into product docs):
   - `dkr/domains/pde/dkr/features/lifecycle/`
   - `dkr/domains/pde/dotfiles/`
   - `dkr/domains/games/Elevate-Combat/`
+  - `dkr/domains/games/domain-config/`
   Do not widen the sparse checkout or read other products' trees. Re-run `dotfiles install-dkr`
   to refresh the profile.
 - The submodule has `update = none`. Do not run `git submodule update` on it; `dotfiles install-dkr`

@@ -3,12 +3,23 @@
 
 ## Cursor Cloud specific instructions
 
-- **dotfiles** lives at `$HOME/dotfiles` (override with `DOTFILES_HOME`).
-- **DKR** lives at `$HOME/DKR` (override with `DKR_HOME`).
-- Before writing or pushing code, run `dotfiles setup --non-interactive` (or `bash .cursor/bootstrap.sh` on a cold Build).
-- The bootstrap clones `dotfiles` and `DKR` with ONE credential (GitHub App `DKR_APP_ID` + `DKR_APP_PRIVATE_KEY`, else `GH_CLAUDE_SECRET`). That credential is not DKR-only: it must read the product repo, `DKR` and `dotfiles`. If a clone is rejected, run `node .dkr/bin/paired-push.mjs --mint-token --repos avoidTheLite/dotfiles,avoidTheLite/DKR >/dev/null` and report which repo the App/PAT lacks; never print the token.
-- If either repo is missing after bootstrap, **stop and report** — do not continue, invent a path, or skip setup.
-- Generator-owned paths (`.cursor/`, and when present `.claude/` / `.github/` from the CLI) must not be hand-edited in this product repo; change templates in `avoidTheLite/dotfiles` and re-run `dotfiles install-cloud-agent` (or regenerate).
+**Setup phase (Build / `.cursor/environment.json` install).** Runs `bash .dkr/agent-env/bootstrap.sh` through the thin `.cursor/bootstrap.sh` shim. It installs Node 24, installs the CLI pinned in `.dkr/config.json` (`cli.spec`) and runs `dotfiles setup --agent` (links `~/dotfiles` and `~/.local/bin/dotfiles` only; no shell, git or editor changes), hydrates the sparse `dkr/` for a paired product, then runs the product's `.dkr/agent-env/post-bootstrap.sh` if it has one. Do not re-run `dotfiles setup --non-interactive` by hand: that is the machine installer and the pinned bootstrap does not need it.
+
+**Agent phase (your shell).** Install-time `PATH` exports do not carry over. `/exec-daemon/node` (v22) can come before the installed Node 24 and `~/.local/bin` may be missing from `PATH`, so a bare `node -v` or `dotfiles` can look wrong on a healthy environment.
+
+- Run work through the product's package scripts (for example `pnpm …`), which use the pinned Node. If the product documents a readiness command (look in its `AGENTS.md` / `docs/`), run that first rather than checking `node -v`.
+- To call the CLI directly: `export PATH="$HOME/.local/bin:$PATH"` (or use `$DOTFILES_HOME/scripts/dotfiles`).
+- Treat Docker and local inference as optional: report them as skipped when absent, not as failures.
+
+**Where things live.**
+
+- **dotfiles** is at `$HOME/dotfiles` (override with `DOTFILES_HOME`).
+- **DKR:** a paired product reads the sparse checkout at `dkr/` in this repo (hydrated by `dotfiles install-dkr`); do not use or create `$HOME/DKR` for it. A repo that is not paired, and Claude cloud sessions, may have a full clone at `$HOME/DKR` (override with `DKR_HOME`).
+
+**Credentials (setup phase).** The bootstrap clones `dotfiles` and the DKR with ONE credential set as an environment (Build) secret: GitHub App `DKR_APP_ID` + `DKR_APP_PRIVATE_KEY`, else `GH_CLAUDE_SECRET`. That credential is not DKR-only: it must read the product repo, `DKR` and `dotfiles`. If a clone is rejected, run `node .dkr/bin/paired-push.mjs --mint-token --repos avoidTheLite/dotfiles,avoidTheLite/DKR >/dev/null` and report which repo the App/PAT lacks; never print the token. Runtime provider keys are optional (demo mode).
+
+- If a required repo is missing after bootstrap, **stop and report**: do not continue, invent a path, or skip setup.
+- Generator-owned paths (`.cursor/`, `.dkr/agent-env/`, and when present `.claude/` / `.github/` from the CLI) must not be hand-edited in this product repo; change templates in `avoidTheLite/dotfiles` and re-run `dotfiles agent-env init` (or `install-cloud-agent`).
 
 <!-- <<< dotfiles cursor-cloud <<< -->
 
@@ -53,6 +64,7 @@ into product docs):
   - `dkr/domains/pde/dkr/features/lifecycle/`
   - `dkr/domains/pde/dotfiles/`
   - `dkr/domains/games/Elevate-Combat/`
+  - `dkr/domains/games/domain-config/`
   Do not widen the sparse checkout or read other products' trees. Re-run `dotfiles install-dkr`
   to refresh the profile.
 - The submodule has `update = none`. Do not run `git submodule update` on it; `dotfiles install-dkr`

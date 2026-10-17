@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Claude Code on the web SessionStart hook. Generator-owned (dotfiles install-cloud-agent).
-# Cloud sessions only (CLAUDE_CODE_REMOTE=true); a no-op on local machines. Reuses the
-# shared .cursor/bootstrap.sh so Cursor and Claude cloud agents provision identically.
+# Cloud sessions only (CLAUDE_CODE_REMOTE=true); a no-op on local machines. Calls the shared
+# .dkr/agent-env/bootstrap.sh engine, so every agent platform provisions identically.
 # Never fails the session: stdout is added to Claude's context, so problems are reported there.
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-bootstrap="${root}/.cursor/bootstrap.sh"
+bootstrap="${root}/.dkr/agent-env/bootstrap.sh"
 if [ ! -f "${bootstrap}" ]; then
-  echo "cloud-agent hook: ${bootstrap} missing; run 'dotfiles install-cloud-agent'. Stop and report."
+  echo "cloud-agent hook: ${bootstrap} missing; run 'dotfiles agent-env init' (or 'dotfiles install-cloud-agent' on an unpaired repo). Stop and report."
   exit 0
 fi
 
