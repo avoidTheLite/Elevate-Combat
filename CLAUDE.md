@@ -5,7 +5,7 @@
 
 ## Claude Code cloud specific instructions
 
-- A SessionStart hook (`.claude/hooks/cloud-bootstrap.sh`, cloud only) runs the shared `.cursor/bootstrap.sh`.
+- A SessionStart hook (`.claude/hooks/cloud-bootstrap.sh`, cloud only) runs the shared `.dkr/agent-env/bootstrap.sh`.
 - Claude cloud sessions reach only GitHub repos attached to the session: attach `avoidTheLite/dotfiles` and `avoidTheLite/DKR` alongside this repo. If the hook reports a failure, **stop and report** — do not skip setup.
 - Cloud sessions run as root with Node 20/21/22 preinstalled; the bootstrap installs Node 24 from nodejs.org (Trusted network access allows it).
 <!-- <<< dotfiles claude-cloud <<< -->
@@ -51,6 +51,7 @@ into product docs):
   - `dkr/domains/pde/dkr/features/lifecycle/`
   - `dkr/domains/pde/dotfiles/`
   - `dkr/domains/games/Elevate-Combat/`
+  - `dkr/domains/games/domain-config/`
   Do not widen the sparse checkout or read other products' trees. Re-run `dotfiles install-dkr`
   to refresh the profile.
 - The submodule has `update = none`. Do not run `git submodule update` on it; `dotfiles install-dkr`
