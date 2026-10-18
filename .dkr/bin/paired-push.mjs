@@ -14,6 +14,84 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+/** Default deadline for git operations during paired publication (fetch/push can be slow). */
+export const DEFAULT_GIT_TIMEOUT_MS = 120_000;
+/** Default deadline for non-git publication helpers (catch-up, gh probes, App mint child). */
+export const DEFAULT_SUBPROCESS_TIMEOUT_MS = 60_000;
+/** Default deadline covering GitHub App HTTP request + response-body read. */
+export const DEFAULT_GITHUB_API_TIMEOUT_MS = 30_000;
+
+/**
+ * Combine stderr/stdout with spawn error codes and termination signals for actionable failures.
+ * @param {import('node:child_process').SpawnSyncReturns<string>} result
+ * @returns {string}
+ */
+export function formatSpawnDetail(result) {
+  const parts = [];
+  if (result.error) {
+    parts.push(result.error.code === 'ETIMEDOUT' ? 'timed out' : result.error.message);
+  }
+  if (result.signal) {
+    parts.push(`signal ${result.signal}`);
+  }
+  if (result.status != null && result.status !== 0) {
+    parts.push(`exit ${result.status}`);
+  }
+  const stderr = (result.stderr ?? '').trim();
+  const stdout = (result.stdout ?? '').trim();
+  if (stderr) parts.push(stderr);
+  else if (stdout) parts.push(stdout);
+  return parts.join(': ') || 'unknown failure';
+}
+
+/**
+ * True for AbortError / TimeoutError from fetch abort and our deadline helper.
+ * @param {unknown} error
+ */
+function isAbortError(error) {
+  if (!error || typeof error !== 'object') return false;
+  const name = /** @type {{ name?: string, code?: string }} */ (error).name;
+  const code = /** @type {{ name?: string, code?: string }} */ (error).code;
+  return name === 'AbortError' || name === 'TimeoutError' || code === 'ABORT_ERR';
+}
+
+/**
+ * Application deadline via AbortController + setTimeout. Prefer this over
+ * `AbortSignal.timeout`: some Node embeddings drop its internal timer and never abort.
+ * @param {number} ms
+ * @returns {{ signal: AbortSignal, dispose: () => void }}
+ */
+function createDeadline(ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(Object.assign(new Error(`TimeoutError: ${ms}ms`), { name: 'TimeoutError' }));
+  }, ms);
+  const dispose = () => clearTimeout(timer);
+  controller.signal.addEventListener('abort', dispose, { once: true });
+  return { signal: controller.signal, dispose };
+}
+
+/**
+ * Read a Response body while honoring the same AbortSignal that covers the request.
+ * @param {Response} res
+ * @param {AbortSignal | null | undefined} signal
+ */
+async function readResponseText(res, signal) {
+  if (!signal) return res.text();
+  if (signal.aborted) {
+    throw signal.reason ?? Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  }
+  return Promise.race([
+    res.text(),
+    new Promise((_, reject) => {
+      const onAbort = () => {
+        reject(signal.reason ?? Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }),
+  ]);
+}
+
 /**
  * Resolve a `dotfiles` CLI that can run `dkr catch-up` (PATH, DOTFILES_ROOT, or sibling clone).
  * @param {string} productRoot
@@ -23,7 +101,10 @@ function resolveDotfilesCli(productRoot) {
   if (process.env.DKR_CATCHUP === '0') {
     return null;
   }
-  const which = spawnSync('sh', ['-c', 'command -v dotfiles'], { encoding: 'utf8' });
+  const which = spawnSync('sh', ['-c', 'command -v dotfiles'], {
+    encoding: 'utf8',
+    timeout: DEFAULT_SUBPROCESS_TIMEOUT_MS,
+  });
   if (which.status === 0 && which.stdout.trim()) {
     return { cmd: which.stdout.trim(), argsPrefix: [] };
   }
@@ -65,16 +146,20 @@ function runCatchUpBeforePush({ root, dkrDir, log, dryRun = false }) {
   if (dryRun) {
     args.push('--dry-run');
   }
-  const result = spawnSync(cli.cmd, args, { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(cli.cmd, args, {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: DEFAULT_SUBPROCESS_TIMEOUT_MS,
+  });
   const out = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
   if (out) {
     for (const line of out.split('\n')) {
       log(`catch-up: ${line}`);
     }
   }
-  if (result.status !== 0) {
+  if (result.error || result.status !== 0) {
     throw new Error(
-      'catch-up failed before push. Fix twin sync (or DKR_CATCHUP=0 to skip) and retry.',
+      `catch-up failed before push (${formatSpawnDetail(result)}). Fix twin sync (or DKR_CATCHUP=0 to skip) and retry.`,
     );
   }
 }
@@ -169,7 +254,7 @@ export function createAppJwt({ appId, privateKey, now = Math.floor(Date.now() / 
  * are all reachable with a single token when listed together.
  * @param {{ appId: string, privateKey: string, repo?: string | null, repos?: string[] | null,
  *   installationId?: string | null,
- *   access?: 'read' | 'write', permissions?: Record<string, string> | null (overrides `access`; the broker maps its own scopes to these), apiUrl?: string, fetchImpl?: typeof fetch, now?: number }} input
+ *   access?: 'read' | 'write', permissions?: Record<string, string> | null (overrides `access`; the broker maps its own scopes to these), apiUrl?: string, fetchImpl?: typeof fetch, now?: number, timeoutMs?: number }} input
  * @returns {Promise<{ token: string, expiresAt: string }>}
  */
 export async function mintAppInstallationToken(input) {
@@ -184,6 +269,7 @@ export async function mintAppInstallationToken(input) {
     apiUrl = 'https://api.github.com',
     fetchImpl = fetch,
     now,
+    timeoutMs = DEFAULT_GITHUB_API_TIMEOUT_MS,
   } = input;
   if (!appId || !privateKey) {
     throw new Error(`GitHub App credentials need ${APP_ENV.id} and ${APP_ENV.key}`);
@@ -211,22 +297,44 @@ export async function mintAppInstallationToken(input) {
   };
   // Error bodies are GitHub's own message; they never echo the JWT or a token.
   const call = async (method, url, body) => {
-    const res = await fetchImpl(url, {
-      method,
-      headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      let message = text.slice(0, 200);
-      try {
-        message = JSON.parse(text).message ?? message;
-      } catch {
-        /* keep raw text */
+    const deadline = timeoutMs > 0 ? createDeadline(timeoutMs) : null;
+    const signal = deadline?.signal;
+    try {
+      const res = await fetchImpl(url, {
+        method,
+        headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
+        body: body ? JSON.stringify(body) : undefined,
+        ...(signal ? { signal } : {}),
+      });
+      const text = await readResponseText(res, signal);
+      if (!res.ok) {
+        let message = text.slice(0, 200);
+        try {
+          message = JSON.parse(text).message ?? message;
+        } catch {
+          /* keep raw text */
+        }
+        throw new Error(`GitHub App API ${method} ${url.replace(base, '')} -> HTTP ${res.status}: ${message}`);
       }
-      throw new Error(`GitHub App API ${method} ${url.replace(base, '')} -> HTTP ${res.status}: ${message}`);
+      return JSON.parse(text);
+    } catch (error) {
+      if (error instanceof Error && /GitHub App API /.test(error.message)) throw error;
+      if (isAbortError(error) || signal?.aborted) {
+        throw new Error(
+          `GitHub App API ${method} ${url.replace(base, '')} timed out after ${timeoutMs}ms`,
+          { cause: error },
+        );
+      }
+      const code = error && typeof error === 'object' ? /** @type {{ code?: string }} */ (error).code : undefined;
+      throw new Error(
+        `GitHub App API ${method} ${url.replace(base, '')} network error${code ? ` (${code})` : ''}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    } finally {
+      deadline?.dispose();
     }
-    return JSON.parse(text);
   };
 
   let id = installationId;
@@ -242,6 +350,7 @@ export async function mintAppInstallationToken(input) {
         /HTTP 404/.test(text)
           ? `the GitHub App is not installed on ${m[1]}/${m[2]} (or the App id does not match): install it on every repo the agent must read (${slugs.join(', ')}). ${text}`
           : text,
+        { cause: error },
       );
     }
   }
@@ -255,6 +364,7 @@ export async function mintAppInstallationToken(input) {
       /HTTP 422/.test(text) && parsed.length > 1
         ? `the App installation does not cover all of: ${slugs.join(', ')}. Add the missing repo(s) to the App installation. ${text}`
         : text,
+      { cause: error },
     );
   }
   if (!minted.token) {
@@ -287,16 +397,16 @@ export function mintAppInstallationTokenSync(input) {
     ['--input-type=module', '-e', MINT_CHILD_SOURCE],
     {
       encoding: 'utf8',
-      timeout: 30000,
+      timeout: input.timeoutMs ?? DEFAULT_GITHUB_API_TIMEOUT_MS,
       env: {
         ...process.env,
         [APP_MINT_INPUT_ENV]: JSON.stringify({ ...input, moduleFile: fileURLToPath(import.meta.url) }),
       },
     },
   );
-  if (result.status !== 0) {
-    const detail = (result.stderr || result.error?.message || 'mint failed').trim();
-    throw new Error(detail.replaceAll(String(input.privateKey), '***'));
+  if (result.error || result.status !== 0) {
+    const detail = formatSpawnDetail(result).replaceAll(String(input.privateKey), '***');
+    throw new Error(detail || 'mint failed');
   }
   return JSON.parse(result.stdout);
 }
@@ -348,32 +458,165 @@ export function clearAppTokenCache() {
 }
 
 /**
+ * Ranked authentication channels for GitHub HTTPS (clone/fetch/push). Higher `rank` is tried
+ * first. This is an attempt sequence, not a gate: a missing or failed channel is skipped and the
+ * next is tried. Override order with `options.channels` (ids) or `DOTFILES_AUTH_CHANNELS`
+ * (comma-separated ids). Values never appear in attempt records — only channel ids and status.
+ *
+ * @typedef {{ id: string, rank: number, kind: 'github-app' | 'static-env', envKeys: string[], role: string }} AuthChannel
+ */
+export const AUTH_CHANNELS = Object.freeze([
+  {
+    id: 'github-app',
+    rank: 100,
+    kind: 'github-app',
+    envKeys: [APP_ENV.id, APP_ENV.key],
+    role: 'clone+push',
+  },
+  {
+    id: 'GH_CLAUDE_SECRET',
+    rank: 80,
+    kind: 'static-env',
+    envKeys: ['GH_CLAUDE_SECRET'],
+    role: 'clone+push',
+  },
+  {
+    id: 'DKR_GITHUB_TOKEN',
+    rank: 60,
+    kind: 'static-env',
+    envKeys: ['DKR_GITHUB_TOKEN'],
+    role: 'clone+push',
+  },
+  {
+    id: 'GH_TOKEN',
+    rank: 40,
+    kind: 'static-env',
+    envKeys: ['GH_TOKEN'],
+    role: 'clone+push',
+  },
+  {
+    id: 'GITHUB_TOKEN',
+    rank: 20,
+    kind: 'static-env',
+    envKeys: ['GITHUB_TOKEN'],
+    role: 'clone+push',
+  },
+]);
+
+/**
+ * @param {string | string[] | null | undefined} override
+ * @returns {AuthChannel[]}
+ */
+export function resolveAuthChannelOrder(override) {
+  const byId = new Map(AUTH_CHANNELS.map((c) => [c.id, c]));
+  let ids = null;
+  if (Array.isArray(override) && override.length) {
+    ids = override;
+  } else if (typeof override === 'string' && override.trim()) {
+    ids = override.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  if (!ids?.length) {
+    return [...AUTH_CHANNELS].sort((a, b) => b.rank - a.rank);
+  }
+  const ordered = [];
+  for (const id of ids) {
+    const channel = byId.get(id);
+    if (!channel) {
+      throw new Error(`unknown auth channel "${id}" (known: ${AUTH_CHANNELS.map((c) => c.id).join(', ')})`);
+    }
+    ordered.push(channel);
+  }
+  return ordered;
+}
+
+/**
+ * Credential catalog for doctor / obs adapters: names and ranks only, never values.
+ * @returns {Array<{ id: string, rank: number, kind: string, envKeys: string[], role: string }>}
+ */
+export function authChannelCatalog() {
+  return resolveAuthChannelOrder().map(({ id, rank, kind, envKeys, role }) => ({
+    id,
+    rank,
+    kind,
+    envKeys: [...envKeys],
+    role,
+  }));
+}
+
+/**
  * Credential for private GitHub HTTPS (clone/fetch/push) when the agent platform's own install
- * token is scoped to the product repo only. The same credential serves every private repo the
- * agent must read: the DKR, the dotfiles CLI repo and the product repo. A GitHub App installation
- * token (minted from DKR_APP_ID + DKR_APP_PRIVATE_KEY) wins; if minting fails the static secrets
- * below are tried and the failure is reported on stderr, so a misconfigured App cannot silently
- * break a working PAT.
+ * token is scoped to the product repo only. Walks {@link AUTH_CHANNELS} by rank: App mint first,
+ * then static secrets. Failures skip to the next channel so a misconfigured App cannot block a
+ * working PAT (and the reverse: App wins when it works).
  * @param {NodeJS.ProcessEnv} [env]
- * @param {{ repo?: string | null, repos?: string[] | null, access?: 'read' | 'write', mint?: typeof mintAppInstallationTokenSync }} [options]
- * @returns {{ token: string, source: string } | null} `source` is a name, never a value
+ * @param {{ repo?: string | null, repos?: string[] | null, access?: 'read' | 'write', mint?: typeof mintAppInstallationTokenSync, channels?: string[], includeAttempts?: boolean, onAttempt?: (a: object) => void, log?: (line: string) => void }} [options]
+ * @returns {{ token: string | null, source: string | null, attempts?: object[] } | null}
+ *   `source` is a channel id, never a value. With `includeAttempts` and no usable channel, returns
+ *   `{ token: null, source: null, attempts }` instead of bare `null` so callers can inspect the walk.
  */
 export function resolveGithubAuth(env = process.env, options = {}) {
-  try {
-    const app = resolveAppToken(env, options);
-    if (app) {
-      return { token: app.token, source: APP_ENV.id };
+  const channels = resolveAuthChannelOrder(options.channels ?? env.DOTFILES_AUTH_CHANNELS);
+  /** @type {Array<{ id: string, status: 'skipped' | 'failed' | 'selected', detail?: string }>} */
+  const attempts = [];
+  const log =
+    options.log ??
+    ((line) => {
+      console.error(line);
+    });
+
+  for (const channel of channels) {
+    if (channel.kind === 'github-app') {
+      const state = appCredentialState(env);
+      if (state.state === 'none') {
+        attempts.push({ id: channel.id, status: 'skipped', detail: 'App credentials not configured' });
+        continue;
+      }
+      if (state.state === 'partial') {
+        const detail = `incomplete: missing ${state.missing.join(', ')}`;
+        attempts.push({ id: channel.id, status: 'failed', detail });
+        log(`github-auth: channel ${channel.id} unavailable (${detail}); trying next channel`);
+        continue;
+      }
+      try {
+        const app = resolveAppToken(env, options);
+        if (app) {
+          attempts.push({ id: channel.id, status: 'selected' });
+          const result = {
+            token: app.token,
+            source: channel.id,
+            ...(options.includeAttempts ? { attempts: [...attempts] } : {}),
+          };
+          options.onAttempt?.(attempts);
+          return result;
+        }
+        attempts.push({ id: channel.id, status: 'skipped', detail: 'mint returned no token' });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        attempts.push({ id: channel.id, status: 'failed', detail });
+        log(`github-auth: channel ${channel.id} unavailable (${detail}); trying next channel`);
+      }
+      continue;
     }
-  } catch (error) {
-    console.error(
-      `github-auth: GitHub App token unavailable (${error instanceof Error ? error.message : String(error)}); falling back to static token`,
-    );
-  }
-  for (const key of ['GH_CLAUDE_SECRET', 'DKR_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN']) {
+
+    const key = channel.envKeys[0];
     const value = env[key];
-    if (typeof value === 'string' && value.trim()) {
-      return { token: value.trim(), source: key };
+    if (typeof value !== 'string' || !value.trim()) {
+      attempts.push({ id: channel.id, status: 'skipped', detail: `${key} unset` });
+      continue;
     }
+    attempts.push({ id: channel.id, status: 'selected' });
+    const result = {
+      token: value.trim(),
+      source: channel.id,
+      ...(options.includeAttempts ? { attempts: [...attempts] } : {}),
+    };
+    options.onAttempt?.(attempts);
+    return result;
+  }
+
+  options.onAttempt?.(attempts);
+  if (options.includeAttempts) {
+    return { token: null, source: null, attempts: [...attempts] };
   }
   return null;
 }
@@ -408,22 +651,27 @@ export function githubAuthGitEnv(token) {
 
 /**
  * @param {string[]} args
- * @param {{ cwd: string, env?: Record<string, string>, allowFail?: boolean }} options
- * @returns {{ ok: boolean, stdout: string, stderr: string }}
+ * @param {{ cwd: string, env?: Record<string, string>, allowFail?: boolean, timeoutMs?: number }} options
+ * @returns {{ ok: boolean, stdout: string, stderr: string, signal: NodeJS.Signals | null, timedOut: boolean }}
  */
 export function git(args, options) {
   const result = spawnSync('git', args, {
     cwd: options.cwd,
     encoding: 'utf8',
     env: { ...process.env, ...(options.env ?? {}) },
+    timeout: options.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS,
   });
+  const timedOut = result.error?.code === 'ETIMEDOUT';
+  const detail = formatSpawnDetail(result);
   const out = {
-    ok: result.status === 0,
+    ok: result.status === 0 && !result.error,
     stdout: (result.stdout ?? '').trim(),
-    stderr: (result.stderr ?? '').trim(),
+    stderr: (result.stderr ?? '').trim() || (result.error && !timedOut ? result.error.message : ''),
+    signal: result.signal ?? null,
+    timedOut,
   };
   if (!out.ok && !options.allowFail) {
-    throw new Error(`git ${args.join(' ')} failed in ${options.cwd}: ${out.stderr || out.stdout}`);
+    throw new Error(`git ${args.join(' ')} failed in ${options.cwd}: ${detail}`);
   }
   return out;
 }
@@ -562,6 +810,7 @@ function findPrNumber(repoFull, branch) {
     ],
     {
       encoding: 'utf8',
+      timeout: DEFAULT_SUBPROCESS_TIMEOUT_MS,
     },
   );
   if (probe.error || probe.status !== 0) {

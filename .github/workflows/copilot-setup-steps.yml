@@ -1,0 +1,46 @@
+# dotfiles agent-env (generated). Regenerate with: dotfiles agent-env init
+# Copilot reads this file from the DEFAULT branch only; merge it before expecting it to apply.
+name: copilot-setup-steps
+
+on:
+  workflow_dispatch:
+  # The dry-run also covers the shared agent-env files it executes, so a change to them is
+  # tested before merge instead of when an agent session fails to start.
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml, ".dkr/agent-env/**"]
+  pull_request:
+    paths: [.github/workflows/copilot-setup-steps.yml, ".dkr/agent-env/**"]
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: copilot
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      - name: Locate dotfiles CLI
+        env:
+          GH_CLAUDE_SECRET: ${{ secrets.GH_CLAUDE_SECRET }}
+        run: |
+          # In the dotfiles repo the checkout is the CLI. Elsewhere, clone it with the token
+          # (dotfiles is private; an unauthenticated clone fails with "could not read Username").
+          if [ -x scripts/dotfiles ]; then
+            cli_dir="$PWD/scripts"
+          else
+            auth="$(printf 'x-access-token:%s' "$GH_CLAUDE_SECRET" | base64 -w0)"
+            echo "::add-mask::${auth}"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+              clone --depth 1 https://github.com/avoidTheLite/dotfiles.git "$RUNNER_TEMP/dotfiles"
+            cli_dir="$RUNNER_TEMP/dotfiles/scripts"
+          fi
+          echo "$cli_dir" >> "$GITHUB_PATH"
+      - name: Hydrate DKR and run agent-env doctor
+        env:
+          DKR_APP_ID: ${{ secrets.DKR_APP_ID }}
+          DKR_APP_PRIVATE_KEY: ${{ secrets.DKR_APP_PRIVATE_KEY }}
+          GH_CLAUDE_SECRET: ${{ secrets.GH_CLAUDE_SECRET }}
+        run: bash .dkr/agent-env/setup.sh

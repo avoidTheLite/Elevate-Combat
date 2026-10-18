@@ -24,7 +24,7 @@ if a.report:
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 evidence_trees = {}
 errors = warnings = scenarios = 0
-for path in sorted((ROOT / 'dkr/domains/games/Elevate-Combat/features').glob('*/stages/03-execution/gherkin-mapping/semantic-specification.json')):
+for path in sorted((ROOT / 'dkr/domains/games/Elevate-Combat/features').glob('*/stages/03-execution/*/SEMANTICS.json')):
     doc = json.loads(path.read_text())
     diagnostics = component.validate(doc, ROOT / 'dkr')
     for s in doc['scenarios']:
@@ -45,7 +45,7 @@ for path in sorted((ROOT / 'dkr/domains/games/Elevate-Combat/features').glob('*/
     e = sum(d['severity'] == 'error' for d in diagnostics)
     w = sum(d['severity'] == 'warning' for d in diagnostics)
     errors += e; warnings += w
-    print(f'{path.parts[-5]}: {len(doc["use_cases"])} use cases, {len(doc["scenarios"])} scenarios, {e} errors, {w} warnings')
+    print(f'{path.parts[-5]}/{path.parts[-2]}: {len(doc["use_cases"])} use cases, {len(doc["scenarios"])} scenarios, {e} errors, {w} warnings')
     for d in diagnostics:
         print(f'  {d["severity"]}: {d["code"]}: {d["message"]}')
 if not scenarios:
