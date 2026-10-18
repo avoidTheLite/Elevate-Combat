@@ -7,7 +7,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "dkr:check": "python3 scripts/check-dkr-mapping.py"
   },
   "devDependencies": {
     "@iron-ridge/eslint-config": "workspace:*",
