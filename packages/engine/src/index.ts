@@ -20,3 +20,5 @@ export * from './ai/strategicAi.ts';
 export * from './runner.ts';
 export * from './sim/index.ts';
 export * from './save.ts';
+export * from './foundation/attributes.ts';
+export * from './foundation/workLedger.ts';
