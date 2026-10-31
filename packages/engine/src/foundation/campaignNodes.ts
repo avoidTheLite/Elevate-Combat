@@ -1,5 +1,6 @@
 // GAMES-ELEVATE-CAMPAIGN-UC-001 / UC-002: real campaign node command boundary.
 import { hexKey, neighbors } from '../hex.ts';
+import { createRng } from '../rng.ts';
 import type { World } from '../grid.ts';
 import { buildWorld } from '../grid.ts';
 import type { GameState, Team } from '../types.ts';
@@ -61,9 +62,15 @@ export interface CampaignNodeDefinition extends FoundationBuildingDefinition {
   readonly slotlessUnlocks: readonly CampaignNodeUpgradeOption[];
 }
 
+export type CampaignNodePlacement =
+  | { readonly mode: 'simple' }
+  | { readonly mode: 'advanced'; readonly seed: number; readonly additionalNodes: number };
+
 /** Required configured rules. This module has no production price or balance defaults. */
 export interface CampaignNodeProfile {
   readonly id: string;
+  /** Absent in older saves means one node per MainHex. HQ sites are always retained. */
+  readonly placement?: CampaignNodePlacement;
   readonly activationCp: number;
   readonly captureCosts: FoundationCaptureCosts;
   readonly initialGenericCenterDefinitionId: string;
@@ -213,10 +220,32 @@ const turnId = (state: Pick<GameState, 'turn' | 'active'>): string =>
 export function campaignNodeSites(
   world: World,
   hq: Readonly<Record<Team, string>>,
+  placement?: CampaignNodePlacement,
 ): CampaignNodeSite[] {
   if (!world.mainByKey.has(hq.A) || !world.mainByKey.has(hq.B) || hq.A === hq.B)
     throw new Error('Invalid HQ mapping');
-  return world.mains.map((main) => {
+  let mains = world.mains;
+  if (placement?.mode === 'advanced') {
+    const candidates = world.mains.filter((m) => m.key !== hq.A && m.key !== hq.B);
+    if (
+      !Number.isSafeInteger(placement.additionalNodes) ||
+      placement.additionalNodes < 0 ||
+      placement.additionalNodes >= candidates.length
+    )
+      throw new Error('Advanced nodes must select fewer than all non-HQ MainHexes');
+    const rng = createRng(placement.seed);
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = rng.int(0, i);
+      [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+    }
+    const selected = new Set([
+      hq.A,
+      hq.B,
+      ...candidates.slice(0, placement.additionalNodes).map((m) => m.key),
+    ]);
+    mains = world.mains.filter((m) => selected.has(m.key));
+  }
+  return mains.map((main) => {
     const centerSubHex = hexKey(main.center);
     const annexSubHexes = neighbors(main.center).map(hexKey);
     if (
@@ -285,6 +314,19 @@ export function validateCampaignNodeProfile(profile: CampaignNodeProfile): strin
       !tier(profile.homeCenterTier)
     )
       throw new Error('Invalid node profile');
+    const placement = profile.placement;
+    if (
+      placement !== undefined &&
+      (!placement ||
+        !['simple', 'advanced'].includes(placement.mode) ||
+        (placement.mode === 'advanced' &&
+          (!Number.isSafeInteger(placement.seed) ||
+            placement.seed < 0 ||
+            placement.seed > 0xffffffff ||
+            !Number.isSafeInteger(placement.additionalNodes) ||
+            placement.additionalNodes < 0)))
+    )
+      throw new Error('Invalid node placement configuration');
     for (const d of profile.definitions) {
       if (
         !d ||
@@ -375,7 +417,7 @@ export function createCampaignInfrastructure(
 ): CampaignInfrastructure {
   const invalid = validateCampaignNodeProfile(profile);
   if (invalid) throw new Error(invalid);
-  const sites = campaignNodeSites(world, state.hq);
+  const sites = campaignNodeSites(world, state.hq, profile.placement);
   return {
     formatVersion: 1,
     profile: clone(profile),
@@ -442,7 +484,7 @@ export function validateCampaignInfrastructure(
       !Array.isArray(infra.workRequests)
     )
       throw new Error('Invalid campaign infrastructure');
-    const expected = campaignNodeSites(world, hq);
+    const expected = campaignNodeSites(world, hq, infra.profile.placement);
     if (
       JSON.stringify(infra.sites) !== JSON.stringify(expected) ||
       infra.capture.nodes.length !== expected.length

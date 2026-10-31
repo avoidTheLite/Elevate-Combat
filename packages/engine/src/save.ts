@@ -342,6 +342,15 @@ export function validateGameState(raw: unknown): string[] {
     if (typeof s.fog !== 'boolean') err('settings.fog: must be a boolean');
     if (!isInt(s.battleRounds) || s.battleRounds < 1 || s.battleRounds > 100)
       err('settings.battleRounds: must be an integer in [1, 100]');
+    if (
+      s.commanderTrainingCp !== undefined &&
+      !(
+        isInt(s.commanderTrainingCp) &&
+        Number.isSafeInteger(s.commanderTrainingCp) &&
+        s.commanderTrainingCp > 0
+      )
+    )
+      err('settings.commanderTrainingCp: must be a positive whole CP price');
     if (s.battleObjective !== undefined && !isObj(s.battleObjective))
       err('settings.battleObjective: must be an object');
     if (s.transferRule !== undefined) {

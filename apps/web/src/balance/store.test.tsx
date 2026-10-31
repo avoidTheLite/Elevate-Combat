@@ -86,6 +86,9 @@ describe('SetupScreen integration', () => {
     });
     render(<App />);
     expect(screen.getByTestId('custom-rules-badge')).toHaveTextContent(/custom rules active/i);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
     expect(useGameStore.getState().game!.settings.rules).toEqual({ units: { ww2_tank: { hp } } });
@@ -99,6 +102,9 @@ describe('SetupScreen integration', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /reset custom rules/i }));
     expect(screen.queryByTestId('custom-rules-badge')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
     expect(useGameStore.getState().game!.settings.rules).toBeUndefined();

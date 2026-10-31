@@ -240,6 +240,7 @@ export function createFoundationDemoScenario(
   capture: number,
   raze: number,
   era: Era = 'ww2',
+  commanderTrainingCp?: number,
 ): GameState {
   const configuration = createFoundationPlaytestConfiguration(capture, raze);
   const label = FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === id)!.label;
@@ -262,6 +263,7 @@ export function createFoundationDemoScenario(
       : id === 'capture-move'
         ? captureMove(state)
         : annexRaid(state);
+  if (commanderTrainingCp !== undefined) state.settings.commanderTrainingCp = commanderTrainingCp;
   const errors = validateGameState(state);
   if (errors.length) throw new Error(`Prepared demo: ${errors.join('; ')}`);
   const loaded = deserializeSave(serializeSave(state, `Prepared demo: ${label}`));

@@ -177,6 +177,8 @@ export interface GameSettings {
   controllers: Record<Team, Controller>;
   fog: boolean;
   battleRounds: number;
+  /** Positive CP cost per newly formed commander. Absent preserves legacy saved rules. */
+  commanderTrainingCp?: number;
   /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
   battleObjective?: Partial<BattleObjective>;
   /** Optional transfer-rule override; omitted fields use `COMMAND.transferRule`. */

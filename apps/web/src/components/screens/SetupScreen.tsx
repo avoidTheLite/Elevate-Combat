@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { configurationDocument, parseCampaignConfiguration } from '../../lib/campaignScenarios.ts';
 import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import {
   GRID_LIMITS,
@@ -34,6 +35,7 @@ function NumberField(props: {
       <div className="flex items-center gap-2">
         <input
           id={id}
+          aria-label={props.label}
           type="range"
           min={props.min}
           max={props.max}
@@ -57,8 +59,8 @@ function Choice<T extends string>(props: {
   onChange: (v: T) => void;
 }): React.ReactElement {
   return (
-    <div className="flex flex-col gap-1 text-[11px]">
-      <span className="text-[hsl(var(--muted-foreground))] tracking-widest">{props.label}</span>
+    <fieldset className="min-w-0 flex flex-col gap-1 text-[11px]">
+      <legend className="text-[hsl(var(--muted-foreground))] tracking-widest">{props.label}</legend>
       <div className="flex gap-1 flex-wrap">
         {props.options.map((o) => (
           <Button
@@ -72,12 +74,12 @@ function Choice<T extends string>(props: {
           </Button>
         ))}
       </div>
-    </div>
+    </fieldset>
   );
 }
 
 type Mode = 'ai' | 'hotseat' | 'spectate';
-type CampaignMode = 'classic' | 'infrastructure';
+type CampaignMode = 'classic' | 'simple' | 'advanced';
 
 export function SetupScreen(): React.ReactElement {
   const newGame = useGameStore((s) => s.newGame);
@@ -90,6 +92,11 @@ export function SetupScreen(): React.ReactElement {
   const [campaignMode, setCampaignMode] = useState<CampaignMode>('classic');
   const [demoScenario, setDemoScenario] = useState<FoundationDemoSelection>('standard');
   const [demoError, setDemoError] = useState<string | null>(null);
+  const [commanderPrice, setCommanderPrice] = useState('');
+  const commanderCp = Number(commanderPrice);
+  const validCommanderPrice =
+    commanderPrice.trim() !== '' && Number.isSafeInteger(commanderCp) && commanderCp > 0;
+  const [additionalNodes, setAdditionalNodes] = useState(16);
   const [capturePrice, setCapturePrice] = useState('');
   const [razePrice, setRazePrice] = useState('');
   const captureCp = Number(capturePrice);
@@ -101,8 +108,10 @@ export function SetupScreen(): React.ReactElement {
     Number.isSafeInteger(razeCp) &&
     razeCp > 0 &&
     captureCp > razeCp;
-  const canStart = campaignMode === 'classic' || validPrices;
-  const prepared = campaignMode === 'infrastructure' && demoScenario !== 'standard';
+  const canStart = validCommanderPrice && (campaignMode === 'classic' || validPrices);
+  const prepared = demoScenario !== 'standard';
+  const maximumAdditionalNodes = settings.grid.mainCols * settings.grid.mainRows - 3;
+  const advancedCount = Math.min(additionalNodes, maximumAdditionalNodes);
 
   const g = settings.grid;
   const perMain = clusterSize(g.subRadius);
@@ -120,8 +129,24 @@ export function SetupScreen(): React.ReactElement {
     return {
       ...settings,
       controllers,
-      ...(campaignMode === 'infrastructure' && validPrices
-        ? { infrastructure: createFoundationPlaytestConfiguration(captureCp, razeCp) }
+      ...(validCommanderPrice ? { commanderTrainingCp: commanderCp } : {}),
+      ...(campaignMode !== 'classic' && validPrices
+        ? {
+            infrastructure: {
+              ...createFoundationPlaytestConfiguration(captureCp, razeCp),
+              nodes: {
+                ...createFoundationPlaytestConfiguration(captureCp, razeCp).nodes,
+                placement:
+                  campaignMode === 'advanced'
+                    ? {
+                        mode: 'advanced' as const,
+                        seed: settings.seed,
+                        additionalNodes: advancedCount,
+                      }
+                    : { mode: 'simple' as const },
+              },
+            },
+          }
         : {}),
     };
   };
@@ -131,13 +156,42 @@ export function SetupScreen(): React.ReactElement {
     setDemoError(null);
     if (prepared) {
       try {
-        const game = createFoundationDemoScenario(demoScenario, captureCp, razeCp, settings.era);
+        const game = createFoundationDemoScenario(
+          demoScenario,
+          captureCp,
+          razeCp,
+          settings.era,
+          commanderCp,
+        );
         if (importSave(serializeSave(game, `Prepared demo: ${demoScenario}`)))
           useGameStore.getState().setUi(foundationDemoFocus(game));
       } catch (error) {
         setDemoError(error instanceof Error ? error.message : 'Prepared demo could not start');
       }
     } else newGame(withActiveRules(configured()));
+  };
+
+  const exportConfiguration = (): void => {
+    if (!canStart) return;
+    const blob = new Blob(
+      [JSON.stringify(configurationDocument(withActiveRules(configured())), null, 2)],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'iron-ridge-campaign-configuration.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const loadConfiguration = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    try {
+      if (file.size > 2_000_000) throw new Error('Configuration file is too large (maximum 2 MB)');
+      newGame(parseCampaignConfiguration(await file.text()));
+    } catch (error) {
+      setDemoError(error instanceof Error ? error.message : 'Could not start configuration');
+    }
   };
 
   return (
@@ -177,15 +231,57 @@ export function SetupScreen(): React.ReactElement {
         )}
 
         <Choice<CampaignMode>
-          label="CAMPAIGN RULES"
+          label="INFRASTRUCTURE"
           value={campaignMode}
           options={[
             { value: 'classic', label: 'CLASSIC' },
-            { value: 'infrastructure', label: 'INFRASTRUCTURE PLAYTEST' },
+            { value: 'simple', label: 'SIMPLE NODES' },
+            { value: 'advanced', label: 'ADVANCED SEEDED NODES' },
           ]}
-          onChange={setCampaignMode}
+          onChange={(value) => {
+            setCampaignMode(value);
+            setDemoScenario('standard');
+          }}
         />
-        {campaignMode === 'infrastructure' && (
+        <p className="text-[11px] leading-4 text-[hsl(var(--muted-foreground))]">
+          {campaignMode === 'classic'
+            ? 'Classic: HQ recruitment and territory fortification. No infrastructure nodes, node buildings or supply network.'
+            : campaignMode === 'simple'
+              ? 'Simple: one seven-tile node site in every MainHex. Select your HQ or any node in game to activate, build, upgrade and repair.'
+              : 'Advanced: nodes on a seeded selection of MainHexes, including both Home HQs. Other MainHexes retain territory and movement rules.'}
+        </p>
+        <label className="text-[11px] flex flex-col gap-1">
+          <span>Commander training price (CP)</span>
+          <input
+            aria-label="Commander training price (CP)"
+            aria-describedby="commander-price-hint"
+            type="number"
+            min="1"
+            step="1"
+            value={commanderPrice}
+            onChange={(event) => setCommanderPrice(event.target.value)}
+            required
+            className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
+          />
+          <span
+            id="commander-price-hint"
+            className="text-[10px] text-[hsl(var(--muted-foreground))]"
+          >
+            Enter a positive whole CP price for each new commander, including splits. No balance
+            price is preselected.
+          </span>
+        </label>
+        {campaignMode === 'advanced' && !prepared && (
+          <NumberField
+            label="NON-HQ NODES"
+            value={advancedCount}
+            min={0}
+            max={maximumAdditionalNodes}
+            onChange={setAdditionalNodes}
+            hint={`${advancedCount + 2} nodes total; both Home HQs are guaranteed. Map seed controls placement.`}
+          />
+        )}
+        {campaignMode !== 'classic' && (
           <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-3">
             <p className="text-[11px] text-[hsl(var(--warning))] leading-4">
               Playtest nodes, supply and stationed garrisons with provisional balance values. Choose
@@ -224,28 +320,35 @@ export function SetupScreen(): React.ReactElement {
                 this playtest.
               </p>
             )}
-            <Choice<FoundationDemoSelection>
-              label="PREPARED DEMO"
-              value={demoScenario}
-              options={FOUNDATION_DEMO_SCENARIOS}
-              onChange={setDemoScenario}
-            />
-            <p className="text-[11px] leading-4">
-              {
-                FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === demoScenario)
-                  ?.description
-              }
-            </p>
-            {prepared && (
-              <p className="text-[10px] text-[hsl(var(--warning))] leading-4">
-                Prepared demo positions, not a completed campaign: 3×3 map, radius 2, seed 1, no fog
-                and two human players. Infrastructure is activated and built through normal actions.
-                CP comes from normal income; your prices are kept exactly. Other tuning is playtest.
-                Standard campaign keeps your map and opponent settings.
-              </p>
-            )}
           </div>
         )}
+
+        <div className="border border-[hsl(var(--border))] p-3 flex flex-col gap-2">
+          <Choice<FoundationDemoSelection>
+            label="TEAM SCENARIOS"
+            value={demoScenario}
+            options={FOUNDATION_DEMO_SCENARIOS}
+            onChange={(value) => {
+              setDemoScenario(value);
+              if (value !== 'standard') setCampaignMode('simple');
+            }}
+          />
+          <p className="text-[11px] leading-4">
+            {
+              FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === demoScenario)
+                ?.description
+            }
+          </p>
+          {prepared && (
+            <p className="text-[10px] text-[hsl(var(--warning))] leading-4">
+              Prepared demo positions, not a completed campaign: 3×3 map, radius 2, seed 1, no fog
+              and two human players. Infrastructure is activated and built through normal actions.
+              CP comes from normal income; your prices are kept exactly. Commander training uses
+              your CP price. Other tuning is playtest. Standard campaign keeps your map and opponent
+              settings.
+            </p>
+          )}
+        </div>
 
         {!prepared && (
           <>
@@ -294,15 +397,19 @@ export function SetupScreen(): React.ReactElement {
                 <div className="flex gap-2">
                   <input
                     id="f-seed"
+                    aria-label="MAP SEED"
                     type="number"
                     value={settings.seed}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
-                        seed: Math.abs(Math.floor(Number(e.target.value) || 0)),
+                        seed: Math.min(
+                          0xffffffff,
+                          Math.abs(Math.floor(Number(e.target.value) || 0)),
+                        ),
                       })
                     }
-                    className="flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
+                    className="min-w-0 flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
                   />
                   <Button
                     size="sm"
@@ -347,6 +454,28 @@ export function SetupScreen(): React.ReactElement {
             </Button>
           )}
         </div>
+        {!prepared && (
+          <Button variant="ghost" onClick={exportConfiguration} disabled={!canStart}>
+            EXPORT NEW-RUN CONFIGURATION
+          </Button>
+        )}
+        <label className="text-[11px] flex flex-col gap-2">
+          <span>START FROM CUSTOM CONFIGURATION (.json)</span>
+          <input
+            type="file"
+            accept=".json,application/json"
+            aria-label="Start from campaign configuration"
+            className="w-full min-w-0 text-[10px]"
+            onChange={(event) => {
+              void loadConfiguration(event.target.files?.[0]);
+              event.target.value = '';
+            }}
+          />
+          <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+            Starts a fresh run from the file's map, rules and CP prices. Export a configuration
+            above to customize or share. To resume exact progress, use saved games below.
+          </span>
+        </label>
         {!prepared && <LabEntry settings={configured} />}
       </div>
 

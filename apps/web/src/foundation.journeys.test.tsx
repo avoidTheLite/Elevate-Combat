@@ -53,7 +53,7 @@ function turnStartCaptureFixture(): GameState {
 describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrastructure player journeys', () => {
   it('requires explicit capture prices before starting the named playtest in the normal game', () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'INFRASTRUCTURE PLAYTEST' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
     expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(null);
     expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(null);
     expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
@@ -61,6 +61,9 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrast
     fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: '7' } });
     expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
     const game = useGameStore.getState().game!;
     expect(game.settings.infrastructure?.tuningStatus).toBe('playtest');

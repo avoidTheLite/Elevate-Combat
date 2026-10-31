@@ -63,6 +63,11 @@ export function StrategicSidebar({
       ]}
     >
       <Panel id="command" title="COMMAND">
+        <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">
+          {game.infrastructure
+            ? 'Infrastructure enabled: select your HQ or a marked node, then use Node order below to build, upgrade or repair. Engineers and the building window determine availability.'
+            : 'Classic campaign: recruit at HQ and fortify owned territory. Node construction and supply are available by choosing Simple or Advanced infrastructure in New Campaign setup.'}
+        </p>
         <Stat
           label="Command Points"
           value={`${game.cp[team]} CP`}

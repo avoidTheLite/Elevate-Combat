@@ -210,6 +210,11 @@ export function centerKey(world: World, main: HexKey): HexKey {
 }
 
 export function createGame(input: GameSettings): GameState {
+  if (
+    input.commanderTrainingCp !== undefined &&
+    (!Number.isSafeInteger(input.commanderTrainingCp) || input.commanderTrainingCp <= 0)
+  )
+    throw new Error('Commander training requires a positive whole CP price');
   // Starting units (hp, moves) must reflect the game's own rule overrides.
   return withRules(input.rules, () => createGameUnderRules(input));
 }
