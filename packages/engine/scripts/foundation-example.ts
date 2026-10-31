@@ -158,8 +158,14 @@ const attribute = evaluateFoundationAttribute({
 const income = calculateFoundationIncome({
   baseGrant: 3,
   contributions: [
-    { sourceId: 'territory-fixture', kind: 'territory', value: 6.6, active: true, eligible: true },
-    { sourceId: 'building-fixture', kind: 'building', value: 3.8, active: true, eligible: true },
+    {
+      sourceId: 'six-claimed-mainhexes',
+      kind: 'territory',
+      value: 6,
+      active: true,
+      eligible: true,
+    },
+    { sourceId: 'building-fixture', kind: 'building', value: 4.4, active: true, eligible: true },
   ],
 });
 const opened = openReinforcementCycle(createReinforcementState(), {
