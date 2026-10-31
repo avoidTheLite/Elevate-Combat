@@ -1,11 +1,11 @@
 {
   "product": "Elevate-Combat",
-  "dkr_sha": "16d8732463a656eb4a0baf3e265c4b0ebae9c395",
+  "dkr_sha": "2fc220b4451682904bd2580be504c609364200c5",
   "mode": "amend",
   "refs": [
     "GAMES-ELEVATE-CAMPAIGN-UC-001"
   ],
   "twin_pr": "https://github.com/avoidTheLite/DKR/pull/199",
-  "dkr_sync_sha": "19e4b1ffaefc76ec44ac506a026c8040ad80902b",
+  "dkr_sync_sha": "5ec50a4f4e00e0f78e63e4afb2d0613f86ce9384",
   "product_pr": "https://github.com/avoidTheLite/Elevate-Combat/pull/16"
 }
