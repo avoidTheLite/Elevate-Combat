@@ -14,11 +14,27 @@ describe('HQ wall', () => {
     expect(g.getAttribute('position').count).toBe(6 * 2 * 2 * 3);
   });
 
-  it('passes through the centre of every ring cell', () => {
+  it('encloses all six vertices of all seven tiles', () => {
     const vs = verts(hqWallGeometry([0, 0, 0, 0, 0, 0], 1));
-    for (const d of DIRECTIONS) {
+    const polygon = DIRECTIONS.map((d) => {
       const c = hexToWorld(d);
-      expect(vs.some((v) => Math.hypot(v.x - c.x, v.z - c.z) < 1e-6)).toBe(true);
+      return { x: c.x * 1.72, z: c.z * 1.72 };
+    });
+    expect(vs.length).toBeGreaterThan(0);
+    for (const d of [{ q: 0, r: 0 }, ...DIRECTIONS]) {
+      const c = hexToWorld(d);
+      for (let v = 0; v < 6; v++) {
+        const angle = (Math.PI / 3) * v + Math.PI / 6;
+        const point = { x: c.x + Math.cos(angle), z: c.z + Math.sin(angle) };
+        // Every corner lies on the interior side of each wall face.
+        const sides = polygon.map((p, i) => {
+          const next = polygon[(i + 1) % 6]!;
+          return (next.x - p.x) * (point.z - p.z) - (next.z - p.z) * (point.x - p.x);
+        });
+        expect(sides.every((side) => side >= -1e-6) || sides.every((side) => side <= 1e-6)).toBe(
+          true,
+        );
+      }
     }
   });
 
@@ -35,7 +51,7 @@ describe('HQ wall', () => {
     }
     // Lowest cell (index 0) gets the tallest segment: its corner reaches down to its ground.
     const c0 = hexToWorld(DIRECTIONS[0]!);
-    const atC0 = vs.filter((v) => Math.hypot(v.x - c0.x, v.z - c0.z) < 1e-6);
+    const atC0 = vs.filter((v) => Math.hypot(v.x - c0.x * 1.72, v.z - c0.z * 1.72) < 1e-6);
     expect(Math.min(...atC0.map((v) => v.y))).toBeCloseTo(0);
   });
 });

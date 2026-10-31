@@ -321,6 +321,16 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   const { world } = worldOf(state);
   const cell = freeSubNear(state, world, from!.pos, from!.at);
   if (!cell) return { ok: false, error: 'No free cell in this main hex' };
+  const trainingCp = state.settings.commanderTrainingCp ?? 0;
+  if (
+    !Number.isSafeInteger(trainingCp) ||
+    trainingCp < 0 ||
+    (state.settings.commanderTrainingCp !== undefined && trainingCp === 0)
+  )
+    return { ok: false, error: 'Invalid commander training CP configuration' };
+  if (state.cp[from!.team] < trainingCp)
+    return { ok: false, error: `Training a commander costs ${trainingCp} CP` };
+  state.cp[from!.team] -= trainingCp;
   const army: Army = {
     id: newId(state, `${from!.team}army`),
     team: from!.team,
@@ -332,7 +342,10 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   };
   from!.units = from!.units.filter((u) => !unitIds.includes(u.id));
   state.armies.push(army);
-  logStrategic(state, `New commander ${army.id} formed with ${army.units.length} unit(s)`);
+  logStrategic(
+    state,
+    `New commander ${army.id} formed with ${army.units.length} unit(s) (−${trainingCp} CP)`,
+  );
   return { ok: true };
 }
 

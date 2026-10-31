@@ -33,7 +33,9 @@ export function NodePanel({
     <Panel id="node" title={node ? node.name : 'INFRASTRUCTURE NODE'}>
       {!node ? (
         <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
-          Select a MainHex to inspect its node.
+          {mainHex
+            ? 'This MainHex has no node in the seeded Advanced layout. Select a marked node or your Home HQ to build.'
+            : 'Select your Home HQ or a marked node to inspect buildings and choose a Node order.'}
         </p>
       ) : (
         <div role="region" aria-label="Infrastructure node" className="flex flex-col gap-2">

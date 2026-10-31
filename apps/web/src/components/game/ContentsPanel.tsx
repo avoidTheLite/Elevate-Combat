@@ -83,13 +83,15 @@ export function ContentsPanel({
   const targets = orders ? transferTargets(game, holder.id) : [];
   const noTargetReason = `No holder in reach — transfers need one ${transferRuleText(game)}.`;
   const formBlocked =
-    checked.length === 0
-      ? 'Tick units first'
-      : holder.kind === 'commander' && checked.length >= holder.units.length
-        ? 'Leave at least one unit with the commander'
-        : checked.length > ECONOMY.armyCap
-          ? `A commander holds at most ${ECONOMY.armyCap} units`
-          : null;
+    game.cp[holder.team] < (game.settings.commanderTrainingCp ?? 0)
+      ? `Training a commander costs ${game.settings.commanderTrainingCp} CP`
+      : checked.length === 0
+        ? 'Tick units first'
+        : holder.kind === 'commander' && checked.length >= holder.units.length
+          ? 'Leave at least one unit with the commander'
+          : checked.length > ECONOMY.armyCap
+            ? `A commander holds at most ${ECONOMY.armyCap} units`
+            : null;
 
   const transfer = (to: Army): void => {
     if (dispatch({ type: 'transferUnits', fromId: holder.id, toId: to.id, unitIds: checked })) {
@@ -194,6 +196,9 @@ export function ContentsPanel({
                 onClick={form}
               >
                 NEW COMMANDER
+                {game.settings.commanderTrainingCp !== undefined
+                  ? ` (−${game.settings.commanderTrainingCp} CP)`
+                  : ''}
               </Button>
             )}
           </div>

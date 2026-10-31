@@ -28,6 +28,9 @@ describe('App – setup screen', () => {
 describe('App – game start flow', () => {
   it('START NEW GAME transitions to the strategic view', async () => {
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /end turn/i })).toBeInTheDocument(),
@@ -39,6 +42,9 @@ describe('App – game start flow', () => {
 
   it('recruiting at HQ spends command points', async () => {
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
     const before = useGameStore.getState().game!.cp.A;
@@ -49,6 +55,9 @@ describe('App – game start flow', () => {
   it('ending the turn hands control to the AI and back', async () => {
     useGameStore.getState().setAiSpeed(1);
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /end turn/i }));
     await waitFor(() => expect(useGameStore.getState().game!.turn).toBe(2), { timeout: 8000 });
@@ -57,6 +66,9 @@ describe('App – game start flow', () => {
 
   it('MENU opens quit dialog; Save & Quit keeps CONTINUE', async () => {
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
     fireEvent.click(await screen.findByRole('button', { name: /save & quit/i }));
@@ -66,6 +78,9 @@ describe('App – game start flow', () => {
 
   it('Abandon clears the autosave so CONTINUE disappears', async () => {
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
     fireEvent.click(await screen.findByRole('button', { name: /abandon/i }));
@@ -79,6 +94,9 @@ describe('App – information overlays', () => {
     const { useViewStore } = await import('./stores/useViewStore.ts');
     act(() => useViewStore.getState().setOverlay('basic'));
     render(<App />);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /2 height/i }));
     expect(useViewStore.getState().overlay).toBe('height');

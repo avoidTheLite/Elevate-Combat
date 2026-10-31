@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 function start(label: string, capture = '7', raze = '3'): void {
-  fireEvent.click(screen.getByRole('button', { name: 'INFRASTRUCTURE PLAYTEST' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
   fireEvent.click(screen.getByRole('button', { name: label }));
   expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
   expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(null);
@@ -25,6 +25,9 @@ function start(label: string, capture = '7', raze = '3'): void {
     target: { value: capture },
   });
   fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: raze } });
+  fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+    target: { value: '11' },
+  });
   fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
   expect(screen.queryByRole('button', { name: 'START NEW GAME' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Prepared demo guide' })).toBeInTheDocument();
