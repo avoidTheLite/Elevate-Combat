@@ -12,6 +12,8 @@ export interface NodeWorkSpend {
   readonly operationCount: number;
   readonly activationClosed: boolean;
   readonly activationRepairSpent: boolean;
+  /** Old saves omit this field and retain the ordinary open work window. */
+  readonly buildingWindow?: 'open' | 'closed';
 }
 
 export interface EngineerWorkSpend {
@@ -94,6 +96,7 @@ export type FoundationWorkError =
   | 'stale-version'
   | 'unknown-target'
   | 'not-owner'
+  | 'building-window-closed'
   | 'activation-closed'
   | 'activation-repair-spent'
   | 'node-limit'
@@ -203,6 +206,9 @@ export function validateFoundationWorkState(state: FoundationWorkState): string 
       typeof spend.ordinarySpent !== 'boolean' ||
       typeof spend.activationClosed !== 'boolean' ||
       typeof spend.activationRepairSpent !== 'boolean' ||
+      (spend.buildingWindow !== undefined &&
+        spend.buildingWindow !== 'open' &&
+        spend.buildingWindow !== 'closed') ||
       ((spend.ordinarySpent || spend.activationRepairSpent) && spend.operationCount === 0) ||
       (spend.activationRepairSpent && !spend.activationClosed)
     ) {
@@ -421,6 +427,12 @@ export function evaluateFoundationWork(
       })
     : null;
   if (previous) {
+    if (previous.buildingWindow === 'closed') {
+      return fail(
+        'building-window-closed',
+        'This acquisition missed the owner-turn building window',
+      );
+    }
     if (previous.activationClosed && request.kind !== 'repair-building') {
       return fail('activation-closed', 'Activation permits repairs only for the rest of this turn');
     }

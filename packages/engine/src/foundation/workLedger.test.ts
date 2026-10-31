@@ -494,4 +494,25 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001: foundation work accounting', () => {
       rejects(initial(), { kind: kind as FoundationWorkRequest['kind'] }, 'invalid-request');
     }
   });
+
+  it('defaults legacy work records to open and validates explicit acquisition windows', () => {
+    const legacy = activation();
+    const open = {
+      ...legacy,
+      nodeSpending: [{ ...legacy.nodeSpending[0], activationClosed: false }],
+    };
+    expect(apply(open).nodeSpending[0]).toMatchObject({ ordinarySpent: true, operationCount: 1 });
+    expect(
+      validateFoundationWorkState({
+        ...open,
+        nodeSpending: [{ ...open.nodeSpending[0], buildingWindow: 'closed' }],
+      }),
+    ).toBeNull();
+    const corrupt = {
+      ...open,
+      nodeSpending: [{ ...open.nodeSpending[0], buildingWindow: 'later' }],
+    } as unknown as FoundationWorkState;
+    expect(validateFoundationWorkState(corrupt)).toBe('Invalid node work record');
+    rejects(corrupt, {}, 'invalid-state');
+  });
 });

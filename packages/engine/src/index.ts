@@ -23,3 +23,6 @@ export * from './save.ts';
 export * from './foundation/attributes.ts';
 export * from './foundation/workLedger.ts';
 export * from './foundation/reinforcement.ts';
+export * from './foundation/capture.ts';
+export * from './foundation/control.ts';
+export * from './foundation/freeShots.ts';
