@@ -267,8 +267,8 @@ export function SetupScreen(): React.ReactElement {
             id="commander-price-hint"
             className="text-[10px] text-[hsl(var(--muted-foreground))]"
           >
-            Enter a positive whole CP price for each new commander, including splits. No balance
-            price is preselected.
+            Enter a positive whole CP price for each NEW COMMANDER order. Charging splits is
+            provisional and awaits confirmation; no balance price is preselected.
           </span>
         </label>
         {campaignMode === 'advanced' && !prepared && (
