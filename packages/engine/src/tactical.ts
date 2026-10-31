@@ -1,3 +1,5 @@
+import { workingCampaignRoads } from './foundation/campaignRoadState.ts';
+import { roadEdgeKey } from './battleMap.ts';
 // ── Tactical battle state machine ────────────────────────────────────────────
 // Deployment (defender first, then attacker) → alternating side turns, attacker
 // first, until one side is wiped out, retreats, or the round limit expires.
@@ -180,7 +182,16 @@ export function createBattle(
 
 export function contextFor(state: GameState): BattleContext {
   if (!state.battle) throw new Error('No active battle');
-  return buildContext(state.settings, state.battle);
+  const ctx = buildContext(state.settings, state.battle);
+  const edges = new Set<string>();
+  for (const road of workingCampaignRoads(state)) {
+    if (road.damaged) continue;
+    for (let i = 1; i < road.path.length; i++)
+      edges.add(roadEdgeKey(road.path[i - 1]!, road.path[i]!));
+  }
+  ctx.roadEdges = edges;
+  ctx.roadMultiplier = state.infrastructure?.configuration?.supply.roadMultiplier ?? 1;
+  return ctx;
 }
 
 function unitById(battle: Battle, id: string): BattleUnit | undefined {

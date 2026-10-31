@@ -6,7 +6,7 @@
 import type { HexKey } from './hex.ts';
 import { hexKey, neighbor, parseKey } from './hex.ts';
 import type { BattleContext } from './battleMap.ts';
-import { h } from './battleMap.ts';
+import { h, roadEdgeKey } from './battleMap.ts';
 import type { BattleUnit } from './types.ts';
 import { unitType } from './units.ts';
 
@@ -29,7 +29,8 @@ export function stepCost(
   const climb = h1 - h0;
   if (climb > maxClimb) return null;
   if (-climb > MAX_DROP) return null;
-  return 1 + Math.max(0, climb) + (h1 === 0 ? 1 : 0);
+  const cost = 1 + Math.max(0, climb) + (h1 === 0 ? 1 : 0);
+  return cost * (ctx.roadEdges?.has(roadEdgeKey(from, to)) ? (ctx.roadMultiplier ?? 1) : 1);
 }
 
 export function reachable(

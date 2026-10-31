@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { apply, type GameAction } from '../actions.ts';
 import { buildWorld } from '../grid.ts';
 import { hexDistance, hexKey } from '../hex.ts';
 import type { Terrain } from '../terrain.ts';
@@ -21,7 +22,7 @@ import {
   type CampaignSupplyRuntime,
 } from './campaignSupply.ts';
 import type { SupplyProfile } from './supplyGraph.ts';
-import { campaignBuildingData } from './campaignNodes.ts';
+import { campaignBuildingData, constructCampaignNodeRequest } from './campaignNodes.ts';
 import type { CampaignInfrastructure } from './campaignNodes.ts';
 import { calculateFoundationIncome } from './attributes.ts';
 import { createGame, defaultSettings } from '../strategic.ts';
@@ -531,6 +532,203 @@ describe('actual node payload supply connector adapter', () => {
 });
 
 describe('C1 frozen origins through real supply splits and merges', () => {
+  it('TS-058 real roster: six actual recruits survive center capacity10 then14 then4 with headroom8/0 and frozen allowance4/0 in one owner cycle', () => {
+    const base = createFoundationPlaytestConfiguration(7, 3);
+    // Deliberately synthetic, nonmonotone capacity and one-CP upgrade prices isolate the
+    // capacity boundary. Home output uses base10/14/4; the valid Regional boost is retained.
+    // They are not proposed production balance values.
+    const configured = {
+      ...base,
+      nodes: {
+        ...base.nodes,
+        definitions: base.nodes.definitions.map((definition) =>
+          definition.id === 'generic'
+            ? { ...definition, costs: { ...definition.costs, upgrade: { 2: 1, 3: 1 } } }
+            : definition,
+        ),
+      },
+      effects: {
+        ...base.effects,
+        generic: {
+          1: { ...base.effects.generic[1]!, housing: 20, throughput: 20, reinforcement: 10 },
+          2: { ...base.effects.generic[2]!, housing: 20, throughput: 20, reinforcement: 14 },
+          3: { ...base.effects.generic[3]!, housing: 20, throughput: 20, reinforcement: 4 },
+        },
+      },
+    };
+    let state = createGame({
+      ...defaultSettings(),
+      seed: 1,
+      fog: false,
+      commanderTrainingCp: 11,
+      controllers: { A: 'human', B: 'human' },
+      grid: { mainCols: 3, mainRows: 3, subRadius: 2 },
+      infrastructure: configured,
+    });
+    const run = (action: GameAction): void => {
+      const result = apply(state, action);
+      expect(result.error, action.type).toBeNull();
+      expect(validateGameState(result.state), action.type).toEqual([]);
+      state = result.state;
+    };
+    const home = state.infrastructure!.sites.find((site) => site.homeTeam === 'A')!;
+    const centerId = state.infrastructure!.capture.nodes.find((node) => node.id === home.nodeId)!
+      .buildings[0]!.id;
+    const commanderEngineer = state.armies
+      .find((army) => army.team === 'A' && army.kind === 'commander')!
+      .units.find((unit) => unit.typeId === 'ww2_engineer')!.id;
+    const cycle = state.infrastructure!.ownerTurns.A;
+    const paidIncome = structuredClone(state.infrastructure!.clock!.paidIncomeEvents);
+    const startingCp = state.cp.A;
+    expect(startingCp).toBe(25);
+    expect(
+      campaignSupplyView(state, 'A')!.benefitSelections[home.nodeId]!.reinforcement.value,
+    ).toBe(10);
+    for (const typeId of ['ww2_engineer', ...Array<string>(5).fill('ww2_rifle_infantry')])
+      run({ type: 'recruit', typeId });
+    const garrisonId = state.armies.find((army) => army.team === 'A' && army.building === 'hq')!.id;
+    const roster = structuredClone(state.armies.find((army) => army.id === garrisonId)!.units);
+    expect(roster).toHaveLength(6);
+    expect(new Set(roster.map((unit) => unit.id)).size).toBe(6);
+    expect(roster.filter((unit) => unit.typeId === 'ww2_engineer')).toHaveLength(1);
+    expect(roster.filter((unit) => unit.typeId === 'ww2_rifle_infantry')).toHaveLength(5);
+    expect(state.cp.A).toBe(startingCp - 19);
+    const recruitedEngineer = roster.find((unit) => unit.typeId === 'ww2_engineer')!.id;
+    expect(recruitedEngineer).not.toBe(commanderEngineer);
+    const conserved = structuredClone(state.infrastructure!.supply!.reinforcement);
+    const attributions = structuredClone(state.infrastructure!.supply!.deployments);
+    expect(conserved.receipts).toHaveLength(6);
+    expect(
+      conserved.receipts.every(
+        (receipt) => receipt.request.units === 1 && receipt.request.ownerTurnId === cycle,
+      ),
+    ).toBe(true);
+    expect(
+      conserved.cycles.find((entry) => entry.team === 'A' && entry.ownerTurnId === cycle)!.grants,
+    ).toEqual([expect.objectContaining({ capacity: 10, spent: 6 })]);
+    for (const [tier, capacity, networkRemaining, available, engineerUnitId] of [
+      [2, 14, 8, 4, commanderEngineer],
+      [3, 4, 0, 0, recruitedEngineer],
+    ] as const) {
+      const beforeCp = state.cp.A;
+      run({
+        type: 'nodeWork',
+        request: constructCampaignNodeRequest(state, {
+          kind: 'upgrade',
+          nodeId: home.nodeId,
+          buildingId: centerId,
+          tier,
+          engineerUnitId,
+        }),
+      });
+      const supply = campaignSupplyView(state, 'A')!;
+      expect(supply.benefitSelections[home.nodeId]!.reinforcement).toMatchObject({
+        providerId: home.nodeId,
+        value: capacity,
+      });
+      const runtime = state.infrastructure!.supply!;
+      const context = campaignSupplyReinforcementContext(
+        runtime,
+        supply,
+        cycle,
+        'reinforcement',
+        home.nodeId,
+      );
+      expect(context.networks).toHaveLength(1);
+      expect(context.networks[0]!.currentRemaining).toBe(networkRemaining);
+      expect(
+        reinforcementAllowance(runtime.reinforcement, context, context.networks[0]!.networkId),
+      ).toMatchObject({
+        lineageRemaining: 4,
+        networkRemaining,
+        available,
+      });
+      expect(
+        campaignSupplyReinforcementAllowance(runtime, supply, cycle, 'reinforcement', home.nodeId)
+          .available,
+      ).toBe(available);
+      expect(state.cp.A).toBe(beforeCp - 1);
+      expect(state.infrastructure!.ownerTurns.A).toBe(cycle);
+      expect(state.infrastructure!.clock!.ownerCycle.A).toBe(cycle);
+      expect(state.infrastructure!.clock!.paidIncomeEvents).toEqual(paidIncome);
+      expect(runtime.reinforcement).toEqual(conserved);
+      expect(runtime.deployments).toEqual(attributions);
+      expect(state.armies.find((army) => army.id === garrisonId)!.units).toEqual(roster);
+    }
+    expect(
+      state.infrastructure!.capture.work.engineerSpending.map((spend) => spend.unitId).sort(),
+    ).toEqual([commanderEngineer, recruitedEngineer].sort());
+    const beforeRefusal = structuredClone(state);
+    const rejected = apply(state, { type: 'recruit', typeId: 'ww2_rifle_infantry' });
+    expect(rejected.error).toBe('Network reinforcement allowance is exhausted');
+    expect(rejected.state).toBe(state);
+    expect(state).toEqual(beforeRefusal);
+  });
+
+  it('TS-058: capacity14 then4 yields local remaining8 then0 while a 10-budget/6-spend lineage stays capped at4 then0', () => {
+    const original = fixture();
+    const input: CampaignSupplyInput = {
+      ...original,
+      hqBenefits: original.hqBenefits.filter((hq) => hq.authorityId === 'home'),
+      nodes: original.nodes.map((node) =>
+        node.id === 'regional' ? { ...node, authority: null } : node,
+      ),
+    };
+    const opening = evaluateCampaignSupply(input);
+    expect(opening.benefitSelections.home.capacity.value).toBe(10);
+    const state = spend(
+      openCampaignSupplyCycle(runtime(input), opening, 'A-cycle', 'capacity'),
+      opening,
+      'home',
+      6,
+      'deployed-six',
+    );
+    const before = structuredClone(state);
+    for (const [capacity, networkRemaining, available] of [
+      [14, 8, 4],
+      [4, 0, 0],
+    ]) {
+      const changed = evaluateCampaignSupply({
+        ...input,
+        hqBenefits: input.hqBenefits.map((hq) =>
+          hq.authorityId === 'home'
+            ? {
+                ...hq,
+                contributions: hq.contributions.map((contribution) =>
+                  contribution.benefitId === 'capacity'
+                    ? { ...contribution, value: capacity }
+                    : contribution,
+                ),
+              }
+            : hq,
+        ),
+      });
+      expect(changed.benefitSelections.home.capacity.value).toBe(capacity);
+      const context = campaignSupplyReinforcementContext(
+        state,
+        changed,
+        'A-cycle',
+        'capacity',
+        'home',
+      );
+      expect(context.networks).toHaveLength(1);
+      expect(context.networks[0]!.currentRemaining).toBe(networkRemaining);
+      expect(
+        reinforcementAllowance(state.reinforcement, context, context.networks[0]!.networkId),
+      ).toMatchObject({ lineageRemaining: 4, networkRemaining, available });
+      expect(
+        campaignSupplyReinforcementAllowance(state, changed, 'A-cycle', 'capacity', 'home')
+          .available,
+      ).toBe(available);
+      expect(state).toEqual(before);
+      expect(state.reinforcement.cycles[0]!.grants).toEqual([
+        { lineageId: state.reinforcement.cycles[0]!.grants[0]!.lineageId, capacity: 10, spent: 6 },
+      ]);
+      expect(state.reinforcement.receipts[0]!.request.units).toBe(6);
+      expect(state.deployments).toEqual(before.deployments);
+    }
+  });
+
   it('bounds a directed destination by eligible HQ capacity while preserving one shared pool', () => {
     const input = fixture();
     const heights = new Int8Array(input.world.subs.length).fill(8);

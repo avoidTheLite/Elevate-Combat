@@ -1,3 +1,4 @@
+import { commitCampaignRoadRepairs } from './foundation/campaignRoads.ts';
 // ── Strategic (campaign) layer ───────────────────────────────────────────────
 // Main hexes are territory. Units live in holders: commanders move on the
 // sub-hex grid (see command.ts), garrisons sit in their building. Engaging an
@@ -849,6 +850,8 @@ function concludeFoundationBattle(state: GameState): StratResult {
     }
   const ruins = commitCampaignRazeTiles(state, b);
   if (!ruins.ok) return { ok: false, error: ruins.error };
+  const roadRepairs = commitCampaignRoadRepairs(state);
+  if (!roadRepairs.ok) return { ok: false, error: roadRepairs.error };
   const withdrawal = applyCampaignWithdrawal(state, world, b);
   if (!withdrawal.ok) return { ok: false, error: withdrawal.error };
   state.armies = state.armies.filter(isPresent);

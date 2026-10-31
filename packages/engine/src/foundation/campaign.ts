@@ -1,3 +1,4 @@
+import { workingCampaignRoads, validateCampaignRoadRepairState } from './campaignRoadState.ts';
 import type { GameState, Team } from '../types.ts';
 import type { Battle } from '../types.ts';
 import { buildWorld } from '../grid.ts';
@@ -261,6 +262,8 @@ export function validateCampaignConfiguration(raw: unknown): string[] {
 /** Pure validation only: loading never calls initialization or a turn/event resolver. */
 export function validateCampaignFoundationState(state: GameState, world: World): string[] {
   const errors: string[] = [];
+  const roadRepairError = validateCampaignRoadRepairState(state);
+  if (roadRepairError) errors.push(roadRepairError);
   const f = state.infrastructure;
   if (f === undefined)
     return state.settings.infrastructure ? ['Configured infrastructure state is missing'] : errors;
@@ -526,7 +529,7 @@ export function campaignSupplyView(state: GameState, team: Team): CampaignSupply
     terrain,
     team,
     nodes,
-    roads: f.supply.roads,
+    roads: workingCampaignRoads(state),
     stationedUnits: state.armies
       .filter((a) => a.kind === 'garrison' && a.building === 'temporary')
       .flatMap((a) =>

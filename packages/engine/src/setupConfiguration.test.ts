@@ -137,20 +137,34 @@ describe('configured commander CP transactions', () => {
       expect(game).toEqual(before);
     }
   });
-  it('preserves the rules of saves without a configured training price', () => {
+  it('restores old saves without charging existing commanders but requires an explicit price for new formation', () => {
     const game = createGame(defaultSettings());
     const commander = game.armies.find(
       (holder) => holder.team === 'A' && holder.kind === 'commander',
     )!;
     const resumed = deserializeSave(serializeSave(game));
     if (!resumed.ok) throw new Error(resumed.error);
-    const result = apply(resumed.save.state, {
+    expect(resumed.save.state).toEqual(game);
+    const blocked = apply(resumed.save.state, {
       type: 'formCommander',
       fromId: commander.id,
       unitIds: [commander.units[0]!.id],
     });
-    expect(result.error).toBeNull();
-    expect(result.state.cp).toEqual(game.cp);
-    expect(result.state.settings.commanderTrainingCp).toBeUndefined();
+    expect(blocked.error).toMatch(/Configure a commander training CP price/);
+    expect(blocked.state).toEqual(game);
+    const configured = apply(resumed.save.state, {
+      type: 'configureCommanderTraining',
+      cpCost: 11,
+    });
+    expect(configured.error).toBeNull();
+    expect(configured.state.cp).toEqual(game.cp);
+    expect(configured.state.armies).toEqual(game.armies);
+    const formed = apply(configured.state, {
+      type: 'formCommander',
+      fromId: commander.id,
+      unitIds: [commander.units[0]!.id],
+    });
+    expect(formed.error).toBeNull();
+    expect(formed.state.cp.A).toBe(game.cp.A - 11);
   });
 });

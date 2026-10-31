@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { configurationDocument, parseCampaignConfiguration } from '../../lib/campaignScenarios.ts';
 import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import {
@@ -10,7 +10,8 @@ import {
 } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
-import { withActiveRules } from '../../balance/store.ts';
+import type { SetupSelection } from '../../balance/store.ts';
+import { newCampaignProblem, useBalanceStore, withActiveRules } from '../../balance/store.ts';
 import { LabEntry } from '../balance/LabEntry.tsx';
 import { LoadList } from './LoadList.tsx';
 import {
@@ -87,18 +88,24 @@ export function SetupScreen(): React.ReactElement {
   const loadSaved = useGameStore((s) => s.loadSaved);
   useGameStore((s) => s.saveRev); // re-render when a slot changes (CONTINUE visibility)
   const hasSave = useGameStore((s) => s.hasSave)();
-  const [settings, setSettings] = useState<GameSettings>(defaultSettings());
-  const [mode, setMode] = useState<Mode>('ai');
-  const [campaignMode, setCampaignMode] = useState<CampaignMode>('classic');
+  const [restored] = useState(() => useBalanceStore.getState().setupSelection);
+  useEffect(() => {
+    useBalanceStore.getState().clearSetupSelection();
+  }, []);
+  const [settings, setSettings] = useState<GameSettings>(restored?.settings ?? defaultSettings());
+  const [mode, setMode] = useState<Mode>(restored?.mode ?? 'ai');
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>(
+    restored?.campaignMode ?? 'classic',
+  );
   const [demoScenario, setDemoScenario] = useState<FoundationDemoSelection>('standard');
   const [demoError, setDemoError] = useState<string | null>(null);
-  const [commanderPrice, setCommanderPrice] = useState('');
+  const [commanderPrice, setCommanderPrice] = useState(restored?.commanderPrice ?? '');
   const commanderCp = Number(commanderPrice);
   const validCommanderPrice =
     commanderPrice.trim() !== '' && Number.isSafeInteger(commanderCp) && commanderCp > 0;
-  const [additionalNodes, setAdditionalNodes] = useState(16);
-  const [capturePrice, setCapturePrice] = useState('');
-  const [razePrice, setRazePrice] = useState('');
+  const [additionalNodes, setAdditionalNodes] = useState(restored?.additionalNodes ?? 16);
+  const [capturePrice, setCapturePrice] = useState(restored?.capturePrice ?? '');
+  const [razePrice, setRazePrice] = useState(restored?.razePrice ?? '');
   const captureCp = Number(capturePrice);
   const razeCp = Number(razePrice);
   const validPrices =
@@ -108,7 +115,21 @@ export function SetupScreen(): React.ReactElement {
     Number.isSafeInteger(razeCp) &&
     razeCp > 0 &&
     captureCp > razeCp;
-  const canStart = validCommanderPrice && (campaignMode === 'classic' || validPrices);
+  const setupProblem = !validCommanderPrice
+    ? 'Enter a positive whole commander training CP price in setup before starting a game.'
+    : campaignMode !== 'classic' && !validPrices
+      ? 'The selected infrastructure mode needs positive whole Capture/Raze CP prices, with Raze lower than Capture.'
+      : null;
+  const canStart = setupProblem === null;
+  const selection = (): SetupSelection => ({
+    settings,
+    mode,
+    campaignMode,
+    additionalNodes,
+    commanderPrice,
+    capturePrice,
+    razePrice,
+  });
   const prepared = demoScenario !== 'standard';
   const maximumAdditionalNodes = settings.grid.mainCols * settings.grid.mainRows - 3;
   const advancedCount = Math.min(additionalNodes, maximumAdditionalNodes);
@@ -119,14 +140,15 @@ export function SetupScreen(): React.ReactElement {
   const setGrid = (patch: Partial<GameSettings['grid']>): void =>
     setSettings({ ...settings, grid: { ...settings.grid, ...patch } });
 
-  const configured = (): GameSettings => {
+  const configured = (): GameSettings | null => {
+    if (!canStart) return null;
     const controllers: Record<'A' | 'B', Controller> =
       mode === 'ai'
         ? { A: 'human', B: 'ai' }
         : mode === 'hotseat'
           ? { A: 'human', B: 'human' }
           : { A: 'ai', B: 'ai' };
-    return {
+    const candidate: GameSettings = {
       ...settings,
       controllers,
       ...(validCommanderPrice ? { commanderTrainingCp: commanderCp } : {}),
@@ -149,10 +171,12 @@ export function SetupScreen(): React.ReactElement {
           }
         : {}),
     };
+    return newCampaignProblem(candidate) ? null : candidate;
   };
   // Balance-lab overrides (if applied) ride along in settings.rules.
   const start = (): void => {
-    if (!canStart) return;
+    const setup = configured();
+    if (!setup) return;
     setDemoError(null);
     if (prepared) {
       try {
@@ -168,13 +192,14 @@ export function SetupScreen(): React.ReactElement {
       } catch (error) {
         setDemoError(error instanceof Error ? error.message : 'Prepared demo could not start');
       }
-    } else newGame(withActiveRules(configured()));
+    } else newGame(withActiveRules(setup));
   };
 
   const exportConfiguration = (): void => {
-    if (!canStart) return;
+    const setup = configured();
+    if (!setup) return;
     const blob = new Blob(
-      [JSON.stringify(configurationDocument(withActiveRules(configured())), null, 2)],
+      [JSON.stringify(configurationDocument(withActiveRules(setup)), null, 2)],
       { type: 'application/json' },
     );
     const url = URL.createObjectURL(blob);
@@ -267,8 +292,8 @@ export function SetupScreen(): React.ReactElement {
             id="commander-price-hint"
             className="text-[10px] text-[hsl(var(--muted-foreground))]"
           >
-            Enter a positive whole CP price for each NEW COMMANDER order. Charging splits is
-            provisional and awaits confirmation; no balance price is preselected.
+            Enter a positive whole CP price for each NEW COMMANDER order, including splits. No
+            balance price is preselected.
           </span>
         </label>
         {campaignMode === 'advanced' && !prepared && (
@@ -476,7 +501,9 @@ export function SetupScreen(): React.ReactElement {
             above to customize or share. To resume exact progress, use saved games below.
           </span>
         </label>
-        {!prepared && <LabEntry settings={configured} />}
+        {!prepared && (
+          <LabEntry settings={configured} problem={setupProblem} selection={selection} />
+        )}
       </div>
 
       <LoadList />

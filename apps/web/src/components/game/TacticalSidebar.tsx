@@ -12,6 +12,7 @@ import {
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { RoadRepairPanel } from './RoadRepairPanel.tsx';
 import { RazeTileControl } from './RazeTileControl.tsx';
 
 const DIR_NAMES = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
@@ -65,7 +66,7 @@ export function TacticalSidebar({
   const pct = (p: number): string => `${Math.round(p * 100)}%`;
 
   return (
-    <PanelStack priority={['battle', 'battle-log', 'orders', 'unit']}>
+    <PanelStack priority={['battle', 'battle-log', 'orders', 'roads', 'unit']}>
       <Panel id="battle" title={`BATTLE FOR ${battle.contested}`}>
         <Stat
           label="Attacker"
@@ -100,6 +101,14 @@ export function TacticalSidebar({
         </div>
       </Panel>
 
+      {battle.phase === 'combat' && unit && (
+        <RoadRepairPanel
+          game={game}
+          mainHex={unit.pos ? (ctx.world.subByKey.get(unit.pos)?.main ?? null) : null}
+          engineerUnitId={unit.id}
+          canAct={canAct && unit.team === battle.active}
+        />
+      )}
       {/* Fixed-size box: hovering never changes its dimensions. */}
       <Panel
         id="unit"

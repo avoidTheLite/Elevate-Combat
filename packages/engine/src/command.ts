@@ -298,6 +298,23 @@ export function transferUnits(
   return { ok: true };
 }
 
+/** One-time explicit price selection for a restored game whose old settings omitted training CP. */
+export function configureCommanderTraining(state: GameState, cpCost: number): StratResult {
+  if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
+  if (foundationHasPending(state))
+    return { ok: false, error: 'Finish the pending foundation event first' };
+  if (state.settings.commanderTrainingCp !== undefined)
+    return { ok: false, error: 'Commander training CP price is already configured' };
+  if (!Number.isSafeInteger(cpCost) || cpCost <= 0)
+    return { ok: false, error: 'Commander training requires a positive whole CP price' };
+  state.settings = { ...state.settings, commanderTrainingCp: cpCost };
+  logStrategic(
+    state,
+    `Commander training price configured: ${cpCost} CP per new commander, including splits`,
+  );
+  return { ok: true };
+}
+
 /**
  * Split units off a holder into a new commander on the nearest free sub-hex in
  * the same main hex. From a garrison the new commander has 0 moves this turn;
@@ -321,12 +338,13 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   const { world } = worldOf(state);
   const cell = freeSubNear(state, world, from!.pos, from!.at);
   if (!cell) return { ok: false, error: 'No free cell in this main hex' };
-  const trainingCp = state.settings.commanderTrainingCp ?? 0;
-  if (
-    !Number.isSafeInteger(trainingCp) ||
-    trainingCp < 0 ||
-    (state.settings.commanderTrainingCp !== undefined && trainingCp === 0)
-  )
+  const trainingCp = state.settings.commanderTrainingCp;
+  if (trainingCp === undefined)
+    return {
+      ok: false,
+      error: 'Configure a commander training CP price before creating a new commander',
+    };
+  if (!Number.isSafeInteger(trainingCp) || trainingCp <= 0)
     return { ok: false, error: 'Invalid commander training CP configuration' };
   if (state.cp[from!.team] < trainingCp)
     return { ok: false, error: `Training a commander costs ${trainingCp} CP` };

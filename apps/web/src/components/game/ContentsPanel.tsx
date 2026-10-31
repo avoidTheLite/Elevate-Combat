@@ -41,6 +41,10 @@ export function ContentsPanel({
   const dispatch = useGameStore((s) => s.dispatch);
   const setUi = useGameStore((s) => s.setUi);
   const [picking, setPicking] = useState(false);
+  const [trainingPrice, setTrainingPrice] = useState('');
+  const enteredTrainingCp = Number(trainingPrice);
+  const validTrainingPrice =
+    trainingPrice.trim() !== '' && Number.isSafeInteger(enteredTrainingCp) && enteredTrainingCp > 0;
 
   const holder = seenHolders(game, view).find((a) => a.id === ui.selectedArmy) ?? null;
   const cap = holder ? holderCapacity(game, holder) : ECONOMY.armyCap;
@@ -83,15 +87,17 @@ export function ContentsPanel({
   const targets = orders ? transferTargets(game, holder.id) : [];
   const noTargetReason = `No holder in reach — transfers need one ${transferRuleText(game)}.`;
   const formBlocked =
-    game.cp[holder.team] < (game.settings.commanderTrainingCp ?? 0)
-      ? `Training a commander costs ${game.settings.commanderTrainingCp} CP`
-      : checked.length === 0
-        ? 'Tick units first'
-        : holder.kind === 'commander' && checked.length >= holder.units.length
-          ? 'Leave at least one unit with the commander'
-          : checked.length > ECONOMY.armyCap
-            ? `A commander holds at most ${ECONOMY.armyCap} units`
-            : null;
+    game.settings.commanderTrainingCp === undefined
+      ? 'Choose a commander training CP price first'
+      : game.cp[holder.team] < (game.settings.commanderTrainingCp ?? 0)
+        ? `Training a commander costs ${game.settings.commanderTrainingCp} CP`
+        : checked.length === 0
+          ? 'Tick units first'
+          : holder.kind === 'commander' && checked.length >= holder.units.length
+            ? 'Leave at least one unit with the commander'
+            : checked.length > ECONOMY.armyCap
+              ? `A commander holds at most ${ECONOMY.armyCap} units`
+              : null;
 
   const transfer = (to: Army): void => {
     if (dispatch({ type: 'transferUnits', fromId: holder.id, toId: to.id, unitIds: checked })) {
@@ -173,6 +179,41 @@ export function ContentsPanel({
           })}
         </ul>
       )}
+      {orders &&
+        game.settings.commanderTrainingCp === undefined &&
+        holder.building !== 'temporary' && (
+          <div
+            role="region"
+            aria-label="Configure commander training"
+            className="flex flex-col gap-2"
+          >
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              This game has no commander training price. Existing commanders keep their state. Set a
+              positive whole CP price before creating any new commander, including a split.
+            </p>
+            <label className="flex flex-col gap-1 text-[10px]">
+              Commander training price (CP)
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={trainingPrice}
+                onChange={(event) => setTrainingPrice(event.target.value)}
+                className="w-full min-w-0 border border-[hsl(var(--border-bright))] bg-transparent p-1"
+              />
+            </label>
+            <Button
+              size="sm"
+              disabled={!validTrainingPrice}
+              onClick={() => {
+                if (validTrainingPrice)
+                  dispatch({ type: 'configureCommanderTraining', cpCost: enteredTrainingCp });
+              }}
+            >
+              Set training price
+            </Button>
+          </div>
+        )}
       {orders && holder.units.length > 0 && (
         <>
           <div className="flex gap-2">

@@ -156,7 +156,11 @@ function decide(state: GameState): GameAction {
       const unitIds = garrison.units.slice(0, n).map((u) => u.id);
       return { type: 'transferUnits', fromId: garrison.id, toId: spent.id, unitIds };
     }
-    if (spare >= 4 && state.cp[team] >= (state.settings.commanderTrainingCp ?? 0)) {
+    if (
+      spare >= 4 &&
+      state.settings.commanderTrainingCp !== undefined &&
+      state.cp[team] >= state.settings.commanderTrainingCp
+    ) {
       const unitIds = garrison.units.slice(0, Math.min(spare, ECONOMY.armyCap)).map((u) => u.id);
       if (freeSubNear(state, world, garrison.pos, garrison.at))
         return { type: 'formCommander', fromId: garrison.id, unitIds };

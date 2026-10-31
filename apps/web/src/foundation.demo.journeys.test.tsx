@@ -50,14 +50,14 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / UC-002: prepared scenarios in normal s
       costs: { capture: 10000, raze: 9999 },
     });
     expect(state.infrastructure!.capture.pending!.candidates).toHaveLength(3);
-    // Starting 20 plus five normal 5-CP Home-HQ payments; no demo resource grant.
-    expect(state.cp.A).toBe(45);
+    // Starting 20 + five 5-CP payments − two confirmed 11-CP commander splits.
+    expect(state.cp.A).toBe(23);
     const owners = state.infrastructure!.capture.nodes.map((node) => node.owner);
     for (const button of screen.getAllByRole('button', { name: /Do nothing .* \(0 CP\)/ }))
       fireEvent.click(button);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm all choices' }));
     const next = useGameStore.getState().game!;
-    expect(next.cp.A).toBe(45);
+    expect(next.cp.A).toBe(23);
     expect(next.infrastructure!.capture.pending).toBeNull();
     expect(next.infrastructure!.capture.nodes.map((node) => node.owner)).toEqual(owners);
     expect(next.phase).toBe('strategic');

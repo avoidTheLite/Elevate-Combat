@@ -3,7 +3,7 @@ import type { Era, RulesComparison } from '@iron-ridge/engine';
 import { STANDARD_SCENARIOS, unitsForEra } from '@iron-ridge/engine';
 import type { CompareMessage } from '../../balance/compare.ts';
 import { isEmptyRules, normalizeRules, rulesChangeCount } from '../../balance/draft.ts';
-import { useBalanceStore, withActiveRules } from '../../balance/store.ts';
+import { newCampaignProblem, useBalanceStore } from '../../balance/store.ts';
 import type { ComparisonJob } from '../../balance/worker.ts';
 import { startComparison } from '../../balance/worker.ts';
 import { cn } from '../../lib/utils.ts';
@@ -60,7 +60,13 @@ function TestPanel(): React.ReactElement {
   const job = useRef<ComparisonJob | null>(null);
   const seq = useRef(0);
 
-  useEffect(() => () => job.current?.cancel(), []);
+  useEffect(
+    () => () => {
+      ++seq.current;
+      job.current?.cancel();
+    },
+    [],
+  );
 
   const run = (): void => {
     job.current?.cancel();
@@ -104,6 +110,7 @@ function TestPanel(): React.ReactElement {
   };
 
   const cancel = (): void => {
+    ++seq.current;
     job.current?.cancel();
     job.current = null;
     setTest((t) => ({ ...t, running: false, current: null, error: 'Cancelled' }));
@@ -227,6 +234,8 @@ export function BalanceLab(): React.ReactElement {
   const clearActive = useBalanceStore((s) => s.clearActive);
   const resetDraft = useBalanceStore((s) => s.resetDraft);
   const importJson = useBalanceStore((s) => s.importJson);
+  const setupError = useBalanceStore((s) => s.setupError);
+  const setupSelection = useBalanceStore((s) => s.setupSelection);
   const newGame = useGameStore((s) => s.newGame);
   const [era, setEra] = useState<Era>(() => useBalanceStore.getState().setup.era);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string[] } | null>(null);
@@ -251,10 +260,26 @@ export function BalanceLab(): React.ReactElement {
   };
 
   const applyAndPlay = (): void => {
-    applyAll();
-    const setup = useBalanceStore.getState().setup;
-    newGame(withActiveRules(setup));
-    closeLab();
+    const { setup, setupError, draft } = useBalanceStore.getState();
+    const { rules: _previousRules, ...baseSetup } = setup;
+    void _previousRules;
+    const candidate = normalizeRules(draft);
+    const effective = isEmptyRules(candidate) ? baseSetup : { ...baseSetup, rules: candidate };
+    const problem = setupError ?? newCampaignProblem(effective);
+    if (problem) {
+      setNotice({ tone: 'err', text: [problem] });
+      return;
+    }
+    try {
+      applyAll();
+      newGame(effective);
+      closeLab();
+    } catch (error) {
+      setNotice({
+        tone: 'err',
+        text: [error instanceof Error ? error.message : 'Could not start selected campaign'],
+      });
+    }
   };
 
   const onImport = async (file: File | undefined): Promise<void> => {
@@ -310,7 +335,12 @@ export function BalanceLab(): React.ReactElement {
         <Button size="sm" onClick={doApply} disabled={!draftDiffers}>
           APPLY ALL
         </Button>
-        <Button size="sm" onClick={applyAndPlay}>
+        <Button
+          size="sm"
+          onClick={applyAndPlay}
+          disabled={setupError !== null}
+          title={setupError ?? undefined}
+        >
           APPLY &amp; NEW GAME
         </Button>
         <Button
@@ -362,6 +392,20 @@ export function BalanceLab(): React.ReactElement {
         )}
       </div>
 
+      {setupError && (
+        <p
+          role="alert"
+          className="text-[11px] border border-[hsl(var(--warning))] p-2 text-[hsl(var(--warning))]"
+        >
+          {setupSelection?.campaignMode === 'advanced'
+            ? 'Advanced seeded nodes'
+            : setupSelection?.campaignMode === 'simple'
+              ? 'Simple nodes'
+              : 'Campaign'}{' '}
+          cannot start yet: {setupError} Return to setup to complete it. Lab rule editing and tests
+          remain available.
+        </p>
+      )}
       {unsaved > 0 && (
         <div className="text-[10px] text-[hsl(var(--warning))]" data-testid="unsaved-warning">
           ● {unsaved} card(s) have unsaved edits — press SAVE on each card to include them in the

@@ -13,27 +13,42 @@ export function startComparison(
   onMessage: (m: CompareMessage) => void,
 ): ComparisonJob {
   if (typeof Worker !== 'undefined') {
-    const worker = new Worker(new URL('./balance.worker.ts', import.meta.url), { type: 'module' });
+    let worker: Worker | null = null;
     let finished = false;
-    worker.onmessage = (e: MessageEvent<CompareMessage>) => {
-      if (e.data.id !== req.id) return;
-      if (e.data.type === 'done' || e.data.type === 'error') {
-        finished = true;
-        worker.terminate();
-      }
-      onMessage(e.data);
-    };
-    worker.onerror = (e) => {
-      if (finished) return;
+    const stop = (): void => {
       finished = true;
-      worker.terminate();
-      onMessage({ type: 'error', id: req.id, message: e.message || 'Worker failed' });
+      worker?.terminate();
     };
-    worker.postMessage(req);
+    try {
+      worker = new Worker(new URL('./balance.worker.ts', import.meta.url), { type: 'module' });
+      worker.onmessage = (e: MessageEvent<CompareMessage>) => {
+        if (finished || e.data.id !== req.id) return;
+        if (e.data.type === 'done' || e.data.type === 'error') stop();
+        onMessage(e.data);
+      };
+      worker.onerror = (e) => {
+        e.preventDefault();
+        if (finished) return;
+        stop();
+        onMessage({ type: 'error', id: req.id, message: e.message || 'Worker failed' });
+      };
+      worker.onmessageerror = () => {
+        if (finished) return;
+        stop();
+        onMessage({ type: 'error', id: req.id, message: 'Worker response could not be read' });
+      };
+      worker.postMessage(req);
+    } catch (error) {
+      stop();
+      onMessage({
+        type: 'error',
+        id: req.id,
+        message: error instanceof Error ? error.message : 'Worker could not start',
+      });
+    }
     return {
       cancel: () => {
-        finished = true;
-        worker.terminate();
+        if (!finished) stop();
       },
     };
   }

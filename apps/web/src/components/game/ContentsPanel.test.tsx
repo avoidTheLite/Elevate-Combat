@@ -116,8 +116,39 @@ describe('ContentsPanel', () => {
     expect(useGameStore.getState().ui.checkedUnits).toEqual([]);
   });
 
+  it('requires an explicit one-time price in a legacy game before creating another commander', () => {
+    const s = withRecruits(strategicGame(true), 2);
+    const g = alphaGarrison(s);
+    load(s, g.id);
+    render(<Harness />);
+    const beforeCp = game().cp.A;
+    fireEvent.click(screen.getByLabelText(`select ${g.units[0]!.label}`));
+    expect(screen.getByRole('button', { name: /new commander/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Set training price' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '0' },
+    });
+    expect(screen.getByRole('button', { name: 'Set training price' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '13' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Set training price' }));
+    expect(game().settings.commanderTrainingCp).toBe(13);
+    expect(game().cp.A).toBe(beforeCp);
+    expect(game().armies.map((holder) => holder.id)).toEqual(s.armies.map((holder) => holder.id));
+    expect(
+      screen.queryByRole('region', { name: 'Configure commander training' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'NEW COMMANDER (−13 CP)' }));
+    expect(game().cp.A).toBe(beforeCp - 13);
+    expect(
+      game().armies.filter((holder) => holder.kind === 'commander' && holder.team === 'A'),
+    ).toHaveLength(2);
+  });
+
   it('forms a new commander from the garrison and selects it', () => {
     const s = withRecruits(strategicGame(true), 3);
+    s.settings.commanderTrainingCp = 11;
     const g = alphaGarrison(s);
     load(s, g.id);
     render(<Harness />);

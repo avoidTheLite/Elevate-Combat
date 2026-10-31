@@ -9,19 +9,23 @@ export function RoadRepairPanel({
   game,
   mainHex,
   canAct,
+  engineerUnitId,
 }: {
   game: GameState;
   mainHex: string | null;
   canAct: boolean;
+  engineerUnitId?: string | null;
 }): React.ReactElement | null {
   const dispatch = useGameStore((state) => state.dispatch);
   const [selectedId, setSelectedId] = useState('');
   const options = useMemo(
     () =>
       campaignRoadRepairOptions(game).filter(
-        (option) => mainHex === null || option.mainHex === mainHex,
+        (option) =>
+          (mainHex === null || option.mainHex === mainHex) &&
+          (engineerUnitId === undefined || option.engineerUnitId === engineerUnitId),
       ),
-    [game, mainHex],
+    [game, mainHex, engineerUnitId],
   );
   if (options.length === 0) return null;
   const selected = options.find((option) => option.request?.requestId === selectedId);
@@ -30,6 +34,8 @@ export function RoadRepairPanel({
       <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
         Repairing one damaged road section spends its quoted CP and one engineer action. It does not
         use a node building operation.
+        {game.phase === 'battle' &&
+          ' In battle it also spends 1 ACT and ends movement. Tactical rounds and reload do not refresh the strategic engineer action.'}
       </p>
       <label className="text-[10px] flex flex-col gap-1">
         <span>Road repair order</span>
@@ -76,7 +82,8 @@ export function RoadRepairPanel({
                 setSelectedId('');
             }}
           >
-            Repair road ({selected.cpCost} CP)
+            Repair road ({game.phase === 'battle' ? '1 ACT · ' : ''}
+            {selected.cpCost} CP)
           </Button>
         </>
       )}

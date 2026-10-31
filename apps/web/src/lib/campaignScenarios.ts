@@ -20,6 +20,7 @@ export function configurationDocument(settings: GameSettings): CampaignScenarioD
       'campaign-configuration-v1',
       'commander-training-cp-v1',
       ...(settings.infrastructure ? ['infrastructure-nodes-v1'] : []),
+      ...(settings.infrastructure?.roads?.length ? ['tactical-road-repair-v1'] : []),
       ...(settings.infrastructure?.nodes.placement?.mode === 'advanced' ? ['seeded-nodes-v1'] : []),
     ],
     settings,
@@ -43,6 +44,7 @@ export function parseCampaignConfiguration(text: string): GameSettings {
     'commander-training-cp-v1',
     'infrastructure-nodes-v1',
     'seeded-nodes-v1',
+    'tactical-road-repair-v1',
   ]);
   if (
     doc.requiredCodeCapabilities !== undefined &&

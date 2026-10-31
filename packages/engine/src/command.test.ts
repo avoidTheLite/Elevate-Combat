@@ -51,6 +51,7 @@ function game(over: Partial<GameSettings> = {}): GameState {
   return createGame({
     ...defaultSettings(),
     grid: { mainCols: 5, mainRows: 3, subRadius: 2 },
+    commanderTrainingCp: 11,
     controllers: { A: 'human', B: 'human' },
     fog: false,
     ...over,
@@ -888,6 +889,7 @@ describe('AI on the command layer', () => {
       era: 'medieval',
       seed: 7,
       grid: { mainCols: 5, mainRows: 3, subRadius: 2 },
+      commanderTrainingCp: 11,
       controllers: { A: 'ai', B: 'ai' },
     });
     const { world } = worldOf(s);

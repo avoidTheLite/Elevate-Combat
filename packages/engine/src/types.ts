@@ -153,6 +153,8 @@ export interface Battle {
   endReason: string | null;
   /** Annex damage is tactical immediately and commits to nodes with the battle outcome. */
   ruinedInfrastructureBuildingIds?: string[];
+  /** Working repairs: durable engineering receipts are spent immediately; road state commits with battle. */
+  repairedInfrastructureRoads?: { roadId: string; requestId: string }[];
   /** Explicit withdrawal event; outcome processing never infers it from prose or winner. */
   withdrawnTeam?: Team;
   departedUnitIds?: string[];
@@ -177,7 +179,7 @@ export interface GameSettings {
   controllers: Record<Team, Controller>;
   fog: boolean;
   battleRounds: number;
-  /** Positive CP cost per newly formed commander. Absent preserves legacy saved rules. */
+  /** Positive CP cost per newly formed commander, including splits. Absence preserves old save restoration but requires explicit price selection before NEW training. */
   commanderTrainingCp?: number;
   /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
   battleObjective?: Partial<BattleObjective>;

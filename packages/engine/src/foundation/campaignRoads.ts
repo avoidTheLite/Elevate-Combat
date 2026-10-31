@@ -1,7 +1,9 @@
 import { buildWorld } from '../grid.ts';
 import { hexDistance, parseKey } from '../hex.ts';
 import { withRules } from '../rules.ts';
-import type { GameState } from '../types.ts';
+import type { GameState, Team } from '../types.ts';
+import { workingCampaignRoads, validateCampaignRoadRepairState } from './campaignRoadState.ts';
+export { workingCampaignRoads, validateCampaignRoadRepairState } from './campaignRoadState.ts';
 import { unitType } from '../units.ts';
 import { foundationHasPending } from './campaign.ts';
 import { applyFoundationWork } from './workLedger.ts';
@@ -18,6 +20,9 @@ export interface CampaignRoadRepairRequest {
 export type CampaignRoadRepairResult =
   | { readonly ok: true; readonly replayed: boolean; readonly receipt: FoundationWorkReceipt }
   | { readonly ok: false; readonly error: string };
+
+const repairTeam = (state: GameState): Team =>
+  state.phase === 'battle' && state.battle ? state.battle.active : state.active;
 
 const validId = (value: unknown): value is string => typeof value === 'string' && !!value.trim();
 const whole = (value: unknown): value is number =>
@@ -61,18 +66,21 @@ export function applyCampaignRoadRepair(
           return { ok: false, error: 'Request ID belongs to different work' };
         return { ok: true, replayed: true, receipt: previous };
       }
-      if (state.phase !== 'strategic')
-        return { ok: false, error: 'Road repair requires the strategic phase' };
+      const tactical = state.phase === 'battle' && state.battle?.phase === 'combat';
+      if (state.phase !== 'strategic' && !tactical)
+        return { ok: false, error: 'Road repair requires strategy or active tactical combat' };
+      const invalidRepairs = validateCampaignRoadRepairState(state);
+      if (invalidRepairs) return { ok: false, error: invalidRepairs };
       if (foundationHasPending(state) || f.clock.pendingTurnStart !== null)
         return {
           ok: false,
           error: 'Resolve pending turn, capture, stationing or free shots first',
         };
-      const team = state.active;
+      const team = repairTeam(state);
       if (
         request.ownerTurnId !== f.ownerTurns[team] ||
         f.clock.ownerCycle[team] !== request.ownerTurnId ||
-        !f.clock.startedCycles.includes(request.ownerTurnId)
+        (!tactical && !f.clock.startedCycles.includes(request.ownerTurnId))
       )
         return { ok: false, error: 'Road repair must use the current owner turn' };
       if (!whole(f.configuration.roadRepairCp))
@@ -87,7 +95,7 @@ export function applyCampaignRoadRepair(
         f.capture.work.commandPoints.B !== state.cp.B
       )
         return { ok: false, error: 'CP snapshot changed; refresh infrastructure first' };
-      const roads = f.supply.roads.filter((road) => road.id === request.roadId);
+      const roads = workingCampaignRoads(state).filter((road) => road.id === request.roadId);
       if (roads.length !== 1) return { ok: false, error: 'Unknown or ambiguous road section' };
       const road = roads[0];
       if (road.damaged !== true) return { ok: false, error: 'Road section is not damaged' };
@@ -103,9 +111,44 @@ export function applyCampaignRoadRepair(
         )
       )
         return { ok: false, error: 'Road section has invalid MainHex-local geometry' };
-      const engineerHolder = state.armies.find((holder) =>
-        holder.units.some((unit) => unit.id === request.engineerUnitId),
-      );
+      const tacticalUnit = tactical
+        ? state.battle!.units.find((unit) => unit.id === request.engineerUnitId)
+        : null;
+      if (tactical) {
+        if (!state.battle!.mains.includes(road.mainHex))
+          return { ok: false, error: 'Road section is outside this battle' };
+        if (
+          !tacticalUnit ||
+          tacticalUnit.hp <= 0 ||
+          !tacticalUnit.pos ||
+          tacticalUnit.team !== team ||
+          !unitType(tacticalUnit.typeId).engineer
+        )
+          return {
+            ok: false,
+            error: 'Tactical repair requires a living friendly deployed engineer',
+          };
+        if (world.subByKey.get(tacticalUnit.pos)?.main !== road.mainHex)
+          return { ok: false, error: 'Engineer must be in this MainHex' };
+        if (tacticalUnit.acted)
+          return { ok: false, error: 'Engineer already used its tactical ACT' };
+      }
+      const holders = tactical
+        ? state
+            .battle!.units.filter((unit) => unit.pos && unit.hp > 0)
+            .map((unit) => ({
+              id: `battle-holder:${unit.id}`,
+              team: unit.team,
+              kind: unit.stationed ? ('garrison' as const) : ('commander' as const),
+              at: world.subByKey.get(unit.pos!)!.main,
+              units: [{ id: unit.id, typeId: unit.typeId, hp: unit.hp, label: unit.label }],
+            }))
+        : state.armies;
+      const engineerHolder = !tactical
+        ? state.armies.find((holder) =>
+            holder.units.some((unit) => unit.id === request.engineerUnitId),
+          )
+        : null;
       if (engineerHolder && world.subByKey.get(engineerHolder.pos)?.main !== engineerHolder.at)
         return { ok: false, error: 'Engineer holder position/MainHex mismatch' };
       const workRequest: FoundationWorkRequest = {
@@ -132,7 +175,7 @@ export function applyCampaignRoadRepair(
             cpCost: f.configuration.roadRepairCp,
           },
         ],
-        holders: state.armies,
+        holders,
       });
       if (!repaired.ok) return { ok: false, error: repaired.reason };
       if (repaired.replayed) return { ok: true, replayed: true, receipt: repaired.receipt };
@@ -143,10 +186,24 @@ export function applyCampaignRoadRepair(
         supply: {
           ...f.supply,
           roads: f.supply.roads.map((section) =>
-            section.id === road.id ? { ...section, damaged: false } : section,
+            !tactical && section.id === road.id ? { ...section, damaged: false } : section,
           ),
         },
       };
+      if (tactical && tacticalUnit) {
+        tacticalUnit.acted = true;
+        tacticalUnit.mp = 0;
+        state.battle!.repairedInfrastructureRoads = [
+          ...(state.battle!.repairedInfrastructureRoads ?? []),
+          { roadId: road.id, requestId: request.requestId },
+        ];
+        state.battle!.log.push({
+          round: state.battle!.round,
+          team,
+          kind: 'info',
+          text: `${tacticalUnit.label} repairs ${road.id} (1 ACT, ${repaired.receipt.cpSpent} CP, strategic engineer action)`,
+        });
+      }
       return { ok: true, replayed: false, receipt: repaired.receipt };
     } catch (error) {
       return {
@@ -164,10 +221,11 @@ export function constructCampaignRoadRepairRequest(
 ): CampaignRoadRepairRequest {
   const f = state.infrastructure;
   if (!f) throw new Error('Road infrastructure is not initialized');
+  const team = repairTeam(state);
   return {
-    requestId: `road-repair:${JSON.stringify([state.nextId, f.capture.version, f.ownerTurns[state.active], roadId, engineerUnitId])}`,
+    requestId: `road-repair:${JSON.stringify([state.nextId, f.capture.version, f.ownerTurns[team], state.battle?.id ?? null, roadId, engineerUnitId])}`,
     expectedVersion: f.capture.version,
-    ownerTurnId: f.ownerTurns[state.active],
+    ownerTurnId: f.ownerTurns[team],
     roadId,
     engineerUnitId,
   };
@@ -192,9 +250,11 @@ export function quoteCampaignRoadRepair(
 ): CampaignRoadRepairQuote {
   const road = state.infrastructure?.supply?.roads.find((section) => section.id === roadId);
   const cost = state.infrastructure?.configuration?.roadRepairCp;
-  const unit = state.armies
-    .flatMap((holder) => holder.units)
-    .find((candidate) => candidate.id === engineerUnitId);
+  const unit =
+    state.battle?.units.find((candidate) => candidate.id === engineerUnitId) ??
+    state.armies
+      .flatMap((holder) => holder.units)
+      .find((candidate) => candidate.id === engineerUnitId);
   let request: CampaignRoadRepairRequest | null = null;
   try {
     request = constructCampaignRoadRepairRequest(state, roadId, engineerUnitId);
@@ -225,21 +285,35 @@ export function quoteCampaignRoadRepair(
 
 /** Disabled missing/spent-engineer reasons remain visible; map assets are never invented. */
 export function campaignRoadRepairOptions(state: GameState): CampaignRoadRepairQuote[] {
+  const world = buildWorld(state.settings.grid);
   return withRules(state.settings.rules, () =>
-    (state.infrastructure?.supply?.roads ?? [])
-      .filter((road) => road.damaged)
+    workingCampaignRoads(state)
+      .filter(
+        (road) =>
+          road.damaged && (state.phase !== 'battle' || state.battle?.mains.includes(road.mainHex)),
+      )
       .flatMap((road) => {
-        const engineers = state.armies
-          .filter((holder) => holder.team === state.active && holder.at === road.mainHex)
-          .flatMap((holder) =>
-            holder.units.filter((unit) => {
-              try {
-                return unit.hp > 0 && unitType(unit.typeId).engineer === true;
-              } catch {
-                return false;
-              }
-            }),
-          );
+        const engineers =
+          state.phase === 'battle' && state.battle
+            ? state.battle.units.filter(
+                (unit) =>
+                  unit.team === state.battle!.active &&
+                  unit.hp > 0 &&
+                  unit.pos &&
+                  world.subByKey.get(unit.pos)?.main === road.mainHex &&
+                  unitType(unit.typeId).engineer,
+              )
+            : state.armies
+                .filter((holder) => holder.team === state.active && holder.at === road.mainHex)
+                .flatMap((holder) =>
+                  holder.units.filter((unit) => {
+                    try {
+                      return unit.hp > 0 && unitType(unit.typeId).engineer === true;
+                    } catch {
+                      return false;
+                    }
+                  }),
+                );
         if (engineers.length)
           return engineers.map((unit) => quoteCampaignRoadRepair(state, road.id, unit.id));
         const cost = state.infrastructure?.configuration?.roadRepairCp;
@@ -257,4 +331,18 @@ export function campaignRoadRepairOptions(state: GameState): CampaignRoadRepairQ
         ];
       }),
   );
+}
+
+/** Write final operational road state once from the real battle; CP and engineering are never replayed. */
+export function commitCampaignRoadRepairs(
+  state: GameState,
+): { ok: true } | { ok: false; error: string } {
+  if (!state.battle || state.battle.phase !== 'over')
+    return { ok: false, error: 'Road repairs commit from a completed battle' };
+  const invalid = validateCampaignRoadRepairState(state);
+  if (invalid) return { ok: false, error: invalid };
+  if (!state.battle.repairedInfrastructureRoads?.length) return { ok: true };
+  const f = state.infrastructure!;
+  state.infrastructure = { ...f, supply: { ...f.supply!, roads: workingCampaignRoads(state) } };
+  return { ok: true };
 }

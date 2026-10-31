@@ -17,6 +17,7 @@ import {
   validateGameState,
   worldOf,
   COMMAND,
+  ECONOMY,
 } from '@iron-ridge/engine';
 import type { Army, CampaignNodeSite, Era, GameAction, GameState, Team } from '@iron-ridge/engine';
 
@@ -124,6 +125,16 @@ function captureStart(state: GameState): GameState {
   state = prepareEnemySites(state, sites);
   // Split the actual starting army using normal unit-holder actions; no troops or CP are minted.
   for (let index = 0; index < 2; index++) {
+    const trainingCp = state.settings.commanderTrainingCp!;
+    for (let attempts = 0; state.cp.A < trainingCp && attempts < ECONOMY.maxTurns; attempts++) {
+      if (state.phase !== 'strategic') break;
+      state = step(state, { type: 'endTurn' });
+      state = step(state, { type: 'endTurn' });
+    }
+    if (state.phase !== 'strategic' || state.cp.A < trainingCp)
+      throw new Error(
+        'Training price is too high to prepare this scenario within the campaign turn limit',
+      );
     const source = commander(state, 'A');
     state = step(state, {
       type: 'formCommander',
@@ -242,11 +253,14 @@ export function createFoundationDemoScenario(
   era: Era = 'ww2',
   commanderTrainingCp?: number,
 ): GameState {
+  if (!Number.isSafeInteger(commanderTrainingCp) || (commanderTrainingCp ?? 0) <= 0)
+    throw new Error('Choose a positive whole commander training CP price for this scenario');
   const configuration = createFoundationPlaytestConfiguration(capture, raze);
   const label = FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === id)!.label;
   let state = createGame({
     ...defaultSettings(),
     era,
+    commanderTrainingCp,
     grid: { mainCols: 3, mainRows: 3, subRadius: 2 },
     seed: 1,
     fog: false,
@@ -263,7 +277,6 @@ export function createFoundationDemoScenario(
       : id === 'capture-move'
         ? captureMove(state)
         : annexRaid(state);
-  if (commanderTrainingCp !== undefined) state.settings.commanderTrainingCp = commanderTrainingCp;
   const errors = validateGameState(state);
   if (errors.length) throw new Error(`Prepared demo: ${errors.join('; ')}`);
   const loaded = deserializeSave(serializeSave(state, `Prepared demo: ${label}`));

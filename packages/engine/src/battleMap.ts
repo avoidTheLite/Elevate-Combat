@@ -15,6 +15,9 @@ export interface BattleContext {
   cells: Set<HexKey>;
   heightOf: HeightFn;
   unitAt: Map<HexKey, BattleUnit>;
+  /** Configured infrastructure road benefit; absent for Classic and isolated combat fixtures. */
+  roadEdges?: ReadonlySet<string>;
+  roadMultiplier?: number;
 }
 
 /** Replaces procedural terrain for battle contexts (simulator only; default off). */
@@ -82,4 +85,8 @@ export function deploymentZone(ctx: BattleContext, battle: Battle, team: Team): 
   return ctx.world.mainByKey
     .get(own)!
     .subKeys.filter((k) => hexDistance(parseKey(k), otherCentre) > n + DEPLOY_BUFFER);
+}
+
+export function roadEdgeKey(a: HexKey, b: HexKey): string {
+  return JSON.stringify(a < b ? [a, b] : [b, a]);
 }

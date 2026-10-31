@@ -10,6 +10,7 @@ import type { BattleContext } from '../battleMap.ts';
 import { deploymentZone, h, liveUnits, refreshOccupancy } from '../battleMap.ts';
 import { previewAttack } from '../combat.ts';
 import { campaignGarrisonTargetOptions } from '../foundation/campaignGarrisons.ts';
+import { campaignRoadRepairOptions } from '../foundation/campaignRoads.ts';
 import { campaignRazeTileOptions } from '../foundation/campaignRaze.ts';
 import type { FreeShotPrompt } from '../foundation/freeShots.ts';
 import { reachable } from '../movement.ts';
@@ -249,6 +250,12 @@ function decide(state: GameState): GameAction {
     // Fire first if a good shot exists from here.
     const shotHere = bestShot(ctx, battle, u, enemies);
     if (!shotHere) {
+      if (t.engineer) {
+        const road = campaignRoadRepairOptions(state).find(
+          (quote) => quote.allowed && quote.engineerUnitId === u.id,
+        );
+        if (road?.request) return { type: 'repairRoad', request: road.request };
+      }
       const target = campaignRazeTileOptions(state, u.id).find((quote) => quote.eligible);
       if (target) return { type: 'razeTile', unitId: u.id, buildingId: target.buildingId };
     }

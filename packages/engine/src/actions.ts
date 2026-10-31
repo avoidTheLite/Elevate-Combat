@@ -34,7 +34,14 @@ import {
   extractFromBattle,
   setUp,
 } from './tactical.ts';
-import { engage, formCommander, moveArmy, moveCommander, transferUnits } from './command.ts';
+import {
+  configureCommanderTraining,
+  engage,
+  formCommander,
+  moveArmy,
+  moveCommander,
+  transferUnits,
+} from './command.ts';
 import type { GameState } from './types.ts';
 import { withRules } from './rules.ts';
 import type { CampaignNodeAction } from './foundation/campaignNodes.ts';
@@ -67,6 +74,7 @@ export type GameAction =
   | { type: 'engage'; armyId: string; targetId: string }
   | { type: 'transferUnits'; fromId: string; toId: string; unitIds: string[] }
   | { type: 'formCommander'; fromId: string; unitIds: string[] }
+  | { type: 'configureCommanderTraining'; cpCost: number }
   /** V0.9 adapter: `dest` is a main hex (engage there, or step into it). */
   | { type: 'moveArmy'; armyId: string; dest: HexKey }
   | { type: 'recruit'; typeId: string; nodeId?: string }
@@ -143,6 +151,9 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
       break;
     case 'transferUnits':
       res = transferUnits(state, action.fromId, action.toId, action.unitIds);
+      break;
+    case 'configureCommanderTraining':
+      res = configureCommanderTraining(state, action.cpCost);
       break;
     case 'formCommander':
       res = formCommander(state, action.fromId, action.unitIds);

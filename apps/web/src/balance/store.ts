@@ -10,12 +10,52 @@ import type {
   RulesOverride,
   UnitStatsOverride,
 } from '@iron-ridge/engine';
-import { defaultSettings, validateRulesOverride } from '@iron-ridge/engine';
+import {
+  createGame,
+  defaultSettings,
+  validateGameState,
+  validateFoundationCaptureCosts,
+  validateRulesOverride,
+} from '@iron-ridge/engine';
 import { isEmptyRules, normalizeRules } from './draft.ts';
 
 export const BALANCE_KEY = 'iron-ridge-balance-v1';
 
 export type AppView = 'setup' | 'lab';
+
+/** Setup's unsent form values, retained only when returning from the lab. */
+export interface SetupSelection {
+  settings: GameSettings;
+  mode: 'ai' | 'hotseat' | 'spectate';
+  campaignMode: 'classic' | 'simple' | 'advanced';
+  additionalNodes: number;
+  commanderPrice: string;
+  capturePrice: string;
+  razePrice: string;
+}
+
+/** All playable lab launches use the same validated engine configuration as normal setup. */
+export function newCampaignProblem(settings: GameSettings): string | null {
+  if (
+    !Number.isSafeInteger(settings.commanderTrainingCp) ||
+    (settings.commanderTrainingCp ?? 0) <= 0
+  )
+    return 'Enter a positive whole commander training CP price in setup before starting a game.';
+  try {
+    if (settings.infrastructure) {
+      const priceProblem = validateFoundationCaptureCosts(
+        settings.infrastructure.nodes.captureCosts,
+      );
+      if (priceProblem) return priceProblem;
+    }
+    const errors = validateGameState(createGame(settings));
+    return errors.length ? errors.join('; ') : null;
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : 'The selected campaign configuration is invalid';
+  }
+}
 
 /** Lab is reachable in dev builds, or anywhere with `?lab` in the URL. */
 export function labEnabled(): boolean {
@@ -52,6 +92,10 @@ interface BalanceStore {
   view: AppView;
   /** Setup the lab was opened from — used by "Apply & new game". */
   setup: GameSettings;
+  /** An invalid selected setup must never silently become a Classic launch. */
+  setupError: string | null;
+  setupSelection: SetupSelection | null;
+  clearSetupSelection: () => void;
   /** Applied override (undefined = code baseline). */
   active: RulesOverride | undefined;
   /** Page draft (always normalized; `{}` = baseline). */
@@ -62,7 +106,11 @@ interface BalanceStore {
   dirtyCards: Record<string, true>;
 
   setCardDirty: (id: string, dirty: boolean) => void;
-  openLab: (setup?: GameSettings) => void;
+  openLab: (
+    setup?: GameSettings | null,
+    problem?: string | null,
+    selection?: SetupSelection,
+  ) => void;
   closeLab: () => void;
   /** Commit one unit's override into the draft. Returns validation errors (empty = ok). */
   saveUnit: (typeId: string, override: UnitStatsOverride | undefined) => string[];
@@ -87,6 +135,9 @@ export const useBalanceStore = create<BalanceStore>((set, get) => {
   return {
     view: 'setup',
     setup: defaultSettings(),
+    setupError: newCampaignProblem(defaultSettings()),
+    setupSelection: null,
+    clearSetupSelection: () => set({ setupSelection: null }),
     active,
     draft: structuredClone(active ?? {}),
     draftVersion: 0,
@@ -101,10 +152,16 @@ export const useBalanceStore = create<BalanceStore>((set, get) => {
         return { dirtyCards: next };
       }),
 
-    openLab: (setup) =>
+    openLab: (setup, problem, selection) =>
       set((s) => ({
         view: 'lab',
-        setup: setup ?? s.setup,
+        setup: structuredClone(setup ?? selection?.settings ?? s.setup),
+        setupError:
+          problem ??
+          (setup
+            ? newCampaignProblem(setup)
+            : 'Complete the selected campaign configuration in setup before starting a game.'),
+        setupSelection: selection ? structuredClone(selection) : null,
         // Start editing from what is applied now.
         draft: structuredClone(s.active ?? {}),
         draftVersion: s.draftVersion + 1,
