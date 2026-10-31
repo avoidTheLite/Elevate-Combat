@@ -22,3 +22,4 @@ export * from './sim/index.ts';
 export * from './save.ts';
 export * from './foundation/attributes.ts';
 export * from './foundation/workLedger.ts';
+export * from './foundation/reinforcement.ts';

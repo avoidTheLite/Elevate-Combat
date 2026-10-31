@@ -1,11 +1,20 @@
 import {
   applyFoundationWork,
+  applyReinforcementSpend,
   calculateFoundationIncome,
+  createReinforcementState,
   evaluateBuildingEligibility,
   evaluateFoundationAttribute,
   evaluateFoundationWork,
+  openReinforcementCycle,
+  reinforcementAllowance,
 } from '../src/index.ts';
-import type { FoundationWorkContext, FoundationWorkState } from '../src/index.ts';
+import type {
+  FoundationWorkContext,
+  FoundationWorkState,
+  ReinforcementContext,
+  ReinforcementState,
+} from '../src/index.ts';
 
 // Synthetic fixture configuration; these costs and outputs are not production defaults.
 const context: FoundationWorkContext = {
@@ -153,6 +162,92 @@ const income = calculateFoundationIncome({
     { sourceId: 'building-fixture', kind: 'building', value: 3.8, active: true, eligible: true },
   ],
 });
+const opened = openReinforcementCycle(createReinforcementState(), {
+  expectedVersion: 0,
+  team: 'A',
+  ownerTurnId: 'A-cycle-1',
+  grants: [{ lineageId: 'original-network', capacity: 10 }],
+});
+if (!opened.ok) throw new Error(opened.reason);
+function networkFacts(
+  state: ReinforcementState,
+  networks: ReinforcementContext['networks'],
+  cycle = 'A-cycle-1',
+): ReinforcementContext {
+  return {
+    snapshotVersion: state.version,
+    ownerTurn: { team: 'A', id: cycle },
+    networks,
+  };
+}
+const spentSix = applyReinforcementSpend(
+  opened.state,
+  {
+    requestId: 'initial-six',
+    expectedVersion: opened.state.version,
+    team: 'A',
+    ownerTurnId: 'A-cycle-1',
+    networkId: 'connected-network',
+    units: 6,
+  },
+  networkFacts(opened.state, [
+    { networkId: 'connected-network', lineageId: 'original-network', currentRemaining: 10 },
+  ]),
+);
+if (!spentSix.ok) throw new Error(spentSix.reason);
+const children = [
+  { networkId: 'left-child', lineageId: 'original-network', currentRemaining: 10 },
+  { networkId: 'right-child', lineageId: 'original-network', currentRemaining: 10 },
+];
+function available(
+  state: ReinforcementState,
+  facts: ReinforcementContext,
+  networkId: string,
+): number {
+  const result = reinforcementAllowance(state, facts, networkId);
+  if (!result.ok) throw new Error(result.reason);
+  return result.available;
+}
+const beforeChildSpend = children.map((n) =>
+  available(spentSix.state, networkFacts(spentSix.state, children), n.networkId),
+);
+const childSpend = applyReinforcementSpend(
+  spentSix.state,
+  {
+    requestId: 'left-child-three',
+    expectedVersion: spentSix.state.version,
+    team: 'A',
+    ownerTurnId: 'A-cycle-1',
+    networkId: 'left-child',
+    units: 3,
+  },
+  networkFacts(spentSix.state, children),
+);
+if (!childSpend.ok) throw new Error(childSpend.reason);
+const refreshedChildren = children.map((n) =>
+  n.networkId === 'left-child'
+    ? { ...n, currentRemaining: childSpend.receipt.networkRemainingAfter }
+    : n,
+);
+const afterChildSpend = children.map((n) =>
+  available(childSpend.state, networkFacts(childSpend.state, refreshedChildren), n.networkId),
+);
+const reconnect = networkFacts(childSpend.state, [
+  { networkId: 'reconnected', lineageId: 'original-network', currentRemaining: 14 },
+]);
+const midCycleIncrease = openReinforcementCycle(childSpend.state, {
+  expectedVersion: childSpend.state.version,
+  team: 'A',
+  ownerTurnId: 'A-cycle-1',
+  grants: [{ lineageId: 'original-network', capacity: 14 }],
+});
+const nextCycle = openReinforcementCycle(childSpend.state, {
+  expectedVersion: childSpend.state.version,
+  team: 'A',
+  ownerTurnId: 'A-cycle-2',
+  grants: [{ lineageId: 'original-network', capacity: 14 }],
+});
+if (!nextCycle.ok) throw new Error(nextCycle.reason);
 console.log(
   JSON.stringify(
     {
@@ -165,6 +260,23 @@ console.log(
       modifiedThroughput: attribute.value,
       projectedIncome: income.cp,
       paymentIssued: false,
+      reinforcement: {
+        openingBudget: 10,
+        initialSpend: 6,
+        childrenShareRemainingBefore: beforeChildSpend,
+        childrenShareRemainingAfterOneSpendsThree: afterChildSpend,
+        reconnectedWithHigherCurrentLimit: available(childSpend.state, reconnect, 'reconnected'),
+        midCycleBudgetIncrease: midCycleIncrease.ok ? 'allowed' : midCycleIncrease.code,
+        nextExplicitOwnerCycleAllowance: available(
+          nextCycle.state,
+          networkFacts(
+            nextCycle.state,
+            [{ networkId: 'reconnected', lineageId: 'original-network', currentRemaining: 14 }],
+            'A-cycle-2',
+          ),
+          'reconnected',
+        ),
+      },
     },
     null,
     2,
