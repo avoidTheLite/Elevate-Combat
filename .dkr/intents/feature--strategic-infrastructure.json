@@ -1,6 +1,6 @@
 {
   "product": "Elevate-Combat",
-  "dkr_sha": "ffb35e24df81a52b85d0e7b2eba5d4312a007167",
+  "dkr_sha": "b81e23e7fd22526b971b3b4dcb00a7d374d20e45",
   "mode": "amend",
   "refs": [
     "GAMES-ELEVATE-CAMPAIGN-UC-001"
