@@ -1,11 +1,23 @@
 import { useState } from 'react';
 import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
-import { GRID_LIMITS, clusterSize, defaultSettings } from '@iron-ridge/engine';
+import {
+  GRID_LIMITS,
+  clusterSize,
+  createFoundationPlaytestConfiguration,
+  defaultSettings,
+  serializeSave,
+} from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
 import { withActiveRules } from '../../balance/store.ts';
 import { LabEntry } from '../balance/LabEntry.tsx';
 import { LoadList } from './LoadList.tsx';
+import {
+  FOUNDATION_DEMO_SCENARIOS,
+  createFoundationDemoScenario,
+  foundationDemoFocus,
+} from '../../foundation/demoScenarios.ts';
+import type { FoundationDemoSelection } from '../../foundation/demoScenarios.ts';
 
 function NumberField(props: {
   label: string;
@@ -65,14 +77,32 @@ function Choice<T extends string>(props: {
 }
 
 type Mode = 'ai' | 'hotseat' | 'spectate';
+type CampaignMode = 'classic' | 'infrastructure';
 
 export function SetupScreen(): React.ReactElement {
   const newGame = useGameStore((s) => s.newGame);
+  const importSave = useGameStore((s) => s.importSave);
   const loadSaved = useGameStore((s) => s.loadSaved);
   useGameStore((s) => s.saveRev); // re-render when a slot changes (CONTINUE visibility)
   const hasSave = useGameStore((s) => s.hasSave)();
   const [settings, setSettings] = useState<GameSettings>(defaultSettings());
   const [mode, setMode] = useState<Mode>('ai');
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>('classic');
+  const [demoScenario, setDemoScenario] = useState<FoundationDemoSelection>('standard');
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [capturePrice, setCapturePrice] = useState('');
+  const [razePrice, setRazePrice] = useState('');
+  const captureCp = Number(capturePrice);
+  const razeCp = Number(razePrice);
+  const validPrices =
+    capturePrice.trim() !== '' &&
+    razePrice.trim() !== '' &&
+    Number.isSafeInteger(captureCp) &&
+    Number.isSafeInteger(razeCp) &&
+    razeCp > 0 &&
+    captureCp > razeCp;
+  const canStart = campaignMode === 'classic' || validPrices;
+  const prepared = campaignMode === 'infrastructure' && demoScenario !== 'standard';
 
   const g = settings.grid;
   const perMain = clusterSize(g.subRadius);
@@ -87,10 +117,28 @@ export function SetupScreen(): React.ReactElement {
         : mode === 'hotseat'
           ? { A: 'human', B: 'human' }
           : { A: 'ai', B: 'ai' };
-    return { ...settings, controllers };
+    return {
+      ...settings,
+      controllers,
+      ...(campaignMode === 'infrastructure' && validPrices
+        ? { infrastructure: createFoundationPlaytestConfiguration(captureCp, razeCp) }
+        : {}),
+    };
   };
   // Balance-lab overrides (if applied) ride along in settings.rules.
-  const start = (): void => newGame(withActiveRules(configured()));
+  const start = (): void => {
+    if (!canStart) return;
+    setDemoError(null);
+    if (prepared) {
+      try {
+        const game = createFoundationDemoScenario(demoScenario, captureCp, razeCp, settings.era);
+        if (importSave(serializeSave(game, `Prepared demo: ${demoScenario}`)))
+          useGameStore.getState().setUi(foundationDemoFocus(game));
+      } catch (error) {
+        setDemoError(error instanceof Error ? error.message : 'Prepared demo could not start');
+      }
+    } else newGame(withActiveRules(configured()));
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 scanlines">
@@ -115,94 +163,182 @@ export function SetupScreen(): React.ReactElement {
           ]}
           onChange={(era) => setSettings({ ...settings, era })}
         />
-        <Choice<Mode>
-          label="OPPONENT"
-          value={mode}
+        {!prepared && (
+          <Choice<Mode>
+            label="OPPONENT"
+            value={mode}
+            options={[
+              { value: 'ai', label: 'VS AI' },
+              { value: 'hotseat', label: 'HOTSEAT 2P' },
+              { value: 'spectate', label: 'AI vs AI' },
+            ]}
+            onChange={setMode}
+          />
+        )}
+
+        <Choice<CampaignMode>
+          label="CAMPAIGN RULES"
+          value={campaignMode}
           options={[
-            { value: 'ai', label: 'VS AI' },
-            { value: 'hotseat', label: 'HOTSEAT 2P' },
-            { value: 'spectate', label: 'AI vs AI' },
+            { value: 'classic', label: 'CLASSIC' },
+            { value: 'infrastructure', label: 'INFRASTRUCTURE PLAYTEST' },
           ]}
-          onChange={setMode}
+          onChange={setCampaignMode}
         />
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <NumberField
-            label="MAIN COLS"
-            value={g.mainCols}
-            min={GRID_LIMITS.mainCols.min}
-            max={GRID_LIMITS.mainCols.max}
-            onChange={(v) => setGrid({ mainCols: v })}
-          />
-          <NumberField
-            label="MAIN ROWS"
-            value={g.mainRows}
-            min={GRID_LIMITS.mainRows.min}
-            max={GRID_LIMITS.mainRows.max}
-            onChange={(v) => setGrid({ mainRows: v })}
-          />
-          <NumberField
-            label="SUB-GRID RADIUS"
-            value={g.subRadius}
-            min={GRID_LIMITS.subRadius.min}
-            max={GRID_LIMITS.subRadius.max}
-            onChange={(v) => setGrid({ subRadius: v })}
-          />
-        </div>
-        <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-          {g.mainCols}×{g.mainRows} main hexes · {perMain} sub-hexes each · {total.toLocaleString()}{' '}
-          tactical cells. Every main hex is a radius-{g.subRadius} cluster on one shared sub-hex
-          lattice, so sub-hexes line up exactly across every main-hex border.
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <NumberField
-            label="BATTLE ROUND LIMIT"
-            value={settings.battleRounds}
-            min={4}
-            max={20}
-            onChange={(v) => setSettings({ ...settings, battleRounds: v })}
-          />
-          <label className="flex flex-col gap-1 text-[11px]" htmlFor="f-seed">
-            <span className="text-[hsl(var(--muted-foreground))] tracking-widest">MAP SEED</span>
-            <div className="flex gap-2">
-              <input
-                id="f-seed"
-                type="number"
-                value={settings.seed}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    seed: Math.abs(Math.floor(Number(e.target.value) || 0)),
-                  })
-                }
-                className="flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSettings({ ...settings, seed: Math.floor(Math.random() * 1e6) })}
-              >
-                RANDOM
-              </Button>
+        {campaignMode === 'infrastructure' && (
+          <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-3">
+            <p className="text-[11px] text-[hsl(var(--warning))] leading-4">
+              Playtest nodes, supply and stationed garrisons with provisional balance values. Choose
+              the CP prices for Capture Node and Raze Node; Raze Node must be cheaper. Do nothing
+              remains free.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-[11px] flex flex-col gap-1">
+                <span>Capture Node price (CP)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={capturePrice}
+                  onChange={(event) => setCapturePrice(event.target.value)}
+                  className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
+                  required
+                />
+              </label>
+              <label className="text-[11px] flex flex-col gap-1">
+                <span>Raze Node price (CP)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={razePrice}
+                  onChange={(event) => setRazePrice(event.target.value)}
+                  className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
+                  required
+                />
+              </label>
             </div>
-          </label>
-        </div>
+            {!validPrices && (
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                Enter positive whole CP prices, with Raze Node lower than Capture Node, to start
+                this playtest.
+              </p>
+            )}
+            <Choice<FoundationDemoSelection>
+              label="PREPARED DEMO"
+              value={demoScenario}
+              options={FOUNDATION_DEMO_SCENARIOS}
+              onChange={setDemoScenario}
+            />
+            <p className="text-[11px] leading-4">
+              {
+                FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === demoScenario)
+                  ?.description
+              }
+            </p>
+            {prepared && (
+              <p className="text-[10px] text-[hsl(var(--warning))] leading-4">
+                Prepared demo positions, not a completed campaign: 3×3 map, radius 2, seed 1, no fog
+                and two human players. Infrastructure is activated and built through normal actions.
+                CP comes from normal income; your prices are kept exactly. Other tuning is playtest.
+                Standard campaign keeps your map and opponent settings.
+              </p>
+            )}
+          </div>
+        )}
 
-        <label className="flex items-center gap-2 text-[11px] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.fog}
-            onChange={(e) => setSettings({ ...settings, fog: e.target.checked })}
-            className="accent-[hsl(var(--primary))]"
-          />
-          <span className="tracking-widest text-[hsl(var(--muted-foreground))]">
-            FOG OF WAR (LOS-based spotting)
-          </span>
-        </label>
+        {!prepared && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <NumberField
+                label="MAIN COLS"
+                value={g.mainCols}
+                min={GRID_LIMITS.mainCols.min}
+                max={GRID_LIMITS.mainCols.max}
+                onChange={(v) => setGrid({ mainCols: v })}
+              />
+              <NumberField
+                label="MAIN ROWS"
+                value={g.mainRows}
+                min={GRID_LIMITS.mainRows.min}
+                max={GRID_LIMITS.mainRows.max}
+                onChange={(v) => setGrid({ mainRows: v })}
+              />
+              <NumberField
+                label="SUB-GRID RADIUS"
+                value={g.subRadius}
+                min={GRID_LIMITS.subRadius.min}
+                max={GRID_LIMITS.subRadius.max}
+                onChange={(v) => setGrid({ subRadius: v })}
+              />
+            </div>
+            <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
+              {g.mainCols}×{g.mainRows} main hexes · {perMain} sub-hexes each ·{' '}
+              {total.toLocaleString()} tactical cells. Every main hex is a radius-{g.subRadius}{' '}
+              cluster on one shared sub-hex lattice, so sub-hexes line up exactly across every
+              main-hex border.
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <NumberField
+                label="BATTLE ROUND LIMIT"
+                value={settings.battleRounds}
+                min={4}
+                max={20}
+                onChange={(v) => setSettings({ ...settings, battleRounds: v })}
+              />
+              <label className="flex flex-col gap-1 text-[11px]" htmlFor="f-seed">
+                <span className="text-[hsl(var(--muted-foreground))] tracking-widest">
+                  MAP SEED
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    id="f-seed"
+                    type="number"
+                    value={settings.seed}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        seed: Math.abs(Math.floor(Number(e.target.value) || 0)),
+                      })
+                    }
+                    className="flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setSettings({ ...settings, seed: Math.floor(Math.random() * 1e6) })
+                    }
+                  >
+                    RANDOM
+                  </Button>
+                </div>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 text-[11px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.fog}
+                onChange={(e) => setSettings({ ...settings, fog: e.target.checked })}
+                className="accent-[hsl(var(--primary))]"
+              />
+              <span className="tracking-widest text-[hsl(var(--muted-foreground))]">
+                FOG OF WAR (LOS-based spotting)
+              </span>
+            </label>
+          </>
+        )}
+
+        {demoError && (
+          <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
+            {demoError}
+          </p>
+        )}
 
         <div className="flex gap-2 pt-1">
-          <Button size="lg" onClick={start} className="flex-1">
+          <Button size="lg" onClick={start} className="flex-1" disabled={!canStart}>
             START NEW GAME
           </Button>
           {hasSave && (
@@ -211,7 +347,7 @@ export function SetupScreen(): React.ReactElement {
             </Button>
           )}
         </div>
-        <LabEntry settings={configured} />
+        {!prepared && <LabEntry settings={configured} />}
       </div>
 
       <LoadList />

@@ -25,6 +25,7 @@ import {
 import type { StratResult } from './strategic.ts';
 import type { Army, GameState, TransferRule } from './types.ts';
 import { TEAM_NAME } from './types.ts';
+import { campaignNodeCapacity, foundationHasPending } from './foundation/campaign.ts';
 
 function findHolder(state: GameState, id: string): Army | undefined {
   return state.armies.find((a) => a.id === id);
@@ -38,6 +39,8 @@ function subDistance(world: World, a: HexKey, b: HexKey): number {
 
 function ordersCheck(state: GameState, army: Army | undefined): StratResult {
   if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
+  if (foundationHasPending(state))
+    return { ok: false, error: 'Finish the pending foundation event first' };
   if (!army) return { ok: false, error: 'No such holder' };
   if (army.team !== state.active) return { ok: false, error: 'Not your holder' };
   return { ok: true };
@@ -51,7 +54,7 @@ function ordersCheck(state: GameState, army: Army | undefined): StratResult {
  */
 export function commanderReach(state: GameState, army: Army): Map<HexKey, number> {
   const out = new Map<HexKey, number>([[army.pos, 0]]);
-  if (army.kind !== 'commander' || army.movesLeft <= 0) return out;
+  if (foundationHasPending(state) || army.kind !== 'commander' || army.movesLeft <= 0) return out;
   const { world } = worldOf(state);
   const blocked = occupiedSubs(state, army.id);
   let frontier = [army.pos];
@@ -180,9 +183,43 @@ export function transferRule(state: GameState): TransferRule {
   };
 }
 
-function capOf(army: Army): number {
-  return army.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap;
+function capOf(state: GameState, army: Army): number {
+  if (
+    army.kind === 'garrison' &&
+    state.infrastructure &&
+    (army.building === 'node' || army.building === 'hq')
+  ) {
+    const home =
+      army.building === 'hq'
+        ? state.infrastructure.sites.find(
+            (site) => site.homeTeam === army.team && site.centerSubHex === army.pos,
+          )
+        : undefined;
+    const node = state.infrastructure.capture.nodes.find(
+      (candidate) => candidate.id === (army.building === 'hq' ? home?.nodeId : army.nodeId),
+    );
+    if (
+      !node ||
+      node.owner !== army.team ||
+      node.mainHex !== army.at ||
+      node.centerSubHex !== army.pos
+    )
+      return 0;
+    try {
+      return campaignNodeCapacity(state, node.id, 'housing');
+    } catch {
+      return 0;
+    }
+  }
+  return army.kind === 'garrison'
+    ? army.building === 'temporary'
+      ? 1
+      : COMMAND.garrisonCap
+    : ECONOMY.armyCap;
 }
+
+/** Shared UI/engine quote: temporary tiles, configured node/HQ housing and classic limits. */
+export const holderCapacity = capOf;
 
 /**
  * May `count` units pass from one holder to another? Same active team, strategic
@@ -199,14 +236,18 @@ export function canTransfer(
   if (!chk.ok) return chk;
   if (!to || to.id === from!.id) return { ok: false, error: 'No receiving holder' };
   if (to.team !== from!.team) return { ok: false, error: 'Cannot transfer to the enemy' };
+  if (from!.kind === 'garrison' && from!.building === 'temporary' && to.kind !== 'commander')
+    return { ok: false, error: 'Only a friendly commander can retrieve a temporary garrison' };
   const rule = transferRule(state);
   const { world } = worldOf(state);
   if (rule.sameMainHex && from!.at !== to.at)
     return { ok: false, error: 'Holders must share a main hex' };
   if (rule.radius !== null && subDistance(world, from!.pos, to.pos) > rule.radius)
     return { ok: false, error: `Holders must be within ${rule.radius} sub-hexes` };
-  if (to.units.length + count > capOf(to))
-    return { ok: false, error: `Receiver would exceed ${capOf(to)} units` };
+  if (to.units.length + count > capOf(state, to))
+    return { ok: false, error: `Receiver would exceed ${capOf(state, to)} units` };
+  if (to.kind === 'garrison' && to.building === 'temporary')
+    return { ok: false, error: 'Temporary garrisons require deliberate post-battle stationing' };
   return { ok: true };
 }
 
@@ -225,7 +266,10 @@ function pickUnits(from: Army, unitIds: string[]): StratResult {
 }
 
 function removeEmpty(state: GameState, army: Army): void {
-  if (army.kind === 'commander' && army.units.length === 0)
+  if (
+    (army.kind === 'commander' || (army.kind === 'garrison' && army.building === 'temporary')) &&
+    army.units.length === 0
+  )
     state.armies = state.armies.filter((a) => a.id !== army.id);
 }
 
@@ -263,6 +307,11 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   const from = findHolder(state, fromId);
   const chk = ordersCheck(state, from);
   if (!chk.ok) return chk;
+  if (from!.kind === 'garrison' && from!.building === 'temporary')
+    return {
+      ok: false,
+      error: 'A commander must retrieve stationed troops before they can form a commander',
+    };
   const pick = pickUnits(from!, unitIds);
   if (!pick.ok) return pick;
   if (from!.kind === 'commander' && unitIds.length >= from!.units.length)

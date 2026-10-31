@@ -29,6 +29,26 @@ import type {
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { withRules } from './rules.ts';
 import { STARTING_ARMY, unitType } from './units.ts';
+import {
+  initializeCampaignFoundation,
+  campaignOwnedCount,
+  campaignIncome,
+  beginCampaignOwnerTurn,
+  resumeCampaignTurnStart,
+  syncCampaignClaims,
+  foundationHasPending,
+  refreshCampaignNetworks,
+} from './foundation/campaign.ts';
+import {
+  prepareCampaignCapture,
+  refreshCampaignNodeSnapshot,
+  campaignBuildingData,
+} from './foundation/campaignNodes.ts';
+import { prepareCampaignStationing } from './foundation/campaignGarrisons.ts';
+import { applyFoundationWork } from './foundation/workLedger.ts';
+import { recruitCampaignUnit } from './foundation/campaignRecruitment.ts';
+import { commitCampaignRazeTiles } from './foundation/campaignRaze.ts';
+import { applyCampaignWithdrawal } from './foundation/campaignWithdrawal.ts';
 
 export const ENGINE_VERSION = '1.0.0';
 
@@ -129,15 +149,29 @@ export function setHolderPos(world: World, army: Army, pos: HexKey): void {
 
 /** A holder occupies its sub-hex while it has units — garrisons always do. */
 export function isPresent(army: Army): boolean {
-  return army.kind === 'garrison' || army.units.length > 0;
+  return (army.kind === 'garrison' && army.building !== 'temporary') || army.units.length > 0;
 }
 
 export function holderAt(state: GameState, subKey: HexKey): Army | undefined {
-  return state.armies.find((a) => isPresent(a) && a.pos === subKey);
+  return state.armies.find(
+    (a) =>
+      isPresent(a) &&
+      a.pos === subKey &&
+      (!state.infrastructure || a.kind !== 'garrison' || a.units.length > 0),
+  );
 }
 
 export function occupiedSubs(state: GameState, exceptId?: string): Set<HexKey> {
-  return new Set(state.armies.filter((a) => isPresent(a) && a.id !== exceptId).map((a) => a.pos));
+  return new Set(
+    state.armies
+      .filter(
+        (a) =>
+          isPresent(a) &&
+          a.id !== exceptId &&
+          (!state.infrastructure || a.kind !== 'garrison' || a.units.length > 0),
+      )
+      .map((a) => a.pos),
+  );
 }
 
 export function garrisonOf(state: GameState, team: Team): Army | undefined {
@@ -249,6 +283,7 @@ function createGameUnderRules(input: GameSettings): GameState {
     `Campaign start — ${settings.era.toUpperCase()} era, ${mainCols}×${mainRows} main grid, sub-radius ${settings.grid.subRadius}`,
     'A',
   );
+  initializeCampaignFoundation(state);
   // Income / warning clocks tick at the start of each player's turn — including turn 1.
   beginTurn(state, 'A');
   return state;
@@ -259,10 +294,12 @@ export function armiesAt(state: GameState, key: HexKey): Army[] {
 }
 
 export function ownedCount(state: GameState, team: Team): number {
+  if (state.infrastructure) return campaignOwnedCount(state, team);
   return Object.values(state.hexes).filter((x) => x.owner === team).length;
 }
 
 export function income(state: GameState, team: Team): number {
+  if (state.infrastructure) return campaignIncome(state, team);
   return ECONOMY.baseIncome + ECONOMY.perHexIncome * ownedCount(state, team);
 }
 
@@ -352,7 +389,8 @@ function autoFortify(
 
 function beginTurn(state: GameState, team: Team): void {
   const { world } = worldOf(state);
-  state.cp[team] += income(state, team);
+  if (state.infrastructure) beginCampaignOwnerTurn(state);
+  else state.cp[team] += income(state, team);
   const n = state.settings.grid.subRadius;
   for (const a of state.armies) if (a.team === team) a.movesLeft = armyMoves(a, n);
   // Warning clocks: consecutive turns an enemy holder has sat adjacent to (or inside) our hex.
@@ -365,6 +403,10 @@ function beginTurn(state: GameState, team: Team): void {
     const threatened = enemyAt.some((e) => mainDistance(world, e, m.key) <= 1);
     hs.warning = threatened ? hs.warning + 1 : 0;
   }
+  if (state.infrastructure && !state.infrastructure.capture.pending) {
+    checkCampaignVictory(state);
+    if (state.phase !== 'over') resumeCampaignTurnStart(state);
+  }
 }
 
 function teamArmyValue(state: GameState, team: Team): number {
@@ -375,6 +417,8 @@ function teamArmyValue(state: GameState, team: Team): number {
 
 export function endStrategicTurn(state: GameState): StratResult {
   if (state.phase !== 'strategic') return { ok: false, error: 'Finish the pending battle first' };
+  if (foundationHasPending(state))
+    return { ok: false, error: 'Resolve the pending campaign choices first' };
   const next = otherTeam(state.active);
   if (next === 'A') state.turn += 1;
   state.active = next;
@@ -424,6 +468,10 @@ export function capture(
   team: Team,
   viaBattle: boolean,
 ): void {
+  if (state.infrastructure) {
+    syncCampaignClaims(state);
+    return;
+  }
   const hs = state.hexes[key]!;
   if (hs.owner === team) return;
   const prev = hs.owner;
@@ -444,7 +492,8 @@ export function capture(
 
 // ── Orders ──
 
-export function recruit(state: GameState, typeId: string): StratResult {
+export function recruit(state: GameState, typeId: string, nodeId?: string): StratResult {
+  if (state.infrastructure) return recruitCampaignUnit(state, typeId, nodeId);
   if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
   const team = state.active;
   const t = unitType(typeId);
@@ -467,7 +516,51 @@ export function fortify(state: GameState, key: HexKey): StratResult {
     return { ok: false, error: 'You can only fortify your own territory' };
   if (state.cp[team] < ECONOMY.fortifyCost)
     return { ok: false, error: `Need ${ECONOMY.fortifyCost} CP` };
+  const engineers = state.armies
+    .filter((a) => a.team === team && a.at === key)
+    .flatMap((a) => a.units.filter((u) => u.hp > 0 && unitType(u.typeId).engineer));
+  if (!engineers.length)
+    return { ok: false, error: 'A living friendly engineer is required to build new forts' };
   const { world, terrain } = worldOf(state);
+  if (state.infrastructure) {
+    const f = state.infrastructure;
+    let planned: ReturnType<typeof applyFoundationWork> | null = null;
+    for (const engineer of engineers) {
+      const result = applyFoundationWork(
+        f.capture.work,
+        {
+          requestId: `fort:${state.nextId}`,
+          expectedVersion: f.capture.version,
+          ownerTurnId: f.ownerTurns[team],
+          team,
+          kind: 'build-fort',
+          targetId: key,
+          engineerUnitId: engineer.id,
+        },
+        {
+          ownerTurn: { team, id: f.ownerTurns[team] },
+          nodes: f.capture.nodes,
+          targets: [{ id: key, kind: 'build-fort', mainHex: key, cpCost: ECONOMY.fortifyCost }],
+          holders: state.armies,
+        },
+      );
+      if (result.ok) {
+        planned = result;
+        break;
+      }
+    }
+    if (!planned?.ok) return { ok: false, error: 'No engineer has a strategic action available' };
+    if (!autoFortify(state, world, terrain, key, team))
+      return { ok: false, error: 'Hex is fully fortified' };
+    state.infrastructure = {
+      ...f,
+      capture: { ...f.capture, version: planned.state.version, work: planned.state },
+    };
+    state.cp = { ...planned.state.commandPoints };
+    state.nextId += 1;
+    log(state, `Engineer fortified ${key} (−${ECONOMY.fortifyCost} CP)`);
+    return { ok: true };
+  }
   if (!autoFortify(state, world, terrain, key, team))
     return { ok: false, error: 'Hex is fully fortified' };
   state.cp[team] -= ECONOMY.fortifyCost;
@@ -560,8 +653,10 @@ export function autoResolve(state: GameState): StratResult {
 /** Write a finished tactical battle back into the campaign. */
 export function concludeBattle(state: GameState): StratResult {
   const b = state.battle;
-  if (state.phase !== 'battle' || !b || b.phase !== 'over' || !b.winner)
+  if (state.phase !== 'battle' || !b || b.phase !== 'over')
     return { ok: false, error: 'Battle not finished' };
+  if (state.infrastructure) return concludeFoundationBattle(state);
+  if (!b.winner) return { ok: false, error: 'Battle not finished' };
   const { world } = worldOf(state);
   for (const army of state.armies.filter(
     (a) => a.id === b.attackerArmyId || a.id === b.defenderArmyId,
@@ -664,6 +759,219 @@ function checkElimination(state: GameState): void {
     );
     if (!hasArmy && state.cp[team] < cheapest && ownedCount(state, team) <= 1) {
       declareWinner(state, otherTeam(team), `${TEAM_NAME[team]} has no forces left`);
+    }
+  }
+}
+
+/** Victory is evaluated against one projected state after all independent node choices commit. */
+export function checkCampaignVictory(state: GameState): void {
+  if (state.phase === 'over' || state.infrastructure?.capture.pending) return;
+  if (state.infrastructure) {
+    syncCampaignClaims(state);
+    for (const site of state.infrastructure.sites) {
+      if (!site.homeTeam) continue;
+      const node = state.infrastructure.capture.nodes.find((n) => n.id === site.nodeId)!;
+      if (node.owner !== site.homeTeam) {
+        declareWinner(
+          state,
+          otherTeam(site.homeTeam),
+          `${TEAM_NAME[site.homeTeam]} lost its Home HQ`,
+        );
+        return;
+      }
+    }
+  }
+  checkElimination(state);
+}
+
+/** Pack mobile survivors; only deliberately selected temporary guards retain individual tiles. */
+function packFoundationSurvivors(state: GameState, battle: Battle): void {
+  const { world } = worldOf(state);
+  const centerKeys = new Set(state.infrastructure!.sites.map((s) => s.centerSubHex));
+  for (const army of state.armies.filter((a) => a.kind === 'commander')) {
+    const ids = new Set(army.units.map((u) => u.id));
+    if (army.units.some((unit) => battle.departedUnitIds?.includes(unit.id))) {
+      army.movesLeft = 0;
+      continue;
+    }
+    const survivors = battle.units.filter((u) => ids.has(u.id) && u.hp > 0 && u.pos);
+    if (!survivors.length) continue;
+    if (battle.extracted && army.id === battle.attackerArmyId) {
+      const home = freeSubNear(state, world, army.pos, battle.origin, army.id);
+      if (home) setHolderPos(world, army, home);
+      army.movesLeft = 0;
+      continue;
+    }
+    const occupied = occupiedSubs(state, army.id);
+    const candidates = survivors
+      .map((u) => u.pos!)
+      .sort((a, b) => Number(centerKeys.has(b)) - Number(centerKeys.has(a)) || a.localeCompare(b));
+    const position =
+      candidates.find((key) => !occupied.has(key)) ??
+      freeSubNear(state, world, candidates[0]!, world.subByKey.get(candidates[0]!)!.main, army.id);
+    if (position) setHolderPos(world, army, position);
+    army.movesLeft = 0;
+  }
+}
+
+function concludeFoundationBattle(state: GameState): StratResult {
+  const b = state.battle!;
+  let f = state.infrastructure!;
+  if (f.clock!.completedBattleIds.includes(b.id))
+    return { ok: false, error: 'Battle already committed' };
+  if (f.clock!.resolvingBattle) return { ok: false, error: 'Resolve saved battle choices first' };
+  const { world } = worldOf(state);
+  const finalUnits = new Map(b.units.map((u) => [u.id, u]));
+  for (const holder of state.armies) {
+    holder.units = holder.units
+      .map((u) => {
+        const final = finalUnits.get(u.id);
+        return final ? { ...u, hp: final.hp } : u;
+      })
+      .filter((u) => u.hp > 0);
+    if (holder.building === 'temporary' && holder.units[0]) {
+      const final = finalUnits.get(holder.units[0].id);
+      if (final) holder.stationedFacing = final.facing;
+    }
+  }
+  state.armies = state.armies.filter(
+    (a) => (a.kind === 'garrison' && a.building !== 'temporary') || a.units.length > 0,
+  );
+  for (const mk of b.mains)
+    for (const sk of world.mainByKey.get(mk)!.subKeys) {
+      if (b.forts[sk]) state.forts[sk] = b.forts[sk]!;
+      else delete state.forts[sk];
+    }
+  const ruins = commitCampaignRazeTiles(state, b);
+  if (!ruins.ok) return { ok: false, error: ruins.error };
+  const withdrawal = applyCampaignWithdrawal(state, world, b);
+  if (!withdrawal.ok) return { ok: false, error: withdrawal.error };
+  state.armies = state.armies.filter(isPresent);
+  f = state.infrastructure!;
+  state.infrastructure = { ...f, clock: { ...f.clock!, resolvingBattle: structuredClone(b) } };
+  packFoundationSurvivors(state, b);
+  const tiles = [
+    ...f.sites.flatMap((site) =>
+      f.capture.nodes
+        .find((node) => node.id === site.nodeId)!
+        .buildings.filter((building) => campaignBuildingData(building).active)
+        .map((building) => ({
+          subHex: campaignBuildingData(building).subHex,
+          kind: 'outpost' as const,
+        })),
+    ),
+    ...f.supply!.roads.flatMap((road) =>
+      road.path.map((subHex) => ({ subHex, kind: 'road' as const })),
+    ),
+  ];
+  if (b.winner) {
+    const stationed = prepareCampaignStationing(state, b, tiles);
+    if (!stationed.ok) return { ok: false, error: stationed.error };
+  }
+  refreshCampaignNodeSnapshot(state);
+  f = state.infrastructure!;
+  const prepared = prepareCampaignCapture(state, world, {
+    requestId: `capture:battle:${b.id}`,
+    expectedVersion: f.capture.version,
+    event: { kind: 'manual-battle-end', battleId: b.id },
+  });
+  if (!prepared.ok) return { ok: false, error: prepared.error };
+  log(
+    state,
+    `Battle at ${b.contested}: resolving independent node and stationing choices`,
+    b.winner ?? b.attacker,
+  );
+  continueFoundationResolution(state);
+  return { ok: true };
+}
+
+export function continueFoundationResolution(state: GameState): void {
+  let f = state.infrastructure;
+  if (!f || f.capture.pending) return;
+  state.armies = state.armies.filter((holder) => {
+    if (holder.units.length > 0 || holder.kind !== 'garrison') return true;
+    if (holder.building === 'temporary') return false;
+    const site = f!.sites.find((s) => s.centerSubHex === holder.pos);
+    const node = site && f!.capture.nodes.find((n) => n.id === site.nodeId);
+    return !node || node.owner === holder.team;
+  });
+  syncCampaignClaims(state);
+  refreshCampaignNetworks(state);
+  checkCampaignVictory(state);
+  f = state.infrastructure!;
+  const battle = f.clock!.resolvingBattle;
+  if (battle) {
+    if (state.phase !== 'over' && f.garrisons!.pendingStationing) return;
+    packFoundationSurvivors(state, battle);
+    state.armies = state.armies.filter((holder) => {
+      if (holder.kind === 'commander' || holder.building === 'temporary')
+        return holder.units.length > 0;
+      const site = f!.sites.find((s) => s.centerSubHex === holder.pos);
+      const node = site && f!.capture.nodes.find((n) => n.id === site.nodeId);
+      return holder.units.length > 0 || !node || node.owner === holder.team;
+    });
+    state.pending = null;
+    state.battle = null;
+    if (state.phase !== 'over') state.phase = 'strategic';
+    const garrisons = state.infrastructure!.garrisons!;
+    state.infrastructure = {
+      ...state.infrastructure!,
+      garrisons: { ...garrisons, pendingStationing: null },
+      clock: {
+        ...state.infrastructure!.clock!,
+        resolvingBattle: null,
+        completedBattleIds: [...state.infrastructure!.clock!.completedBattleIds, battle.id],
+      },
+    };
+    syncCampaignClaims(state);
+    refreshCampaignNodeSnapshot(state);
+    checkCampaignVictory(state);
+  }
+  if (state.phase !== 'over') resumeCampaignTurnStart(state);
+}
+
+/** Movement can expose an uncontested center action, but never bypass opposing field troops. */
+export function afterFoundationMovement(state: GameState, armyId: string): void {
+  const f = state.infrastructure;
+  if (!f || state.phase !== 'strategic' || foundationHasPending(state)) return;
+  refreshCampaignNodeSnapshot(state);
+  syncCampaignClaims(state);
+  const { world } = worldOf(state);
+  const moved = state.armies.find((a) => a.id === armyId);
+  const nodeIds = f.capture.nodes
+    .filter((node) => node.centerSubHex === moved?.pos)
+    .map((node) => node.id);
+  const prepared = prepareCampaignCapture(state, world, {
+    requestId: `capture:movement:${state.nextId++}`,
+    expectedVersion: state.infrastructure!.capture.version,
+    event: { kind: 'strategic-movement', movementReceiptId: `move:${state.nextId - 1}` },
+    nodeIds,
+  });
+  if (!prepared.ok) throw new Error(prepared.error);
+  if (state.infrastructure!.capture.pending) return;
+  for (const node of f.capture.nodes.filter(
+    (n) => nodeIds.includes(n.id) && n.owner && n.owner !== state.active,
+  )) {
+    const commander = state.armies.find(
+      (a) =>
+        a.id === armyId &&
+        a.team === state.active &&
+        a.kind === 'commander' &&
+        a.pos === node.centerSubHex &&
+        a.units.length,
+    );
+    const enemy = state.armies.find(
+      (a) => a.team !== state.active && a.at === node.mainHex && a.units.length,
+    );
+    if (commander && enemy && state.cp[state.active] >= attackCost(commander)) {
+      state.pending = {
+        attackerArmyId: commander.id,
+        defenderArmyId: enemy.id,
+        origin: commander.at,
+        target: node.mainHex,
+      };
+      state.phase = 'battle-pending';
+      return;
     }
   }
 }

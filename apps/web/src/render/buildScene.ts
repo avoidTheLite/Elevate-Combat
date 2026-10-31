@@ -31,6 +31,7 @@ import {
   revealedEnemies,
   warnedRangeCells,
   worldOf,
+  campaignNodeViews,
 } from '@iron-ridge/engine';
 import type { UiState } from '../stores/useGameStore.ts';
 import { commandHighlights, reachPath, seenHolders } from '../lib/holders.ts';
@@ -125,6 +126,7 @@ export function buildStrategicScene(
   ui: UiState,
   view: Team | null,
   overlay: OverlayMode = 'basic',
+  inspectedSupplyRoute: readonly string[] = [],
 ): SceneSpec {
   const { world, terrain } = worldOf(game);
   const hOf = heightFn(world, terrain.heights);
@@ -166,7 +168,7 @@ export function buildStrategicScene(
   }
 
   const overlays: OverlaySpec[] = [];
-  let path: string[] = [];
+  let path: string[] = [...inspectedSupplyRoute];
   const selected = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
   const hl = commandHighlights(game, ui.selectedArmy, ui.checkedUnits, view);
   for (const [k] of hl.reach) overlays.push({ key: k, color: REACH_COLOR, opacity: 0.22 });
@@ -192,7 +194,8 @@ export function buildStrategicScene(
       : hl.transfer.some((t) => t.id === a.id)
         ? '⇄'
         : undefined;
-  for (const team of ['A', 'B'] as Team[]) {
+  const legacyHqs: Team[] = game.infrastructure ? [] : ['A', 'B'];
+  for (const team of legacyHqs) {
     const hq = world.mainByKey.get(game.hq[team])!;
     if (game.hexes[hq.key]?.owner !== team) continue;
     // The garrison's count rides on the HQ label when the viewer can see it.
@@ -212,8 +215,70 @@ export function buildStrategicScene(
       scale: tokenScale,
     });
   }
+  for (const node of campaignNodeViews(game)) {
+    const site = game.infrastructure!.sites.find((candidate) => candidate.nodeId === node.nodeId)!;
+    if (node.owner === null) {
+      overlays.push({
+        key: site.centerSubHex,
+        color: node.status === 'ruined' ? 0xffa03c : 0x899aaf,
+        opacity: 0.18,
+      });
+    }
+    for (const building of node.buildings.filter((candidate) => candidate.placement === 'annex')) {
+      overlays.push({
+        key: building.subHex,
+        color: building.ruined ? 0xffa03c : node.owner ? TEAM_COLOR[node.owner] : 0x899aaf,
+        opacity: building.ruined ? 0.24 : 0.3,
+      });
+    }
+    if (ui.selectedMain === site.mainHex) {
+      for (const cell of site.annexSubHexes) {
+        overlays.push({ key: cell, color: 0x899aaf, opacity: 0.12 });
+      }
+    }
+    if (!node.owner) continue;
+    const center = node.buildings.find((building) => building.placement === 'center');
+    const holder = seen.find(
+      (candidate) =>
+        candidate.kind === 'garrison' &&
+        (candidate.nodeId === node.nodeId ||
+          (candidate.building === 'hq' && candidate.at === site.mainHex)),
+    );
+    tokens.push({
+      id: node.nodeId,
+      key: site.centerSubHex,
+      kind: 'hq',
+      team: node.owner,
+      label: `${node.homeTeam ? '◈ HOME HQ' : node.name}${center ? ` T${center.tier}` : ''}`,
+      sub: node.status === 'ruined' ? 'RUINED' : undefined,
+      badge: holder ? `⚑${holder.units.length}` : undefined,
+      selected: ui.selectedMain === site.mainHex,
+      spent: node.status === 'ruined',
+      ready: node.status === 'active',
+      era: game.settings.era,
+      scale: node.homeTeam ? 0.9 : 0.65,
+    });
+  }
   for (const a of seen) {
     // Garrisons live in the HQ building (drawn above); commanders stand on their sub-hex.
+    if (a.kind === 'garrison' && a.building === 'temporary') {
+      const unit = a.units.find((candidate) => candidate.hp > 0);
+      if (unit)
+        tokens.push({
+          id: a.id,
+          key: a.pos,
+          kind: tokenKind(unit.typeId),
+          model: unit.typeId,
+          team: a.team,
+          label: '⚑ TILE GARRISON',
+          sub: unit.label,
+          hpFrac: unit.hp / unitType(unit.typeId).hp,
+          selected: ui.selectedArmy === a.id,
+          stationed: true,
+          scale: 0.75,
+        });
+      continue;
+    }
     if (a.kind !== 'commander') continue;
     const here = world.subByKey.get(a.pos)!.hex;
     const hp = a.units.reduce((s, u) => s + u.hp, 0);
@@ -322,6 +387,19 @@ export function buildTacticalScene(
   let trajectory: SceneSpec['trajectory'] = null;
   let fireView: SceneSpec['fireView'] = null;
 
+  const tacticalRuins = new Set(battle.ruinedInfrastructureBuildingIds ?? []);
+  for (const node of campaignNodeViews(game)) {
+    for (const building of node.buildings) {
+      if (building.placement !== 'annex' || !ctx.cells.has(building.subHex)) continue;
+      const ruined = building.ruined || tacticalRuins.has(building.id);
+      overlays.push({
+        key: building.subHex,
+        color: ruined ? 0xffa03c : node.owner ? TEAM_COLOR[node.owner] : 0x899aaf,
+        opacity: ruined ? 0.35 : 0.22,
+      });
+    }
+  }
+
   if (battle.phase === 'deploy') {
     const team = battle.deployTeam;
     if (!view || view === team) {
@@ -343,7 +421,7 @@ export function buildTacticalScene(
     (!view || view === sel.team)
   ) {
     const t = unitType(sel.typeId);
-    if (!sel.acted && !sel.deployed) {
+    if (!sel.stationed && !sel.acted && !sel.deployed) {
       const reach = reachable(ctx, sel);
       for (const [k] of reach)
         if (k !== sel.pos) overlays.push({ key: k, color: 0x3aa0ff, opacity: 0.22 });

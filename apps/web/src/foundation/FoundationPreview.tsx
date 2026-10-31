@@ -89,8 +89,8 @@ export function FoundationPreview(): React.ReactElement {
           Choose the fate of two enemy nodes, then commit both outcomes together.
         </p>
         <p className="text-xs text-[hsl(var(--warning))]">
-          Interactive review fixture: 10 CP, Capture 7 CP, Raze 3 CP. These example prices are not
-          final balance values.
+          Interactive review fixture: 10 CP, Capture Node 7 CP, Raze Node 3 CP. These example prices
+          are not final balance values.
         </p>
       </header>
       <Panel title="CAPTURE TIMING">

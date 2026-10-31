@@ -1,10 +1,13 @@
+import { useMemo } from 'react';
 import type { GameState, Team } from '@iron-ridge/engine';
 import {
   COMMAND,
   ECONOMY,
   TEAM_NAME,
+  apply,
   garrisonOf,
   hexFortLevel,
+  income,
   unitsForEra,
   worldOf,
 } from '@iron-ridge/engine';
@@ -13,6 +16,10 @@ import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
 import { holderName, seenHolders } from '../../lib/holders.ts';
 import { ContentsPanel } from './ContentsPanel.tsx';
+import { NodePanel } from './NodePanel.tsx';
+import { SupplyPanel } from './SupplyPanel.tsx';
+import { CampaignRecruitmentPanel } from './CampaignRecruitmentPanel.tsx';
+import { RoadRepairPanel } from './RoadRepairPanel.tsx';
 
 export function StrategicSidebar({
   game,
@@ -34,19 +41,34 @@ export function StrategicSidebar({
   const garrison = garrisonOf(game, team);
   const garrisonFull = (garrison?.units.length ?? 0) >= COMMAND.garrisonCap;
   const n = game.settings.grid.subRadius;
+  const projectedIncome = useMemo(() => income(game, team), [game, team]);
+  const mainKey = main?.key ?? null;
+  const fortifyQuote = useMemo(
+    () =>
+      mainKey && game.phase === 'strategic' ? apply(game, { type: 'fortify', hex: mainKey }) : null,
+    [game, mainKey],
+  );
 
   return (
-    <PanelStack priority={['campaign-log', 'hex', 'recruit', 'contents', 'command']}>
+    <PanelStack
+      priority={[
+        'campaign-log',
+        'hex',
+        'recruit',
+        'roads',
+        'supply',
+        'node',
+        'contents',
+        'command',
+      ]}
+    >
       <Panel id="command" title="COMMAND">
         <Stat
           label="Command Points"
           value={`${game.cp[team]} CP`}
           tone="text-[hsl(var(--warning))] font-bold"
         />
-        <Stat
-          label="Income / turn"
-          value={`+${ECONOMY.baseIncome + ECONOMY.perHexIncome * Object.values(game.hexes).filter((h) => h.owner === team).length}`}
-        />
+        <Stat label="Income / turn" value={`+${projectedIncome}`} />
         <div className="flex gap-2">
           <Button
             className="flex-1"
@@ -102,7 +124,8 @@ export function StrategicSidebar({
               <Button
                 size="sm"
                 onClick={() => dispatch({ type: 'fortify', hex: main.key })}
-                disabled={game.cp[team] < ECONOMY.fortifyCost}
+                disabled={fortifyQuote === null || fortifyQuote.error !== null}
+                title={fortifyQuote?.error ?? undefined}
               >
                 FORTIFY (−{ECONOMY.fortifyCost} CP)
               </Button>
@@ -122,38 +145,47 @@ export function StrategicSidebar({
       </Panel>
 
       <ContentsPanel game={game} view={view} />
+      <NodePanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
+      <SupplyPanel game={game} mainHex={main?.key ?? null} />
+      <RoadRepairPanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
 
-      <Panel
-        id="recruit"
-        title="RECRUIT → HQ GARRISON"
-        right={
-          <span data-testid="garrison-count">
-            {garrison?.units.length ?? 0}/{COMMAND.garrisonCap}
-          </span>
-        }
-      >
-        <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-          Recruits join the HQ garrison ({garrison?.units.length ?? 0}/{COMMAND.garrisonCap}). Click
-          the HQ and use NEW COMMANDER to field them.
-          {garrisonFull && <span className="text-[hsl(var(--destructive))]"> Garrison full.</span>}
-        </div>
-        <div className="grid grid-cols-1 gap-1">
-          {unitsForEra(game.settings.era).map((t) => (
-            <Button
-              key={t.id}
-              size="sm"
-              variant="ghost"
-              className="justify-between"
-              onClick={() => dispatch({ type: 'recruit', typeId: t.id })}
-              disabled={!canAct || game.cp[team] < t.cost || !garrison || garrisonFull}
-              title={`${t.role}\n${t.armorClass} · ${t.damageType} · ${t.attackType} · ${t.placementCategory}`}
-            >
-              <span>{t.name}</span>
-              <span className="text-[hsl(var(--warning))]">{t.cost}</span>
-            </Button>
-          ))}
-        </div>
-      </Panel>
+      {game.infrastructure ? (
+        <CampaignRecruitmentPanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
+      ) : (
+        <Panel
+          id="recruit"
+          title="RECRUIT → HQ GARRISON"
+          right={
+            <span data-testid="garrison-count">
+              {garrison?.units.length ?? 0}/{COMMAND.garrisonCap}
+            </span>
+          }
+        >
+          <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
+            Recruits join the HQ garrison ({garrison?.units.length ?? 0}/{COMMAND.garrisonCap}).
+            Click the HQ and use NEW COMMANDER to field them.
+            {garrisonFull && (
+              <span className="text-[hsl(var(--destructive))]"> Garrison full.</span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-1">
+            {unitsForEra(game.settings.era).map((t) => (
+              <Button
+                key={t.id}
+                size="sm"
+                variant="ghost"
+                className="justify-between"
+                onClick={() => dispatch({ type: 'recruit', typeId: t.id })}
+                disabled={!canAct || game.cp[team] < t.cost || !garrison || garrisonFull}
+                title={`${t.role}\n${t.armorClass} · ${t.damageType} · ${t.attackType} · ${t.placementCategory}`}
+              >
+                <span>{t.name}</span>
+                <span className="text-[hsl(var(--warning))]">{t.cost}</span>
+              </Button>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       <Panel id="campaign-log" title="CAMPAIGN LOG" bodyClassName="h-48">
         <ol className="text-[10px] leading-4 h-full overflow-auto">

@@ -83,7 +83,7 @@ function Harness(input: CaptureChoicePanelProps): React.ReactElement {
   );
 }
 
-describe('CaptureChoicePanel', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: CaptureChoicePanel', () => {
   it('renders nothing without a pending batch', () => {
     const { container } = render(<CaptureChoicePanel {...props({ batch: null })} />);
     expect(container).toBeEmptyDOMElement();
@@ -91,13 +91,17 @@ describe('CaptureChoicePanel', () => {
 
   it('offers named independent choices with authoritative costs and no default selection', () => {
     render(<CaptureChoicePanel {...props()} />);
-    expect(screen.getByRole('region', { name: 'Capture or Raze' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Node outcome' })).toBeInTheDocument();
     const north = within(screen.getByRole('group', { name: 'North Watch' }));
-    expect(north.getByRole('button', { name: 'Capture North Watch (7 CP)' })).toHaveAttribute(
+    expect(north.getByRole('button', { name: 'Capture Node North Watch (7 CP)' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
-    expect(north.getByRole('button', { name: 'Raze North Watch (3 CP)' })).toHaveAttribute(
+    expect(north.getByRole('button', { name: 'Raze Node North Watch (3 CP)' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(north.getByRole('button', { name: 'Do nothing North Watch (0 CP)' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
@@ -110,11 +114,11 @@ describe('CaptureChoicePanel', () => {
   it('confirms only a complete affordable batch, passing its stable ID once', () => {
     const input = props();
     render(<Harness {...input} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Capture North Watch (7 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture Node North Watch (7 CP)' }));
     expect(input.onSelect).toHaveBeenLastCalledWith('north', 'capture');
     expect(screen.getByRole('status')).toHaveTextContent('Choices1/2');
     expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Raze West Road (3 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Raze Node West Road (3 CP)' }));
     expect(input.onSelect).toHaveBeenLastCalledWith('west', 'raze');
     expect(screen.getByRole('status')).toHaveTextContent('Selected cost10 CP');
     expect(screen.getByRole('status')).toHaveTextContent('CP after confirmation0');
@@ -128,16 +132,16 @@ describe('CaptureChoicePanel', () => {
   it('permits editing an unaffordable selection before committing without charging earlier choices', () => {
     const input = props();
     render(<Harness {...input} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Capture North Watch (7 CP)' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Capture West Road (7 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture Node North Watch (7 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture Node West Road (7 CP)' }));
     expect(screen.getByRole('alert')).toHaveTextContent('need 4 more CP');
     expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Raze North Watch (3 CP)' }));
-    expect(screen.getByRole('button', { name: 'Capture North Watch (7 CP)' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: 'Raze Node North Watch (3 CP)' }));
+    expect(screen.getByRole('button', { name: 'Capture Node North Watch (7 CP)' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
-    expect(screen.getByRole('button', { name: 'Raze North Watch (3 CP)' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Raze Node North Watch (3 CP)' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -151,34 +155,51 @@ describe('CaptureChoicePanel', () => {
   it('stays fully controlled until its parent supplies updated choices', () => {
     const input = props();
     render(<CaptureChoicePanel {...input} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Capture North Watch (7 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture Node North Watch (7 CP)' }));
     expect(input.onSelect).toHaveBeenCalledExactlyOnceWith('north', 'capture');
-    expect(screen.getByRole('button', { name: 'Capture North Watch (7 CP)' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Capture Node North Watch (7 CP)' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
     expect(input.batch?.choices).toHaveLength(0);
   });
 
-  it('explains when neither outcome is affordable, preserving the pending choices', () => {
-    const input = props({ commandPoints: 2 });
-    render(<CaptureChoicePanel {...input} />);
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'no affordable complete selection with 2 CP',
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('choices remain pending');
+  it('can do nothing at every node with zero CP without choosing a paid outcome', () => {
+    const input = props({ commandPoints: 0 });
+    render(<Harness {...input} />);
     expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeDisabled();
-    expect(input.onSelect).not.toHaveBeenCalled();
-    expect(input.onConfirm).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /leave|skip/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Do nothing North Watch (0 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Do nothing West Road (0 CP)' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Selected cost0 CP');
+    expect(screen.getByRole('status')).toHaveTextContent('CP after confirmation0');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm all choices' }));
+    expect(input.onConfirm).toHaveBeenCalledExactlyOnceWith('capture-batch');
+    expect(input.onSelect).toHaveBeenNthCalledWith(1, 'north', 'none');
+    expect(input.onSelect).toHaveBeenNthCalledWith(2, 'west', 'none');
   });
 
-  it('detects an unaffordable whole batch even when one node can be razed', () => {
-    render(<CaptureChoicePanel {...props({ commandPoints: 5 })} />);
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'no affordable complete selection with 5 CP',
-    );
+  it('can mix Raze and Do nothing when razing the whole batch would exceed CP', () => {
+    render(<Harness {...props({ commandPoints: 5 })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Raze Node North Watch (3 CP)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Raze Node West Road (3 CP)' }));
     expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('choose Do nothing');
+    fireEvent.click(screen.getByRole('button', { name: 'Do nothing West Road (0 CP)' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Selected cost3 CP');
+    expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeEnabled();
+  });
+
+  it('offers Do nothing even when both paid outcomes are affordable', () => {
+    const input = props({ commandPoints: 100 });
+    render(<Harness {...input} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Do nothing North Watch (0 CP)' }));
+    expect(input.onSelect).toHaveBeenCalledExactlyOnceWith('north', 'none');
+    expect(screen.getByRole('button', { name: 'Do nothing North Watch (0 CP)' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Selected cost0 CP');
   });
 
   it('restores the latest persisted choice and responds to a reduced CP balance', () => {
@@ -189,7 +210,7 @@ describe('CaptureChoicePanel', () => {
     );
     const input = props({ batch: pending, commandPoints: 6 });
     const { rerender } = render(<CaptureChoicePanel {...input} />);
-    expect(screen.getByRole('button', { name: 'Raze North Watch (3 CP)' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Raze Node North Watch (3 CP)' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -208,25 +229,25 @@ describe('CaptureChoicePanel', () => {
     {
       event: { kind: 'turn-start-after-income', incomeReceiptId: 'paid' },
       explanation:
-        /Income has already resolved\. Capture grants building work.*up to two with an eligible engineer/,
+        /Income has already resolved\. Capture Node grants building work.*up to two with an eligible engineer/,
     },
     {
       event: { kind: 'manual-battle-end', battleId: 'battle' },
       explanation:
-        /After this battle, Capture updates network benefits.*no building work, income, deployment or resupply/,
+        /After this battle, Capture Node updates network benefits.*no building work, income, deployment or resupply/,
     },
     {
       event: { kind: 'strategic-movement', movementReceiptId: 'move' },
       explanation:
-        /After movement, Capture updates network benefits.*no building work, income, deployment or resupply/,
+        /After movement, Capture Node updates network benefits.*no building work, income, deployment or resupply/,
     },
   ])('explains the $event.kind reward window', ({ event, explanation }) => {
     render(<CaptureChoicePanel {...props({ batch: { ...batch(), event } })} />);
-    const region = screen.getByRole('region', { name: 'Capture or Raze' });
+    const region = screen.getByRole('region', { name: 'Node outcome' });
     expect(region).toHaveAccessibleDescription(explanation);
-    expect(
-      screen.getByText(/Raze damages buildings and leaves the node unowned/),
-    ).toHaveTextContent('Raze costs CP and uses no node work');
+    expect(screen.getByText(/Raze Node damages the entire node/)).toHaveTextContent(
+      'Raze Node uses no node work',
+    );
   });
 
   it('disables edits and confirmation for another team or while confirmation is in flight', () => {
@@ -236,7 +257,7 @@ describe('CaptureChoicePanel', () => {
     expect(screen.getByText('Waiting for ALPHA to resolve these choices.')).toBeInTheDocument();
     for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
     rerender(<CaptureChoicePanel {...input} currentTeam="A" busy />);
-    expect(screen.getByRole('region', { name: 'Capture or Raze' })).toHaveAttribute(
+    expect(screen.getByRole('region', { name: 'Node outcome' })).toHaveAttribute(
       'aria-busy',
       'true',
     );
@@ -249,7 +270,7 @@ describe('CaptureChoicePanel', () => {
     const input = props({ batch: { ...batch(), costs: { capture: Number.NaN, raze: 3 } } });
     render(<CaptureChoicePanel {...input} />);
     expect(screen.getByRole('alert')).toHaveTextContent('Costs or available CP are unavailable');
-    expect(screen.getByRole('button', { name: 'Capture North Watch' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Capture Node North Watch' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Confirm all choices' })).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('Selected costUnavailable');
   });
@@ -262,7 +283,7 @@ describe('CaptureChoicePanel', () => {
       />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('The battle state changed');
-    expect(screen.getByRole('button', { name: 'Raze North Watch (3 CP)' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Raze Node North Watch (3 CP)' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );

@@ -81,6 +81,7 @@ function sys(battle: Battle, text: string, kind: BattleLogEntry['kind'] = 'syste
 function toBattleUnit(army: Army, idx: number): BattleUnit {
   const au = army.units[idx]!;
   const t = unitType(au.typeId);
+  const stationed = army.kind === 'garrison' && army.building === 'temporary';
   return {
     id: au.id,
     typeId: au.typeId,
@@ -88,16 +89,22 @@ function toBattleUnit(army: Army, idx: number): BattleUnit {
     team: army.team,
     hp: au.hp,
     maxHp: t.hp,
-    pos: null,
-    facing: army.team === 'A' ? 0 : 3,
-    mp: t.move,
+    pos: stationed ? army.pos : null,
+    facing: stationed
+      ? (army.stationedFacing ?? (army.team === 'A' ? 0 : 3))
+      : army.team === 'A'
+        ? 0
+        : 3,
+    mp: stationed ? 0 : t.move,
     moved: false,
     movedDist: 0,
     acted: false,
-    deployed: false,
+    deployed: stationed && t.placementCategory === 'combat_fixed',
     suppressed: false,
     exposed: false,
     firstStrikeUsed: false,
+    holderId: army.id,
+    ...(stationed ? { stationed: true } : {}),
   };
 }
 
@@ -117,6 +124,16 @@ export function createBattle(
     }
   }
   const warning = state.hexes[target]?.warning ?? 0;
+  const stationedHolders = state.armies
+    .filter(
+      (a) =>
+        a.kind === 'garrison' &&
+        a.building === 'temporary' &&
+        mains.includes(a.at) &&
+        a.id !== attackerArmy.id &&
+        a.id !== defenderArmy.id,
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const objective = resolveBattleObjective(state, target, world);
   const battle: Battle = {
     id: `battle-${state.nextId++}`,
@@ -136,6 +153,7 @@ export function createBattle(
     units: [
       ...attackerArmy.units.map((_, i) => toBattleUnit(attackerArmy, i)),
       ...defenderArmy.units.map((_, i) => toBattleUnit(defenderArmy, i)),
+      ...stationedHolders.flatMap((army) => army.units.map((_, i) => toBattleUnit(army, i))),
     ],
     forts,
     warningTurns: warning,
@@ -180,6 +198,7 @@ export function deployUnit(
   if (battle.phase !== 'deploy') return { ok: false, error: 'Not in deployment' };
   const u = unitById(battle, unitId);
   if (!u || u.team !== battle.deployTeam) return { ok: false, error: 'Not your unit' };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons cannot redeploy' };
   if (key === null) {
     u.pos = null;
     refreshOccupancy(ctx, battle);
@@ -212,6 +231,21 @@ export function placeWarnedFort(ctx: BattleContext, battle: Battle, key: HexKey)
   if (battle.phase !== 'deploy' || battle.deployTeam !== battle.defender)
     return { ok: false, error: 'Only the defender places warned fortifications during deployment' };
   if (battle.warnedPlacements <= 0) return { ok: false, error: 'No warned placements left' };
+  const targetMain = ctx.world.subByKey.get(key)?.main;
+  const engineer = battle.units.some(
+    (u) =>
+      u.team === battle.defender &&
+      u.hp > 0 &&
+      unitType(u.typeId).engineer &&
+      (u.pos
+        ? ctx.world.subByKey.get(u.pos)?.main === targetMain
+        : u.holderId === battle.defenderArmyId && battle.contested === targetMain),
+  );
+  if (!engineer)
+    return {
+      ok: false,
+      error: 'A living friendly engineer in this MainHex is required to build a fort',
+    };
   if (!warnedRangeCells(ctx, battle).has(key))
     return { ok: false, error: 'Outside warned placement range' };
   if ((battle.forts[key] ?? 0) >= mechanics().MAX_FORT)
@@ -287,7 +321,7 @@ export function startTurn(battle: Battle, team: Team): void {
   for (const u of battle.units) {
     if (u.team !== team || u.hp <= 0) continue;
     const t = unitType(u.typeId);
-    u.mp = u.suppressed ? Math.floor(t.move / 2) : t.move;
+    u.mp = u.stationed ? 0 : u.suppressed ? Math.floor(t.move / 2) : t.move;
     u.moved = false;
     u.movedDist = 0;
     u.acted = false;
@@ -346,6 +380,7 @@ export function checkVictory(battle: Battle): void {
 
 export function retreat(battle: Battle, team: Team): ActionResult {
   if (battle.phase === 'over') return { ok: false, error: 'Battle already over' };
+  battle.withdrawnTeam = team;
   finish(battle, otherTeam(team), `${TEAM_NAME[team]} withdrew from the field`);
   return { ok: true };
 }
@@ -406,6 +441,7 @@ export function moveUnit(
 ): ActionResult {
   const u = activeUnit(battle, unitId);
   if (typeof u === 'string') return { ok: false, error: u };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons may only fire in battle' };
   if (u.acted) return { ok: false, error: 'Unit already acted' };
   if (u.deployed) return { ok: false, error: 'Set up — PACK UP before moving' };
   const reach = reachable(ctx, u);
@@ -441,6 +477,7 @@ export function attack(
 export function setUp(battle: Battle, unitId: string): ActionResult {
   const u = activeUnit(battle, unitId);
   if (typeof u === 'string') return { ok: false, error: u };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons may only fire in battle' };
   if (unitType(u.typeId).placementCategory !== 'combat_fixed')
     return { ok: false, error: 'Only combat_fixed units set up' };
   if (u.deployed) return { ok: false, error: 'Already set up' };
@@ -460,6 +497,7 @@ export function setUp(battle: Battle, unitId: string): ActionResult {
 export function packUp(battle: Battle, unitId: string): ActionResult {
   const u = activeUnit(battle, unitId);
   if (typeof u === 'string') return { ok: false, error: u };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons may only fire in battle' };
   if (!u.deployed) return { ok: false, error: 'Not set up' };
   if (u.acted) return { ok: false, error: 'Unit already acted' };
   u.deployed = false;
@@ -472,6 +510,7 @@ export function packUp(battle: Battle, unitId: string): ActionResult {
 export function digIn(battle: Battle, unitId: string): ActionResult {
   const u = activeUnit(battle, unitId);
   if (typeof u === 'string') return { ok: false, error: u };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons may only fire in battle' };
   if (!unitType(u.typeId).engineer) return { ok: false, error: 'Only engineers can dig in' };
   if (u.acted) return { ok: false, error: 'Unit already acted' };
   const lvl = battle.forts[u.pos!] ?? 0;
@@ -486,6 +525,7 @@ export function digIn(battle: Battle, unitId: string): ActionResult {
 export function rotateUnit(battle: Battle, unitId: string, dir: number): ActionResult {
   const u = activeUnit(battle, unitId);
   if (typeof u === 'string') return { ok: false, error: u };
+  if (u.stationed) return { ok: false, error: 'Stationed garrisons may only fire in battle' };
   if (u.acted) return { ok: false, error: 'Unit already acted' };
   if (u.mp < 1) return { ok: false, error: 'Needs 1 MP to rotate' };
   u.facing = ((dir % 6) + 6) % 6;
@@ -501,10 +541,11 @@ export function rotateUnit(battle: Battle, unitId: string, dir: number): ActionR
  *   also ends the unit's activation, so both points are then spent.
  */
 export function actionPoints(u: BattleUnit): { left: number; max: number } {
-  if (u.hp <= 0 || !u.pos) return { left: 0, max: 2 };
+  const max = u.stationed ? 1 : 2;
+  if (u.hp <= 0 || !u.pos) return { left: 0, max };
   const canAct = !u.acted;
-  const canMove = canAct && !u.moved && !u.deployed && u.mp > 0;
-  return { left: (canMove ? 1 : 0) + (canAct ? 1 : 0), max: 2 };
+  const canMove = !u.stationed && canAct && !u.moved && !u.deployed && u.mp > 0;
+  return { left: (canMove ? 1 : 0) + (canAct ? 1 : 0), max };
 }
 
 export function battleRng(state: GameState): Rng {

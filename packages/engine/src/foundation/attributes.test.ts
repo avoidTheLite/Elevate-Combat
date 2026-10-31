@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateFoundationIncome,
+  addFoundationAmounts,
+  compareFoundationAmounts,
   evaluateBuildingEligibility,
   evaluateFoundationAttribute,
+  foundationAmountNumber,
+  foundationExactAmount,
   isBuildingEffectActive,
   isNextBuildingTier,
+  maxFoundationAmounts,
+  multiplyFoundationAmounts,
+  powerFoundationAmount,
+  subtractFoundationAmounts,
   validateBuildingUpgradeState,
 } from './attributes.ts';
 import type {
   FoundationAttributeContribution,
+  FoundationAmount,
   FoundationAttributeDefinition,
   FoundationAttributeEvaluation,
   FoundationBuildingDefinition,
@@ -77,7 +86,7 @@ const evaluate = (
   contributions: readonly FoundationAttributeContribution[],
   hqContributions: readonly FoundationHqContribution[] = [],
   overrides: Partial<FoundationAttributeDefinition> = {},
-  baseValue = 10,
+  baseValue: FoundationAmount = 10,
 ): FoundationAttributeEvaluation =>
   evaluateFoundationAttribute({
     definition: { ...definition, ...overrides },
@@ -406,6 +415,76 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001: foundation attribute pipeline', () => {
     expect(evaluate([effect('node', 3.8)], [], { rounding: 'floor' }, 0).value).toBe(3);
     expect(evaluate([effect('node', 3.2)], [], { rounding: 'ceil' }, 0).value).toBe(4);
     expect(evaluate([effect('node', 3.5)], [], { rounding: 'nearest' }, 0).value).toBe(4);
+    for (const [rounding, expected] of [
+      ['none', '3.8'],
+      ['aggregate-income', '3.8'],
+      ['floor', '3'],
+      ['ceil', '4'],
+      ['nearest', '4'],
+    ] as const) {
+      expect(evaluate([effect('node', 3.8)], [], { rounding }, 0).exactValue).toEqual({
+        decimal: expected,
+      });
+    }
+  });
+
+  it('accepts exact source/base tokens and deduplicates equal numeric and token sources', () => {
+    const token = { decimal: '0.99999999999999996' };
+    const result = evaluate(
+      [effect('a', 0, { value: token }), effect('b', -0.25)],
+      [],
+      {},
+      { decimal: '0.25' },
+    );
+    expect(result.value).toBe(1); // Display preview only.
+    expect(result.exactValue).toEqual(token);
+    expect(
+      evaluate([effect('a', 0.5), effect('a', 0, { value: { decimal: '0.5' } })], [], {}, 0),
+    ).toMatchObject({
+      exactValue: { decimal: '0.5' },
+      deduplicatedSources: ['a'],
+    });
+    expect(() =>
+      evaluate([
+        effect('factor', 0, { value: { decimal: '-0.1' }, groupId: 'weather', units: 'factor' }),
+      ]),
+    ).toThrow('non-negative');
+    expect(() => evaluate([effect('invalid', 0, { value: { decimal: '1.0' } })])).toThrow(
+      'canonical',
+    );
+  });
+
+  it('compares exact HQ benefits before selection and applies boosts without numeric conversion', () => {
+    const nearOne = { decimal: '0.99999999999999996' };
+    const result = evaluate([], [hq('a', 0, { value: nearOne }), hq('z', 1)], {}, 0);
+    expect(result.selectedHq?.hqId).toBe('z');
+    const boosted = evaluate(
+      [],
+      [
+        hq('regional', 0, {
+          value: { decimal: '0.46' },
+          homeConnected: true,
+          boost: { operation: 'multiply', value: 1.25, cap: null },
+        }),
+      ],
+      {},
+      0,
+    );
+    expect(boosted.exactValue).toEqual({ decimal: '0.575' });
+    expect(() => evaluate([], [hq('bad', 0, { value: { decimal: '-0.1' } })])).toThrow(
+      'non-negative',
+    );
+    expect(() =>
+      evaluate(
+        [],
+        [
+          hq('bad', 0, {
+            value: { decimal: '0.46' },
+            boost: { operation: 'add', value: 1, cap: 0.45 },
+          }),
+        ],
+      ),
+    ).toThrow('below');
   });
 
   it('rejects missing/wrong units, unknown groups and non-finite configuration', () => {
@@ -478,6 +557,58 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001: foundation attribute pipeline', () => {
 });
 
 describe('GAMES-ELEVATE-CAMPAIGN-UC-001: aggregate foundation income projection', () => {
+  it('preserves weighted-route efficiency through HQ, building income and JSON reload', () => {
+    const cost = addFoundationAmounts(4, 5);
+    const efficiency = maxFoundationAmounts(
+      0.3,
+      subtractFoundationAmounts(1, multiplyFoundationAmounts(0.06, cost)),
+    );
+    expect(efficiency).toEqual({ decimal: '0.46' });
+    const hqBenefit = evaluate([], [hq('home', 0, { kind: 'home', value: efficiency })], {}, 0);
+    expect(hqBenefit.exactValue).toEqual({ decimal: '0.46' });
+    const building = evaluate(
+      [effect('supply', 0, { value: hqBenefit.exactValue, groupId: 'weather', units: 'factor' })],
+      [],
+      { rounding: 'aggregate-income' },
+      100,
+    );
+    const restored = JSON.parse(
+      JSON.stringify({
+        baseGrant: 3,
+        contributions: [income('building', 0, { value: building.value })],
+      }),
+    );
+    expect(calculateFoundationIncome(restored)).toMatchObject({
+      cp: 49,
+      exactTotal: { decimal: '49' },
+    });
+  });
+
+  it('provides canonical signed arithmetic without tolerances or numeric round trips', () => {
+    expect(foundationExactAmount(1e-7)).toEqual({ decimal: '0.0000001' });
+    expect(addFoundationAmounts(0.1, 0.2)).toEqual({ decimal: '0.3' });
+    expect(subtractFoundationAmounts(0.5, 0.75)).toEqual({ decimal: '-0.25' });
+    expect(multiplyFoundationAmounts({ decimal: '-0.25' }, 2)).toEqual({ decimal: '-0.5' });
+    expect(powerFoundationAmount(0.5, 2)).toEqual({ decimal: '0.25' });
+    expect(powerFoundationAmount(0.5, 0)).toEqual({ decimal: '1' });
+    expect(compareFoundationAmounts({ decimal: '0.99999999999999996' }, 1)).toBe(-1);
+    expect(compareFoundationAmounts(0.5, { decimal: '0.5' })).toBe(0);
+    expect(maxFoundationAmounts({ decimal: '-0.1' }, -1)).toEqual({ decimal: '-0.1' });
+    expect(foundationAmountNumber({ decimal: '0.99999999999999996' })).toBe(1);
+    expect(() => powerFoundationAmount(0.5, -1)).toThrow('exponent');
+    expect(() => powerFoundationAmount(0.5, 1.5)).toThrow('exponent');
+    expect(() => multiplyFoundationAmounts(1e308, 10)).toThrow('finite');
+    expect(() => foundationExactAmount(Infinity)).toThrow('finite');
+    const mutable = { decimal: '0.5' };
+    expect(addFoundationAmounts(mutable, 1)).toEqual({ decimal: '1.5' });
+    mutable.decimal = '1.0';
+    expect(() => addFoundationAmounts(mutable, 1)).toThrow('canonical');
+    mutable.decimal = '0.6';
+    expect(addFoundationAmounts(mutable, 1)).toEqual({ decimal: '1.6' });
+    Object.assign(mutable, { extra: 1 });
+    expect(() => addFoundationAmounts(mutable, 1)).toThrow('exact amount');
+  });
+
   it('retains the explicit base grant and floors the complete modified payment once', () => {
     const result = calculateFoundationIncome({
       baseGrant: 3,

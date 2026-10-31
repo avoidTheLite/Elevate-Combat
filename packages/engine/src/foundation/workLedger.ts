@@ -2,7 +2,8 @@ import type { Army, Team } from '../types.ts';
 import { unitType } from '../units.ts';
 
 /** Capture/Raze, activation and owner-turn transitions have separate integration policies. */
-export type FoundationWorkKind = 'build' | 'upgrade' | 'repair-building' | 'repair-road';
+export type FoundationWorkKind =
+  'build' | 'upgrade' | 'repair-building' | 'repair-road' | 'build-fort';
 
 export interface NodeWorkSpend {
   readonly nodeId: string;
@@ -75,6 +76,7 @@ export type FoundationWorkTarget = WorkTargetBase &
       }
     | { readonly kind: 'repair-building'; readonly nodeId: string }
     | { readonly kind: 'repair-road'; readonly mainHex: string }
+    | { readonly kind: 'build-fort'; readonly mainHex: string }
   );
 
 export interface FoundationWorkContext {
@@ -135,7 +137,13 @@ export type FoundationWorkResult =
       readonly receipt: FoundationWorkReceipt;
     };
 
-const KINDS: readonly string[] = ['build', 'upgrade', 'repair-building', 'repair-road'];
+const KINDS: readonly string[] = [
+  'build',
+  'upgrade',
+  'repair-building',
+  'repair-road',
+  'build-fort',
+];
 const validId = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 const validTeam = (value: unknown): value is Team => value === 'A' || value === 'B';
@@ -253,10 +261,13 @@ export function validateFoundationWorkState(state: FoundationWorkState): string 
       (receipt.allowance === 'engineer') !== (receipt.engineerUnitId !== null) ||
       (receipt.allowance === 'engineer' &&
         receipt.engineerUnitId !== receipt.request.engineerUnitId) ||
-      ((receipt.request.kind === 'repair-road' || receipt.request.kind === 'repair-building') &&
+      ((receipt.request.kind === 'repair-road' ||
+        receipt.request.kind === 'build-fort' ||
+        receipt.request.kind === 'repair-building') &&
         receipt.allowance !== 'engineer') ||
       (receipt.activationRepair && receipt.request.kind !== 'repair-building') ||
-      (receipt.request.kind === 'repair-road') !== (receipt.nodeId === null) ||
+      (receipt.request.kind === 'repair-road' || receipt.request.kind === 'build-fort') !==
+        (receipt.nodeId === null) ||
       receipt.nodeOperationsSpent !== (receipt.nodeId === null ? 0 : 1)
     ) {
       return 'Invalid work receipt';
@@ -329,7 +340,7 @@ function contextValid(context: FoundationWorkContext): boolean {
     const key = JSON.stringify([target.kind, target.id]);
     if (targetIds.has(key)) return false;
     targetIds.add(key);
-    if (target.kind === 'repair-road') {
+    if (target.kind === 'repair-road' || target.kind === 'build-fort') {
       if (!validId(target.mainHex)) return false;
     } else {
       if (!validId(target.nodeId) || !nodeIds.has(target.nodeId)) return false;
@@ -409,7 +420,9 @@ export function evaluateFoundationWork(
   if (!target)
     return fail('unknown-target', 'Work target is not in the current definition snapshot');
   const node =
-    target.kind === 'repair-road' ? null : context.nodes.find((n) => n.id === target.nodeId)!;
+    target.kind === 'repair-road' || target.kind === 'build-fort'
+      ? null
+      : context.nodes.find((n) => n.id === target.nodeId)!;
   if (node && node.owner !== request.team)
     return fail('not-owner', 'Node is not controlled by team');
   const previous = node
@@ -443,10 +456,12 @@ export function evaluateFoundationWork(
   }
   const needsEngineer =
     target.kind === 'repair-road' ||
+    target.kind === 'build-fort' ||
     target.kind === 'repair-building' ||
     target.engineerRequired ||
     previous!.ordinarySpent;
-  const mainHex = target.kind === 'repair-road' ? target.mainHex : node!.mainHex;
+  const mainHex =
+    target.kind === 'repair-road' || target.kind === 'build-fort' ? target.mainHex : node!.mainHex;
   let engineerSpend: EngineerWorkSpend | null = null;
   if (request.engineerUnitId !== null) {
     const holder = context.holders.find((h) =>

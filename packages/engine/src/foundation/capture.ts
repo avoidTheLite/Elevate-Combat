@@ -2,7 +2,8 @@ import type { Team } from '../types.ts';
 import { validateFoundationWorkState } from './workLedger.ts';
 import type { FoundationWorkState, NodeWorkSpend } from './workLedger.ts';
 
-export type FoundationCaptureOutcome = 'capture' | 'raze';
+/** `none` is the normal player-facing “Do nothing” choice. */
+export type FoundationCaptureOutcome = 'capture' | 'raze' | 'none';
 export type FoundationCaptureData =
   | null
   | string
@@ -117,7 +118,7 @@ export interface FoundationCaptureReceipt {
   readonly cpSpent: number;
   readonly changes: readonly FoundationCaptureChange[];
   /** Caller recomputes effects and victory after the complete atomic result, never per choice. */
-  readonly recomputeNetworkEffects: true;
+  readonly recomputeNetworkEffects: boolean;
 }
 
 /** JSON-saveable controller data. Troops and physical presence are deliberately not stored here. */
@@ -165,7 +166,10 @@ const uniqueIds = (values: readonly string[]): boolean =>
   Array.isArray(values) &&
   Array.from(values).every(validId) &&
   new Set(values).size === values.length;
-const outcomeValid = (v: unknown): v is FoundationCaptureOutcome => v === 'capture' || v === 'raze';
+const outcomeValid = (v: unknown): v is FoundationCaptureOutcome =>
+  v === 'capture' || v === 'raze' || v === 'none';
+const outcomeCost = (costs: FoundationCaptureCosts, outcome: FoundationCaptureOutcome): number =>
+  outcome === 'none' ? 0 : costs[outcome];
 const clone = <T>(value: T): T => structuredClone(value);
 
 function jsonData(value: unknown, ancestors = new Set<unknown>()): boolean {
@@ -412,7 +416,8 @@ export function validateFoundationCaptureState(state: FoundationCaptureState): s
       requestIds.has(receipt.request.requestId) ||
       versions.has(receipt.resultingVersion) ||
       !whole(receipt.cpSpent) ||
-      receipt.recomputeNetworkEffects !== true ||
+      receipt.recomputeNetworkEffects !==
+        currentFoundationCaptureChoices(receipt.batch).some((c) => c.request.outcome !== 'none') ||
       !Array.isArray(receipt.changes) ||
       receipt.changes.length !== receipt.batch.candidates.length
     ) {
@@ -426,18 +431,23 @@ export function validateFoundationCaptureState(state: FoundationCaptureState): s
       const outcome = currentFoundationCaptureChoices(receipt.batch).find(
         (c: FoundationCaptureChoice) => c.request.nodeId === candidate.node.id,
       )!.request.outcome;
-      const cost = receipt.batch.costs[outcome];
+      const cost = outcomeCost(receipt.batch.costs, outcome);
       if (
         !change ||
         change.nodeId !== candidate.node.id ||
         change.outcome !== outcome ||
         change.previousOwner !== candidate.node.owner ||
-        change.owner !== (outcome === 'capture' ? receipt.batch.team : null) ||
+        change.owner !==
+          (outcome === 'capture'
+            ? receipt.batch.team
+            : outcome === 'raze'
+              ? null
+              : candidate.node.owner) ||
         change.cpSpent !== cost ||
         change.sameCycleIncome !== false ||
         change.sameCycleDeployment !== false ||
         change.sameCycleResupply !== false ||
-        (outcome === 'raze'
+        (outcome !== 'capture'
           ? change.buildingWindow !== 'unchanged'
           : receipt.batch.event.kind === 'turn-start-after-income'
             ? !['open', 'closed'].includes(change.buildingWindow)
@@ -670,7 +680,10 @@ export function commitFoundationCapture(
     if (JSON.stringify(current) !== JSON.stringify(candidate.node))
       return failure(state, 'stale-version', 'Node changed after capture eligibility was frozen');
   }
-  const cpSpent = selections.reduce((sum, c) => sum + batch.costs[c.request.outcome], 0);
+  const cpSpent = selections.reduce(
+    (sum, c) => sum + outcomeCost(batch.costs, c.request.outcome),
+    0,
+  );
   if (!whole(cpSpent) || cpSpent > state.work.commandPoints[batch.team])
     return failure(state, 'insufficient-cp', 'Complete Capture/Raze set exceeds available CP');
   let nodeSpending = [...state.work.nodeSpending];
@@ -700,20 +713,22 @@ export function commitFoundationCapture(
           : 'closed';
       nodeSpending = [...nodeSpending.filter((s) => s !== existing), { ...record, buildingWindow }];
     }
-    replacements.set(node.id, {
-      ...clone(node),
-      owner: outcome === 'capture' ? batch.team : null,
-      buildings: node.buildings.map((b) => ({
-        ...clone(b),
-        ruined: outcome === 'raze' || b.ruined,
-      })),
-    });
+    if (outcome !== 'none') {
+      replacements.set(node.id, {
+        ...clone(node),
+        owner: outcome === 'capture' ? batch.team : null,
+        buildings: node.buildings.map((b) => ({
+          ...clone(b),
+          ruined: outcome === 'raze' || b.ruined,
+        })),
+      });
+    }
     changes.push({
       nodeId: node.id,
       outcome,
       previousOwner: node.owner!,
-      owner: outcome === 'capture' ? batch.team : null,
-      cpSpent: batch.costs[outcome],
+      owner: outcome === 'capture' ? batch.team : outcome === 'raze' ? null : node.owner,
+      cpSpent: outcomeCost(batch.costs, outcome),
       buildingWindow,
       sameCycleIncome: false,
       sameCycleDeployment: false,
@@ -727,7 +742,7 @@ export function commitFoundationCapture(
     batch: clone(batch),
     cpSpent,
     changes,
-    recomputeNetworkEffects: true,
+    recomputeNetworkEffects: selections.some((c) => c.request.outcome !== 'none'),
   };
   return {
     ok: true,

@@ -389,6 +389,11 @@ export interface AttackOutcome {
   log: BattleLogEntry[];
 }
 
+/** Strategic holders pack multiple real units into one SubHex; ordinary battles omit this. */
+export interface AttackOptions {
+  readonly packedUnitIds?: readonly string[];
+}
+
 function push(
   battle: Battle,
   log: BattleLogEntry[],
@@ -502,6 +507,7 @@ function rangedShot(
   shooter: BattleUnit,
   pv: AttackPreview,
   tag: string,
+  packedUnitIds: ReadonlySet<string>,
 ): { roll: number; result: 'direct' | 'splash' | 'miss'; damage: number } {
   const at = unitType(shooter.typeId);
   const roll = rng.die(20);
@@ -531,26 +537,61 @@ function rangedShot(
         tag: direct ? 'Direct' : 'Splash',
       });
     }
-    // Area splash to other units around the impact point.
-    if (at.splash && at.splashRadius > 0) {
-      const centre = parseKey(pv.targetKey);
-      for (const c of spiral(centre, at.splashRadius)) {
-        const k = hexKey(c);
-        if (k === pv.targetKey) continue;
-        const u = ctx.unitAt.get(k);
-        if (!u || u.hp <= 0 || u.id === shooter.id) continue;
+    // The primary attack roll is shared. Additional packed units at impact take
+    // the existing splash pool, exactly as other units within the blast do.
+    if (at.splash && packedUnitIds.size) {
+      for (const u of battle.units) {
+        if (
+          !packedUnitIds.has(u.id) ||
+          u.id === pv.target?.id ||
+          u.id === shooter.id ||
+          u.hp <= 0 ||
+          u.pos !== pv.targetKey
+        )
+          continue;
         const arc =
           unitType(u.typeId).armorClass === 'unarmored'
             ? null
-            : facingArc(k, u.facing, shooter.pos!);
+            : facingArc(u.pos, u.facing, shooter.pos!);
         damage += applyHit(rng, battle, log, {
           attacker: shooter,
           defender: u,
           pool: at.splash,
           facingDmg: arc ? mechanics().FACING_MODS[arc].dmg : 0,
           bonus: 0,
-          tag: `Splash r${hexDistance(c, centre)}`,
+          tag: 'Packed splash',
         });
+      }
+    }
+    // Area splash to other units around the impact point.
+    if (at.splash && at.splashRadius > 0) {
+      const centre = parseKey(pv.targetKey);
+      for (const c of spiral(centre, at.splashRadius)) {
+        const k = hexKey(c);
+        if (k === pv.targetKey) continue;
+        const occupant = ctx.unitAt.get(k);
+        const impacted = packedUnitIds.size
+          ? battle.units.filter(
+              (u) => u.pos === k && (packedUnitIds.has(u.id) || u.id === occupant?.id),
+            )
+          : occupant
+            ? [occupant]
+            : [];
+        for (const u of impacted) {
+          if (u.hp <= 0 || u.id === shooter.id) continue;
+          const arc =
+            unitType(u.typeId).armorClass === 'unarmored'
+              ? null
+              : facingArc(k, u.facing, shooter.pos!);
+          damage += applyHit(rng, battle, log, {
+            attacker: shooter,
+            defender: u,
+            pool: at.splash,
+            facingDmg: arc ? mechanics().FACING_MODS[arc].dmg : 0,
+            bonus: 0,
+            tag: `Splash r${hexDistance(c, centre)}`,
+          });
+        }
       }
     }
     // Siege is the only damage type that can reduce a fortification.
@@ -584,7 +625,26 @@ export function resolveAttack(
   battle: Battle,
   attacker: BattleUnit,
   targetKey: HexKey,
+  options: AttackOptions = {},
 ): AttackOutcome | { error: string } {
+  const packed = new Set<string>();
+  if (options.packedUnitIds !== undefined) {
+    if (!Array.isArray(options.packedUnitIds)) return { error: 'Invalid packed unit list' };
+    for (let i = 0; i < options.packedUnitIds.length; i++) {
+      const id = options.packedUnitIds[i];
+      const unit = battle.units.find((u) => u.id === id);
+      if (
+        !Object.hasOwn(options.packedUnitIds, i) ||
+        typeof id !== 'string' ||
+        packed.has(id) ||
+        !unit ||
+        unit.hp <= 0 ||
+        !unit.pos
+      )
+        return { error: 'Invalid packed unit list' };
+      packed.add(id);
+    }
+  }
   const pv = previewAttack(ctx, battle, attacker, targetKey);
   if (!pv.legal) return { error: pv.reason ?? 'Illegal attack' };
   const log: BattleLogEntry[] = [];
@@ -650,7 +710,7 @@ export function resolveAttack(
       meleeStrike(rng, battle, log, defender, attacker, 0, '↳ counter');
     }
   } else {
-    const shot = rangedShot(ctx, rng, battle, log, attacker, pv, '');
+    const shot = rangedShot(ctx, rng, battle, log, attacker, pv, '', packed);
     roll = shot.roll;
     result = shot.result;
     damage = shot.damage;

@@ -9,6 +9,9 @@ import type { World } from '../grid.ts';
 import { mainDistance } from '../grid.ts';
 import type { Hex } from '../hex.ts';
 import { hexDistance } from '../hex.ts';
+import { campaignNodeActionChoices, campaignNodeViews } from '../foundation/campaignNodes.ts';
+import type { CampaignNodeActionChoice, CampaignNodeView } from '../foundation/campaignNodes.ts';
+import { withRules } from '../rules.ts';
 import {
   COMMAND,
   ECONOMY,
@@ -17,8 +20,10 @@ import {
   attackCost,
   autoResolveOdds,
   freeSubNear,
+  fortify,
   garrisonOf,
   hexFortLevel,
+  recruit,
   visibleArmies,
   worldOf,
 } from '../strategic.ts';
@@ -52,6 +57,10 @@ const RECRUIT_MIX: Record<string, string[]> = {
 };
 
 export function strategicAiStep(state: GameState): GameAction {
+  return withRules(state.settings.rules, () => decide(state));
+}
+
+function decide(state: GameState): GameAction {
   const team = state.active;
   const enemy = otherTeam(team);
   const { world } = worldOf(state);
@@ -62,32 +71,62 @@ export function strategicAiStep(state: GameState): GameAction {
   const garrison = garrisonOf(state, team);
   const gCount = garrison?.units.length ?? 0;
 
-  // 1. Recruit into the HQ garrison.
-  if (garrison && gCount < COMMAND.garrisonCap) {
+  const nodes = campaignNodeViews(state);
+
+  // 1. Keep the existing recruitment mix, using the real deployment gates at each node.
+  const recruitmentSites = [
+    { nodeId: undefined, count: gCount },
+    ...nodes
+      .filter((n) => n.owner === team && n.status === 'active' && n.homeTeam !== team)
+      .map((n) => ({
+        nodeId: n.nodeId,
+        count:
+          state.armies.find(
+            (a) => a.kind === 'garrison' && a.team === team && a.pos === n.centerSubHex,
+          )?.units.length ?? 0,
+      })),
+  ];
+  for (const site of recruitmentSites) {
     const mix = RECRUIT_MIX[state.settings.era]!;
-    const typeId = mix[(state.turn + gCount) % mix.length]!;
+    const typeId = mix[(state.turn + site.count) % mix.length]!;
     const cost = unitType(typeId).cost;
     const cheapest = Math.min(...unitsForEra(state.settings.era).map((u) => u.cost));
-    if (state.cp[team] - cost >= (threatened ? 0 : reserve)) return { type: 'recruit', typeId };
-    if (threatened && state.cp[team] >= cheapest && gCount < 3) {
+    const legal = (id: string): boolean => recruit(structuredClone(state), id, site.nodeId).ok;
+    if (state.cp[team] - cost >= (threatened ? 0 : reserve) && legal(typeId))
+      return { type: 'recruit', typeId, ...(site.nodeId ? { nodeId: site.nodeId } : {}) };
+    if (threatened && state.cp[team] >= cheapest && site.count < 3) {
       const cheap = unitsForEra(state.settings.era).find((u) => u.cost === cheapest)!;
-      return { type: 'recruit', typeId: cheap.id };
+      if (legal(cheap.id))
+        return {
+          type: 'recruit',
+          typeId: cheap.id,
+          ...(site.nodeId ? { nodeId: site.nodeId } : {}),
+        };
     }
   }
 
-  // 2. Fortify threatened frontier hexes.
+  // 2. Develop reachable sites and owned nodes without bypassing player work allowances.
+  const work = chooseNodeWork(state, nodes, reserve);
+  if (work) return { type: 'nodeWork', request: work.request };
+
+  // 3. Fortify threatened frontier hexes only when the real engineer/action checks pass.
   if (state.cp[team] >= ECONOMY.fortifyCost + reserve + 4) {
     const warned = world.mains
       .filter((m) => state.hexes[m.key]?.owner === team && state.hexes[m.key]!.warning > 0)
       .filter((m) => hexFortLevel(state, world, m.key) < 10)
       .sort((a, b) => hexFortLevel(state, world, a.key) - hexFortLevel(state, world, b.key));
-    if (warned[0]) return { type: 'fortify', hex: warned[0].key };
+    const target = warned.find((m) => fortify(structuredClone(state), m.key).ok);
+    if (target) return { type: 'fortify', hex: target.key };
   }
-  if (state.cp[team] > 45 && hexFortLevel(state, world, hq) < 12) {
+  if (
+    state.cp[team] > 45 &&
+    hexFortLevel(state, world, hq) < 12 &&
+    fortify(structuredClone(state), hq).ok
+  ) {
     return { type: 'fortify', hex: hq };
   }
 
-  // 3. Commanders: engage when the odds are good, otherwise march.
+  // 4. Commanders: engage when the odds are good, otherwise march.
   const commanders = state.armies.filter(
     (a) => a.team === team && a.kind === 'commander' && a.movesLeft > 0 && a.units.length > 0,
   );
@@ -100,7 +139,7 @@ export function strategicAiStep(state: GameState): GameAction {
     if (dest) return { type: 'moveCommander', armyId: army.id, dest };
   }
 
-  // 4. Muster: send spare garrison units into the field (keep 2 home; all when threatened).
+  // 5. Muster: send spare garrison units into the field (keep 2 home; all when threatened).
   if (garrison && !threatened) {
     const spare = gCount - 2;
     // Top up a commander at HQ that has already spent its moves (no tempo lost).
@@ -124,6 +163,44 @@ export function strategicAiStep(state: GameState): GameAction {
     }
   }
   return { type: 'endTurn' };
+}
+
+function chooseNodeWork(
+  state: GameState,
+  nodes: CampaignNodeView[],
+  reserve: number,
+): CampaignNodeActionChoice | null {
+  let best: CampaignNodeActionChoice | null = null;
+  let bestScore = -1;
+  for (const node of nodes) {
+    if (node.owner !== null && node.owner !== state.active) continue;
+    if (node.status !== 'inactive' && node.work.operationsRemaining === 0) continue;
+    const center = node.buildings.find((b) => b.placement === 'center')!;
+    for (const choice of campaignNodeActionChoices(state, node.nodeId)) {
+      if (!choice.legal || state.cp[state.active] - choice.cpCost < reserve) continue;
+      const request = choice.request;
+      const centerWork = 'buildingId' in request && request.buildingId === center.id;
+      const score =
+        request.kind === 'activate'
+          ? 80
+          : request.kind === 'repair-building'
+            ? centerWork
+              ? 75
+              : 60
+            : request.kind === 'upgrade'
+              ? centerWork
+                ? 70
+                : 40
+              : request.kind === 'build'
+                ? 50
+                : 30;
+      if (score > bestScore) {
+        bestScore = score;
+        best = choice;
+      }
+    }
+  }
+  return best;
 }
 
 function pendingFor(world: World, army: Army, target: Army): PendingBattle {

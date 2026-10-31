@@ -515,4 +515,39 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001: foundation work accounting', () => {
     expect(validateFoundationWorkState(corrupt)).toBe('Invalid node work record');
     rejects(corrupt, {}, 'invalid-state');
   });
+
+  it('charges a living friendly engineer for new forts outside exhausted node work', () => {
+    const context = facts();
+    const fort: FoundationWorkContext = {
+      ...context,
+      targets: [{ id: 'new-fort', kind: 'build-fort', mainHex: 'main', cpCost: 6 }],
+    };
+    let state = apply(initial());
+    state = apply(state, { targetId: 'annex-2', engineerUnitId: 'engineer-1' });
+    rejects(state, { kind: 'build-fort', targetId: 'new-fort' }, 'engineer-required', fort);
+    rejects(
+      state,
+      { kind: 'build-fort', targetId: 'new-fort', engineerUnitId: 'engineer-1' },
+      'engineer-spent',
+      fort,
+    );
+    const built = apply(
+      state,
+      { kind: 'build-fort', targetId: 'new-fort', engineerUnitId: 'engineer-2' },
+      fort,
+    );
+    expect(built.nodeSpending).toEqual(state.nodeSpending);
+    expect(built.commandPoints.A).toBe(state.commandPoints.A - 6);
+    expect(built.receipts.at(-1)).toMatchObject({
+      request: { kind: 'build-fort' },
+      cpSpent: 6,
+      nodeId: null,
+      nodeOperationsSpent: 0,
+      allowance: 'engineer',
+      engineerUnitId: 'engineer-2',
+    });
+    const replay = applyFoundationWork(built, built.receipts.at(-1)!.request, fort);
+    expect(replay).toMatchObject({ ok: true, replayed: true });
+    expect(replay.state).toBe(built);
+  });
 });

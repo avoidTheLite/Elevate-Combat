@@ -204,7 +204,7 @@ interface AttributeSource {
   units: string;
   active: boolean;
   eligible: boolean;
-  value: number;
+  value: FoundationAmount;
 }
 
 export interface FoundationAttributeContribution extends AttributeSource {
@@ -230,9 +230,13 @@ export interface FoundationExactAmount {
   readonly decimal: string;
 }
 
+export type FoundationAmount = number | FoundationExactAmount;
+
 export interface FoundationAttributeEvaluation {
   /** Aggregate income must pass this exact token directly to calculateFoundationIncome. */
   value: number | FoundationExactAmount;
+  /** Exact output after this attribute's declared rounding boundary; safe to compose. */
+  exactValue: FoundationExactAmount;
   /** Numeric explanation fields are display previews, never aggregate-income inputs. */
   unroundedValue: number;
   flatValue: number;
@@ -301,9 +305,10 @@ function exactAmount(a: Decimal): FoundationExactAmount {
     decimal: `${sign}${digits.slice(0, -a.scale)}${fraction ? `.${fraction}` : ''}`,
   };
 }
-function incomeAmount(value: number | FoundationExactAmount): Decimal {
+const exactCache = new WeakMap<FoundationExactAmount, { text: string; value: Decimal }>();
+function amount(value: FoundationAmount, label: string, nonnegative = false): Decimal {
   if (typeof value === 'number') {
-    finite(value, 'income contribution', true);
+    finite(value, label, nonnegative);
     return decimal(value);
   }
   if (
@@ -315,16 +320,97 @@ function incomeAmount(value: number | FoundationExactAmount): Decimal {
     typeof value.decimal !== 'string' ||
     !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value.decimal)
   ) {
-    throw new Error('Income exact amount must contain only a canonical decimal string');
+    throw new Error(`${label}: exact amount must contain only a canonical decimal string`);
+  }
+  const cached = exactCache.get(value);
+  if (cached?.text === value.decimal) {
+    if (nonnegative && cached.value.coefficient < 0n)
+      throw new Error(`${label} must be non-negative`);
+    return cached.value;
   }
   const parts = value.decimal.split('.');
   const result = { coefficient: BigInt(parts.join('')), scale: parts[1]?.length ?? 0 };
   if (exactAmount(result).decimal !== value.decimal) {
-    throw new Error('Income exact amount is not canonical');
+    throw new Error(`${label}: exact amount is not canonical`);
   }
-  if (result.coefficient < 0n) throw new Error('Income contribution must be non-negative');
+  if (nonnegative && result.coefficient < 0n) throw new Error(`${label} must be non-negative`);
   number(result);
+  exactCache.set(value, { text: value.decimal, value: result });
   return result;
+}
+
+/** Canonical JSON-safe arithmetic. Numeric inputs mean their explicit decimal spelling. */
+export function foundationExactAmount(value: FoundationAmount): FoundationExactAmount {
+  return exactAmount(amount(value, 'foundation amount'));
+}
+
+/** Numeric preview only; compose calculations using the exact token instead. */
+export function foundationAmountNumber(value: FoundationAmount): number {
+  return number(amount(value, 'foundation amount'));
+}
+
+export function addFoundationAmounts(
+  a: FoundationAmount,
+  b: FoundationAmount,
+): FoundationExactAmount {
+  const result = plus(amount(a, 'foundation amount'), amount(b, 'foundation amount'));
+  number(result);
+  return exactAmount(result);
+}
+
+export function subtractFoundationAmounts(
+  a: FoundationAmount,
+  b: FoundationAmount,
+): FoundationExactAmount {
+  const right = amount(b, 'foundation amount');
+  const result = plus(amount(a, 'foundation amount'), {
+    coefficient: -right.coefficient,
+    scale: right.scale,
+  });
+  number(result);
+  return exactAmount(result);
+}
+
+export function multiplyFoundationAmounts(
+  a: FoundationAmount,
+  b: FoundationAmount,
+): FoundationExactAmount {
+  const result = times(amount(a, 'foundation amount'), amount(b, 'foundation amount'));
+  number(result);
+  return exactAmount(result);
+}
+
+export function compareFoundationAmounts(a: FoundationAmount, b: FoundationAmount): -1 | 0 | 1 {
+  return compare(amount(a, 'foundation amount'), amount(b, 'foundation amount')) as -1 | 0 | 1;
+}
+
+export function maxFoundationAmounts(
+  a: FoundationAmount,
+  b: FoundationAmount,
+): FoundationExactAmount {
+  const left = amount(a, 'foundation amount');
+  const right = amount(b, 'foundation amount');
+  return exactAmount(compare(left, right) >= 0 ? left : right);
+}
+
+/** Exact multiplication for a non-negative integral count, such as distinct hostile crossings. */
+export function powerFoundationAmount(
+  value: FoundationAmount,
+  exponent: number,
+): FoundationExactAmount {
+  if (!Number.isSafeInteger(exponent) || exponent < 0)
+    throw new Error('Foundation exponent must be a non-negative safe integer');
+  let factor = amount(value, 'foundation amount');
+  let result = ONE;
+  let remaining = exponent;
+  while (remaining > 0) {
+    if (remaining % 2 === 1) result = times(result, factor);
+    remaining = Math.floor(remaining / 2);
+    if (remaining > 0) factor = times(factor, factor);
+    number(result);
+    number(factor);
+  }
+  return exactAmount(result);
 }
 function floor(a: Decimal): bigint {
   const divisor = 10n ** BigInt(a.scale);
@@ -349,7 +435,7 @@ const sourceKey = (c: AttributeSource): string =>
 export function evaluateFoundationAttribute(input: {
   definition: FoundationAttributeDefinition;
   targetId: string;
-  baseValue: number;
+  baseValue: FoundationAmount;
   contributions: readonly FoundationAttributeContribution[];
   hqContributions: readonly FoundationHqContribution[];
 }): FoundationAttributeEvaluation {
@@ -357,7 +443,7 @@ export function evaluateFoundationAttribute(input: {
   id(d.id, 'attribute');
   id(d.units, 'attribute units');
   id(targetId, 'target');
-  finite(input.baseValue, 'base value');
+  const baseValue = amount(input.baseValue, 'base value');
   if (!['none', 'floor', 'ceil', 'nearest', 'aggregate-income'].includes(d.rounding)) {
     throw new Error('Unknown attribute rounding');
   }
@@ -398,7 +484,7 @@ export function evaluateFoundationAttribute(input: {
     if (source.attributeId !== d.id || source.targetId !== targetId)
       throw new Error('Contribution attribute/target mismatch');
     if (source.units !== expectedUnits) throw new Error('Contribution units mismatch');
-    finite(source.value, 'contribution');
+    amount(source.value, 'contribution');
     flag(source.active, 'source active');
     flag(source.eligible, 'source eligible');
     if (!source.active) {
@@ -426,15 +512,20 @@ export function evaluateFoundationAttribute(input: {
   for (const c of input.contributions) {
     const group = groups.get(c.groupId);
     if (!group) throw new Error(`Unknown contribution group: ${c.groupId}`);
-    if (group.phase === 'multiplier') finite(c.value, 'multiplier', true);
+    const value = amount(
+      c.value,
+      group.phase === 'multiplier' ? 'multiplier' : 'contribution',
+      group.phase === 'multiplier',
+    );
     if (!checkSource(c, group.phase === 'flat' ? d.units : 'factor')) continue;
-    if (distinct(c, JSON.stringify(['effect', c.groupId, c.value]))) effects.push(c);
+    if (distinct(c, JSON.stringify(['effect', c.groupId, exactAmount(value).decimal])))
+      effects.push(c);
   }
   for (const c of input.hqContributions) {
     id(c.hqId, 'HQ');
     flag(c.homeConnected, 'Home connectivity');
     if (c.kind !== 'home' && c.kind !== 'regional') throw new Error('Unknown HQ kind');
-    finite(c.value, 'HQ contribution', true);
+    const value = amount(c.value, 'HQ contribution', true);
     if (d.hqGroupId === null) throw new Error('HQ contribution requires an explicit HQ group');
     if (c.boost !== null) {
       if (c.boost.operation !== 'add' && c.boost.operation !== 'multiply')
@@ -444,7 +535,7 @@ export function evaluateFoundationAttribute(input: {
         throw new Error('HQ boost must improve positive benefits');
       if (c.boost.cap !== null) {
         finite(c.boost.cap, 'HQ boost cap', true);
-        if (c.boost.cap < c.value)
+        if (compare(decimal(c.boost.cap), value) < 0)
           throw new Error('HQ boost cap is below its unboosted contribution');
       }
     }
@@ -453,13 +544,18 @@ export function evaluateFoundationAttribute(input: {
     }
     if (!checkSource(c, d.units)) continue;
     const boost = c.boost === null ? null : [c.boost.operation, c.boost.value, c.boost.cap];
-    if (distinct(c, JSON.stringify(['hq', c.hqId, c.kind, c.homeConnected, c.value, boost])))
+    if (
+      distinct(
+        c,
+        JSON.stringify(['hq', c.hqId, c.kind, c.homeConnected, exactAmount(value).decimal, boost]),
+      )
+    )
       candidates.push(c);
   }
   const hqs = candidates
     .map((c) => {
-      let value = decimal(c.value);
-      if (c.kind === 'regional' && c.homeConnected && c.boost !== null && c.value > 0) {
+      let value = amount(c.value, 'HQ contribution', true);
+      if (c.kind === 'regional' && c.homeConnected && c.boost !== null && value.coefficient > 0n) {
         value =
           c.boost.operation === 'add'
             ? plus(value, decimal(c.boost.value))
@@ -481,7 +577,7 @@ export function evaluateFoundationAttribute(input: {
     ? {
         hqId: chosen.contribution.hqId,
         sourceId: chosen.contribution.sourceId,
-        originalValue: chosen.contribution.value,
+        originalValue: number(amount(chosen.contribution.value, 'HQ contribution', true)),
         boostedValue: number(chosen.value),
       }
     : null;
@@ -489,7 +585,7 @@ export function evaluateFoundationAttribute(input: {
   const grouped = new Map<string, { sourceId: string; value: Decimal }[]>();
   for (const c of effects) {
     const list = grouped.get(c.groupId) ?? [];
-    list.push({ sourceId: c.sourceId, value: decimal(c.value) });
+    list.push({ sourceId: c.sourceId, value: amount(c.value, 'contribution') });
     grouped.set(c.groupId, list);
   }
   if (chosen && d.hqGroupId !== null) {
@@ -497,7 +593,7 @@ export function evaluateFoundationAttribute(input: {
     list.push({ sourceId: chosen.contribution.sourceId, value: chosen.value });
     grouped.set(d.hqGroupId, list);
   }
-  let flat = decimal(input.baseValue);
+  let flat = baseValue;
   let multiplier = ONE;
   const explanation: FoundationAttributeEvaluation['groups'] = [];
   const appliedSources = new Set<string>();
@@ -535,6 +631,19 @@ export function evaluateFoundationAttribute(input: {
   finite(numericValue, 'rounded attribute');
   return {
     value: d.rounding === 'aggregate-income' ? exactAmount(result) : numericValue,
+    exactValue: exactAmount(
+      d.rounding === 'none' || d.rounding === 'aggregate-income'
+        ? result
+        : {
+            coefficient:
+              d.rounding === 'floor'
+                ? floor(result)
+                : d.rounding === 'ceil'
+                  ? -floor({ coefficient: -result.coefficient, scale: result.scale })
+                  : floor(plus(result, decimal(0.5))),
+            scale: 0,
+          },
+    ),
     unroundedValue: number(result),
     flatValue: number(flat),
     multiplier: number(multiplier),
@@ -576,7 +685,7 @@ export function calculateFoundationIncome(input: {
   const sources = new Map<string, { kind: FoundationIncomeContribution['kind']; value: Decimal }>();
   for (const c of input.contributions) {
     id(c.sourceId, 'income source');
-    const value = incomeAmount(c.value);
+    const value = amount(c.value, 'Income contribution', true);
     flag(c.active, 'income active');
     flag(c.eligible, 'income eligible');
     if (c.kind !== 'territory' && c.kind !== 'building')

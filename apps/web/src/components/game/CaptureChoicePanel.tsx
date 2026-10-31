@@ -21,11 +21,11 @@ export interface CaptureChoicePanelProps {
 
 const PHASE_EXPLANATION: Record<FoundationCaptureBatch['event']['kind'], string> = {
   'turn-start-after-income':
-    'Income has already resolved. Capture grants building work for this turn: one ordinary operation, up to two with an eligible engineer. It grants no income, deployment or resupply this turn.',
+    'Income has already resolved. Capture Node grants building work for this turn: one ordinary operation, up to two with an eligible engineer. It grants no income, deployment or resupply this turn.',
   'manual-battle-end':
-    'After this battle, Capture updates network benefits for later actions. It grants no building work, income, deployment or resupply this turn.',
+    'After this battle, Capture Node updates network benefits for later actions. It grants no building work, income, deployment or resupply this turn.',
   'strategic-movement':
-    'After movement, Capture updates network benefits for later actions. It grants no building work, income, deployment or resupply this turn.',
+    'After movement, Capture Node updates network benefits for later actions. It grants no building work, income, deployment or resupply this turn.',
 };
 
 /**
@@ -58,15 +58,10 @@ export function CaptureChoicePanel({
   const totalCost = pricingValid
     ? batch.candidates.reduce((sum, { node }) => {
         const outcome = choices.get(node.id);
-        return sum + (outcome ? batch.costs[outcome] : 0);
+        return sum + (outcome && outcome !== 'none' ? batch.costs[outcome] : 0);
       }, 0)
     : null;
   const safeTotal = totalCost !== null && Number.isSafeInteger(totalCost);
-  const minimumCost = pricingValid ? batch.costs.raze * batch.candidates.length : null;
-  const noAffordableSet =
-    budgetValid &&
-    minimumCost !== null &&
-    (!Number.isSafeInteger(minimumCost) || minimumCost > commandPoints);
   const affordable = budgetValid && safeTotal && totalCost <= commandPoints;
   const allSelected = batch.candidates.length > 0 && selectedCount === batch.candidates.length;
   const ownsBatch = currentTeam === batch.team;
@@ -74,14 +69,18 @@ export function CaptureChoicePanel({
   const canChoose = ownsBatch && !busy && pricingValid && budgetValid;
 
   return (
-    <div role="region" aria-label="Capture or Raze" aria-describedby={phaseId} aria-busy={busy}>
-      <Panel title="CAPTURE OR RAZE" right={TEAM_NAME[batch.team]}>
+    <div role="region" aria-label="Node outcome" aria-describedby={phaseId} aria-busy={busy}>
+      <Panel title="NODE OUTCOME" right={TEAM_NAME[batch.team]}>
         <p id={phaseId} className="text-xs text-[hsl(var(--foreground))]">
           {PHASE_EXPLANATION[batch.event.kind]}
         </p>
         <p className="text-xs text-[hsl(var(--muted-foreground))]">
-          Capture takes control of surviving buildings. Raze damages buildings and leaves the node
-          unowned; troops stay in place. Raze costs CP and uses no node work.
+          Capture Node takes control of surviving buildings. Raze Node damages the entire node and
+          leaves it unowned; troops stay in place. Both use CP. Raze Node uses no node work.
+        </p>
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+          Do nothing costs no CP and leaves ownership and structures unchanged. It is available even
+          when you can afford Capture Node or Raze Node.
         </p>
         <p className="text-xs text-[hsl(var(--muted-foreground))]">
           Choose independently for each node. You can change any choice before confirming. All
@@ -100,29 +99,45 @@ export function CaptureChoicePanel({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  aria-label={`Capture ${name}${pricingValid ? ` (${batch.costs.capture} CP)` : ''}`}
+                  aria-label={`Capture Node ${name}${pricingValid ? ` (${batch.costs.capture} CP)` : ''}`}
                   aria-pressed={selected === 'capture'}
                   disabled={!canChoose}
                   className={selected === 'capture' ? 'bg-[hsl(var(--primary)/0.15)]' : undefined}
                   onClick={() => onSelect(node.id, 'capture')}
                 >
-                  Capture · {pricingValid ? `${batch.costs.capture} CP` : 'cost unavailable'}
+                  Capture Node · {pricingValid ? `${batch.costs.capture} CP` : 'cost unavailable'}
                 </Button>
                 <Button
                   type="button"
                   variant="destructive"
-                  aria-label={`Raze ${name}${pricingValid ? ` (${batch.costs.raze} CP)` : ''}`}
+                  aria-label={`Raze Node ${name}${pricingValid ? ` (${batch.costs.raze} CP)` : ''}`}
                   aria-pressed={selected === 'raze'}
                   disabled={!canChoose}
                   className={selected === 'raze' ? 'bg-[hsl(var(--destructive)/0.15)]' : undefined}
                   onClick={() => onSelect(node.id, 'raze')}
                 >
-                  Raze · {pricingValid ? `${batch.costs.raze} CP` : 'cost unavailable'}
+                  Raze Node · {pricingValid ? `${batch.costs.raze} CP` : 'cost unavailable'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={`Do nothing ${name} (0 CP)`}
+                  aria-pressed={selected === 'none'}
+                  disabled={!canChoose}
+                  onClick={() => onSelect(node.id, 'none')}
+                >
+                  Do nothing · 0 CP
                 </Button>
               </div>
               <p className="mt-2 text-xs">
                 Choice:{' '}
-                {selected === 'capture' ? 'Capture' : selected === 'raze' ? 'Raze' : 'Not chosen'}
+                {selected === 'capture'
+                  ? 'Capture Node'
+                  : selected === 'raze'
+                    ? 'Raze Node'
+                    : selected === 'none'
+                      ? 'Do nothing'
+                      : 'Not chosen'}
               </p>
             </fieldset>
           );
@@ -143,15 +158,10 @@ export function CaptureChoicePanel({
             Costs or available CP are unavailable. Confirmation is paused.
           </p>
         )}
-        {noAffordableSet ? (
+        {budgetValid && safeTotal && !affordable ? (
           <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
-            There is no affordable complete selection with {commandPoints} CP. These choices remain
-            pending.
-          </p>
-        ) : budgetValid && safeTotal && !affordable ? (
-          <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
-            Selected choices need {totalCost - commandPoints} more CP. Change your choices before
-            confirming.
+            Selected choices need {totalCost - commandPoints} more CP. Change your choices or choose
+            Do nothing before confirming.
           </p>
         ) : null}
         {!ownsBatch && (

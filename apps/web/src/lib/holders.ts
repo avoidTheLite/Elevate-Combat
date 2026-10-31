@@ -32,11 +32,16 @@ export function showsContents(holder: Army, view: Team | null): boolean {
 
 /** Short display name, e.g. "HQ GARRISON" or "COMMANDER Aarmy7". */
 export function holderName(a: Army): string {
-  return a.kind === 'garrison' ? 'HQ GARRISON' : `COMMANDER ${a.id}`;
+  if (a.kind !== 'garrison') return `COMMANDER ${a.id}`;
+  return a.building === 'temporary'
+    ? 'TILE GARRISON'
+    : a.building === 'node'
+      ? 'NODE GARRISON'
+      : 'HQ GARRISON';
 }
 
 export function holderTitle(a: Army): string {
-  return `${TEAM_NAME[a.team]} ${a.kind === 'garrison' ? 'HQ GARRISON' : 'COMMANDER'}`;
+  return `${TEAM_NAME[a.team]} ${a.kind === 'garrison' ? holderName(a) : 'COMMANDER'}`;
 }
 
 /** May a human viewer give orders to this holder right now? */
@@ -70,7 +75,7 @@ export function holderForClick(
   const cell = world.subByKey.get(subKey);
   if (!cell) return undefined;
   return seen.find((a) => {
-    if (a.kind !== 'garrison') return false;
+    if (a.kind !== 'garrison' || a.building !== 'hq') return false;
     const g = world.subByKey.get(a.pos);
     return !!g && hexDistance(g.hex, cell.hex) <= 1;
   });

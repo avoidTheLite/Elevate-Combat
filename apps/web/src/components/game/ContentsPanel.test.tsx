@@ -1,7 +1,17 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { GameState } from '@iron-ridge/engine';
-import { COMMAND, apply, commanderReach, unitType } from '@iron-ridge/engine';
+import {
+  COMMAND,
+  apply,
+  commanderReach,
+  createFoundationPlaytestConfiguration,
+  createGame,
+  defaultSettings,
+  hexDistance,
+  unitType,
+  worldOf,
+} from '@iron-ridge/engine';
 import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
 import { ContentsPanel } from './ContentsPanel.tsx';
 import { StrategicSidebar } from './StrategicSidebar.tsx';
@@ -31,6 +41,47 @@ const game = (): GameState => useGameStore.getState().game!;
 beforeEach(() => localStorage.clear());
 
 describe('ContentsPanel', () => {
+  it('GAMES-ELEVATE-CAMPAIGN-UC-002: retrieves a one-unit tile garrison through a nearby commander without remote commander creation', () => {
+    const state = createGame({
+      ...defaultSettings(),
+      infrastructure: createFoundationPlaytestConfiguration(7, 3),
+    });
+    const commander = commanderOf(state, 'A');
+    const unit = commander.units.pop()!;
+    const { world } = worldOf(state);
+    const cell = world.subs.find(
+      (candidate) =>
+        candidate.main === commander.at &&
+        hexDistance(candidate.hex, world.subByKey.get(commander.pos)!.hex) === 1 &&
+        !state.armies.some((holder) => holder.pos === candidate.key),
+    )!;
+    state.forts[cell.key] = 1;
+    state.armies.push({
+      id: 'stationed-guard',
+      team: 'A',
+      kind: 'garrison',
+      building: 'temporary',
+      pos: cell.key,
+      at: cell.main,
+      units: [unit],
+      movesLeft: 0,
+    });
+    load(state, 'stationed-guard');
+    render(<Harness />);
+    expect(screen.getByText(/ALPHA TILE GARRISON/)).toBeInTheDocument();
+    expect(screen.getByText('1/1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /NEW COMMANDER/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(`select ${unit.label}`));
+    fireEvent.click(screen.getByRole('button', { name: /RETRIEVE TO/ }));
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /transfer targets/i })).getByRole('button', {
+        name: new RegExp(commander.id),
+      }),
+    );
+    expect(game().armies.some((holder) => holder.id === 'stationed-guard')).toBe(false);
+    expect(commanderOf(game(), 'A').units.some((candidate) => candidate.id === unit.id)).toBe(true);
+  });
+
   it('lists a commander’s units with type, label and HP bar', () => {
     const s = strategicGame(true);
     const a = commanderOf(s, 'A');

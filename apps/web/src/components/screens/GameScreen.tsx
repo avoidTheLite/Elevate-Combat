@@ -11,6 +11,8 @@ import {
   reachable,
   unitType,
   revealedEnemies,
+  foundationHasPending,
+  campaignSupplyView,
 } from '@iron-ridge/engine';
 import { buildStrategicScene, buildTacticalScene } from '../../render/buildScene.ts';
 import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
@@ -24,6 +26,8 @@ import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Panel } from '../ui/Panel.tsx';
 import { SaveMenu } from '../game/SaveMenu.tsx';
+import { FoundationResolution } from '../game/FoundationResolution.tsx';
+import { FoundationDemoGuide } from '../game/FoundationDemoGuide.tsx';
 
 function teamClass(t: Team): string {
   return t === 'A' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--secondary))]';
@@ -46,6 +50,7 @@ export function GameScreen(): React.ReactElement {
   const aiTurn = isAiTurn(game);
   const humanActing = !aiTurn && acting !== null && game.settings.controllers[acting] === 'human';
   const inBattle = game.phase === 'battle' && game.battle !== null;
+  const foundationPending = foundationHasPending(game);
 
   // AI pacing loop.
   useEffect(() => {
@@ -69,13 +74,23 @@ export function GameScreen(): React.ReactElement {
   }, [error, clearError]);
 
   const overlay = useViewStore((s) => s.overlay);
+  const inspectedSupplyRoute = useMemo(() => {
+    if (!game.infrastructure || inBattle || !ui.selectedMain) return [];
+    const holder = game.armies.find((candidate) => candidate.id === ui.selectedArmy);
+    if (holder?.kind === 'commander') return [];
+    const site = game.infrastructure.sites.find(
+      (candidate) => candidate.mainHex === ui.selectedMain,
+    );
+    if (!site) return [];
+    return campaignSupplyView(game, game.active)?.nodes[site.nodeId]?.activeRoute?.path ?? [];
+  }, [game, inBattle, ui.selectedMain, ui.selectedArmy]);
   const tactical = useMemo(
     () => (inBattle ? buildTacticalScene(game, ui, view, overlay) : null),
     [game, ui, view, inBattle, overlay],
   );
   const strategic = useMemo(
-    () => (!inBattle ? buildStrategicScene(game, ui, view, overlay) : null),
-    [game, ui, view, inBattle, overlay],
+    () => (!inBattle ? buildStrategicScene(game, ui, view, overlay, inspectedSupplyRoute) : null),
+    [game, ui, view, inBattle, overlay, inspectedSupplyRoute],
   );
   const spec = tactical?.spec ?? strategic!;
 
@@ -115,6 +130,7 @@ export function GameScreen(): React.ReactElement {
     const v = viewTeam(g);
     const act = actingTeam(g);
     const human = act !== null && !isAiTurn(g) && g.settings.controllers[act] === 'human';
+    if (foundationHasPending(g)) return;
 
     if (g.phase === 'strategic' || g.phase === 'battle-pending' || g.phase === 'over') {
       strategicClick(key);
@@ -162,7 +178,7 @@ export function GameScreen(): React.ReactElement {
       s.dispatch({ type: 'attack', unitId: sel.id, cell: key });
       return;
     }
-    if (!sel.acted && !sel.deployed && reachable(ctx, sel).has(key)) {
+    if (!sel.stationed && !sel.acted && !sel.deployed && reachable(ctx, sel).has(key)) {
       s.dispatch({ type: 'move', unitId: sel.id, cell: key });
       return;
     }
@@ -178,6 +194,13 @@ export function GameScreen(): React.ReactElement {
             {game.settings.era.toUpperCase()} · {game.settings.grid.mainCols}×
             {game.settings.grid.mainRows} / r{game.settings.grid.subRadius}
           </span>
+          {game.settings.infrastructure && (
+            <span className="text-[hsl(var(--warning))]">
+              {game.settings.infrastructure.tuningStatus === 'playtest'
+                ? 'INFRASTRUCTURE PLAYTEST'
+                : 'INFRASTRUCTURE'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[hsl(var(--muted-foreground))]">TURN {game.turn}</span>
@@ -211,6 +234,7 @@ export function GameScreen(): React.ReactElement {
           </Button>
         </div>
       </header>
+      <FoundationDemoGuide game={game} />
 
       {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
@@ -238,21 +262,26 @@ export function GameScreen(): React.ReactElement {
               game={game}
               ctx={tactical.ctx}
               view={view}
-              canAct={humanActing}
+              canAct={humanActing && !foundationPending}
               seenIds={seenIds}
             />
           ) : (
             <StrategicSidebar
               game={game}
               view={view}
-              canAct={humanActing && game.phase === 'strategic'}
+              canAct={humanActing && !foundationPending && game.phase === 'strategic'}
             />
           )}
         </aside>
       </div>
 
-      {game.phase === 'battle-pending' && game.pending && !aiTurn && <PendingBattle game={game} />}
-      {inBattle && game.battle!.phase === 'over' && !aiTurn && <BattleOver game={game} />}
+      {game.phase === 'battle-pending' && game.pending && !aiTurn && !foundationPending && (
+        <PendingBattle game={game} />
+      )}
+      {inBattle && game.battle!.phase === 'over' && !aiTurn && !foundationPending && (
+        <BattleOver game={game} />
+      )}
+      {foundationPending && <FoundationResolution game={game} />}
       {game.phase === 'over' && <GameOver game={game} />}
       {handoff && !aiTurn && (
         <Overlay>

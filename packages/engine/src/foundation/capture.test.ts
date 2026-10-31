@@ -616,6 +616,65 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: atomic Capture/Raze controller', () => 
     ).toMatchObject({ ok: false, code: 'invalid-profile' });
   });
 
+  it('supports Do nothing as a free normal outcome without changing control, damage or work', () => {
+    const source = initial();
+    const poor = { ...source, work: { ...source.work, commandPoints: { A: 0, B: 17 } } };
+    const state = success(commit(choose(begin(poor), 'node-1', 'none')));
+    expect(state.work.commandPoints).toEqual(poor.work.commandPoints);
+    expect(state.nodes).toEqual(poor.nodes);
+    expect(state.nodes[0]).toBe(poor.nodes[0]);
+    expect(state.work.nodeSpending).toEqual([]);
+    expect(state.work.engineerSpending).toEqual([]);
+    expect(state.receipts[0]).toMatchObject({
+      cpSpent: 0,
+      recomputeNetworkEffects: false,
+      changes: [
+        {
+          nodeId: 'node-1',
+          outcome: 'none',
+          previousOwner: 'B',
+          owner: 'B',
+          cpSpent: 0,
+          buildingWindow: 'unchanged',
+          sameCycleIncome: false,
+          sameCycleDeployment: false,
+          sameCycleResupply: false,
+        },
+      ],
+    });
+    expect(
+      validateFoundationCaptureState(JSON.parse(JSON.stringify(state)) as FoundationCaptureState),
+    ).toBeNull();
+  });
+
+  it('allows Do nothing alongside paid choices atomically even when all outcomes are affordable', () => {
+    const source = initial();
+    let state = begin(source, context(source, undefined, [facts(), facts('node-2')]));
+    state = choose(state, 'node-1', 'none');
+    expect(commit(state)).toMatchObject({ ok: false, code: 'incomplete-choices' });
+    state = choose(state, 'node-2', 'capture');
+    const committed = success(commit(state));
+    expect(committed.nodes[0]).toBe(source.nodes[0]);
+    expect(committed.nodes.map((n) => n.owner)).toEqual(['B', 'A']);
+    expect(committed.work.commandPoints.A).toBe(33);
+    expect(committed.work.nodeSpending.map((s) => s.nodeId)).toEqual(['node-2']);
+    expect(committed.receipts[0].recomputeNetworkEffects).toBe(true);
+    expect(
+      validateFoundationCaptureState({
+        ...committed,
+        receipts: [
+          {
+            ...committed.receipts[0],
+            changes: [
+              { ...committed.receipts[0].changes[0], owner: null },
+              committed.receipts[0].changes[1],
+            ],
+          },
+        ],
+      }),
+    ).not.toBeNull();
+  });
+
   it('keeps manual final-center eligibility independent of unrelated hostile survivors or a winner label', () => {
     const source = initial();
     const manual = context(source, { kind: 'manual-battle-end', battleId: 'battle-1' }, [

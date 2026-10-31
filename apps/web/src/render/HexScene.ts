@@ -688,7 +688,7 @@ export class HexScene {
         obj.kindSig = sig;
       }
       obj.target.copy(pos);
-      obj.pickKey = t.kind === 'army' || t.kind === 'hq' ? t.key : undefined;
+      obj.pickKey = t.kind === 'army' || t.kind === 'hq' || t.stationed ? t.key : undefined;
       const s = t.scale ?? 1;
       obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 1.6 : 1.25) * s, 0);
       const teamHex = `#${TEAM_COLOR[t.team].toString(16).padStart(6, '0')}`;

@@ -13,6 +13,9 @@ import {
   fortify,
   recruit,
   startPendingBattle,
+  continueFoundationResolution,
+  afterFoundationMovement,
+  checkCampaignVictory,
 } from './strategic.ts';
 import {
   attack,
@@ -34,6 +37,30 @@ import {
 import { engage, formCommander, moveArmy, moveCommander, transferUnits } from './command.ts';
 import type { GameState } from './types.ts';
 import { withRules } from './rules.ts';
+import type { CampaignNodeAction } from './foundation/campaignNodes.ts';
+import {
+  applyCampaignNodeAction,
+  chooseCampaignCapture,
+  commitCampaignCapture,
+  refreshCampaignNodeSnapshot,
+} from './foundation/campaignNodes.ts';
+import type { FoundationCaptureOutcome } from './foundation/capture.ts';
+import {
+  foundationHasPending,
+  syncCampaignClaims,
+  refreshCampaignNetworks,
+} from './foundation/campaign.ts';
+import {
+  beginCampaignFreeShots,
+  toggleCampaignStationing,
+  commitCampaignStationing,
+  selectCampaignFreeShotTarget,
+  resolveCampaignFreeShot,
+} from './foundation/campaignGarrisons.ts';
+import { buildWorld } from './grid.ts';
+import { applyCampaignRoadRepair } from './foundation/campaignRoads.ts';
+import type { CampaignRoadRepairRequest } from './foundation/campaignRoads.ts';
+import { applyCampaignRazeTile } from './foundation/campaignRaze.ts';
 
 export type GameAction =
   | { type: 'moveCommander'; armyId: string; dest: HexKey }
@@ -42,7 +69,16 @@ export type GameAction =
   | { type: 'formCommander'; fromId: string; unitIds: string[] }
   /** V0.9 adapter: `dest` is a main hex (engage there, or step into it). */
   | { type: 'moveArmy'; armyId: string; dest: HexKey }
-  | { type: 'recruit'; typeId: string }
+  | { type: 'recruit'; typeId: string; nodeId?: string }
+  | { type: 'nodeWork'; request: CampaignNodeAction }
+  | { type: 'repairRoad'; request: CampaignRoadRepairRequest }
+  | { type: 'captureChoice'; nodeId: string; outcome: FoundationCaptureOutcome }
+  | { type: 'captureCommit' }
+  | { type: 'stationingToggle'; unitId: string }
+  | { type: 'stationingCommit' }
+  | { type: 'freeShotTarget'; targetId: string }
+  | { type: 'freeShotResolve' }
+  | { type: 'razeTile'; unitId: string; buildingId: string }
   | { type: 'fortify'; hex: HexKey }
   | { type: 'endTurn' }
   | { type: 'startBattle' }
@@ -76,6 +112,16 @@ export function apply(prev: GameState, action: GameAction): ApplyResult {
 }
 
 function applyAction(prev: GameState, action: GameAction): ApplyResult {
+  if (foundationHasPending(prev)) {
+    const f = prev.infrastructure!;
+    const allowed = f.capture.pending
+      ? ['captureChoice', 'captureCommit']
+      : f.garrisons?.pendingStationing
+        ? ['stationingToggle', 'stationingCommit']
+        : ['freeShotTarget', 'freeShotResolve'];
+    if (!allowed.includes(action.type))
+      return { state: prev, error: 'Resolve the pending campaign choices first', outcome: null };
+  }
   const state = structuredClone(prev);
   const rng = createRng(state.rng);
   let res: { ok: boolean; error?: string; outcome?: AttackOutcome } = {
@@ -105,7 +151,71 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
       res = moveArmy(state, action.armyId, action.dest);
       break;
     case 'recruit':
-      res = recruit(state, action.typeId);
+      res = recruit(state, action.typeId, action.nodeId);
+      break;
+    case 'nodeWork':
+      res = applyCampaignNodeAction(state, buildWorld(state.settings.grid), action.request);
+      break;
+    case 'repairRoad':
+      res = applyCampaignRoadRepair(state, action.request);
+      break;
+    case 'captureChoice': {
+      const f = state.infrastructure;
+      if (!f?.capture.pending) {
+        res = { ok: false, error: 'No pending capture choices' };
+        break;
+      }
+      res = chooseCampaignCapture(state, {
+        requestId: `capture-choice:${state.nextId++}`,
+        expectedVersion: f.capture.version,
+        batchId: f.capture.pending.request.requestId,
+        nodeId: action.nodeId,
+        outcome: action.outcome,
+      });
+      break;
+    }
+    case 'captureCommit': {
+      const f = state.infrastructure;
+      if (!f?.capture.pending) {
+        res = { ok: false, error: 'No pending capture choices' };
+        break;
+      }
+      res = commitCampaignCapture(state, {
+        requestId: `capture-commit:${state.nextId++}`,
+        expectedVersion: f.capture.version,
+        batchId: f.capture.pending.request.requestId,
+      });
+      if (res.ok) continueFoundationResolution(state);
+      break;
+    }
+    case 'stationingToggle': {
+      const pending = state.infrastructure?.garrisons?.pendingStationing;
+      res = pending
+        ? toggleCampaignStationing(state, action.unitId, pending.version)
+        : { ok: false, error: 'No pending stationing choices' };
+      break;
+    }
+    case 'stationingCommit': {
+      const pending = state.infrastructure?.garrisons?.pendingStationing;
+      res = pending
+        ? commitCampaignStationing(state, pending.version)
+        : { ok: false, error: 'No pending stationing choices' };
+      if (res.ok) continueFoundationResolution(state);
+      break;
+    }
+    case 'freeShotTarget':
+      res = selectCampaignFreeShotTarget(state, action.targetId);
+      break;
+    case 'freeShotResolve':
+      res = resolveCampaignFreeShot(state);
+      if (res.ok) {
+        syncCampaignClaims(state);
+        checkCampaignVictory(state);
+        continueFoundationResolution(state);
+      }
+      break;
+    case 'razeTile':
+      res = applyCampaignRazeTile(state, action.unitId, action.buildingId);
       break;
     case 'fortify':
       res = fortify(state, action.hex);
@@ -183,5 +293,31 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
   if (!res.ok) return { state: prev, error: res.error ?? 'Action failed', outcome: null };
   // Tactical actions roll on the local rng; strategic auto-resolve advances state.rng itself.
   if (rng.state() !== prev.rng >>> 0) state.rng = rng.state();
+  if (state.infrastructure) {
+    if (
+      (action.type === 'finishDeploy' || action.type === 'autoDeploy') &&
+      state.battle?.phase === 'combat'
+    ) {
+      const opened = beginCampaignFreeShots(state, 'tactical-after-deployment');
+      if (!opened.ok) return { state: prev, error: opened.error, outcome: null };
+    }
+    if (action.type === 'moveCommander' || action.type === 'moveArmy')
+      afterFoundationMovement(state, action.armyId);
+    else if (
+      ![
+        'captureChoice',
+        'captureCommit',
+        'stationingToggle',
+        'freeShotTarget',
+        'nodeWork',
+        'repairRoad',
+        'endTurn',
+        'concludeBattle',
+      ].includes(action.type)
+    )
+      refreshCampaignNodeSnapshot(state);
+    syncCampaignClaims(state);
+    if (!state.infrastructure.capture.pending) refreshCampaignNetworks(state);
+  }
   return { state, error: null, outcome: res.outcome ?? null };
 }

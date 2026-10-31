@@ -9,17 +9,66 @@ import type { GameAction } from '../actions.ts';
 import type { BattleContext } from '../battleMap.ts';
 import { deploymentZone, h, liveUnits, refreshOccupancy } from '../battleMap.ts';
 import { previewAttack } from '../combat.ts';
+import { campaignGarrisonTargetOptions } from '../foundation/campaignGarrisons.ts';
+import { campaignRazeTileOptions } from '../foundation/campaignRaze.ts';
+import type { FreeShotPrompt } from '../foundation/freeShots.ts';
 import { reachable } from '../movement.ts';
-import { contextFor, holdsCaptureZone, warnedRangeCells } from '../tactical.ts';
+import { contextFor, holdsCaptureZone, placeWarnedFort, warnedRangeCells } from '../tactical.ts';
 import type { Battle, BattleUnit, GameState, Team } from '../types.ts';
 import { otherTeam } from '../types.ts';
-import { mechanics } from '../rules.ts';
+import { mechanics, withRules } from '../rules.ts';
 import { unitType } from '../units.ts';
 import { canSee, visibleCells, revealedEnemies, withVisionCache } from '../visibility.ts';
 
 interface Shot {
   cell: HexKey;
   value: number;
+}
+
+function shotValue(
+  expectedDamage: number,
+  pDirect: number,
+  pSplash: number,
+  targets: readonly { hp: number; typeId: string }[],
+): number {
+  // Packed-commander previews average across eligible packed units. Apply the
+  // same existing kill/cost heuristic at that boundary, without a new priority system.
+  const bonus = targets.reduce(
+    (total, target) =>
+      total +
+      (expectedDamage >= target.hp ? 4 : 0) +
+      unitType(target.typeId).cost * 0.15 * (pDirect + pSplash),
+    0,
+  );
+  return expectedDamage + (targets.length ? bonus / targets.length : 0);
+}
+
+/** Rank the current legal free-shot options with the ordinary tactical attack heuristic. */
+export function chooseCampaignFreeShotAiTarget(
+  state: GameState,
+  prompt: FreeShotPrompt,
+): string | null {
+  if (!prompt.ok || prompt.status === 'complete') return null;
+  return withRules(state.settings.rules, () => {
+    const options = campaignGarrisonTargetOptions(state, prompt.shooterId, prompt.trigger)
+      .filter((option) => prompt.targetIds.includes(option.targetId))
+      .map((option) => {
+        const targets =
+          prompt.trigger === 'tactical-after-deployment'
+            ? (state.battle?.units.filter((u) => u.id === option.targetId && u.hp > 0) ?? [])
+            : (state.armies.find((a) => a.id === option.targetId)?.units.filter((u) => u.hp > 0) ??
+              []);
+        return {
+          targetId: option.targetId,
+          value: shotValue(option.expectedDamage, option.pDirect, option.pSplash, targets),
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.value - a.value || (a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0),
+      );
+    return options[0]?.targetId ?? null;
+  });
 }
 
 function bestShot(
@@ -32,9 +81,7 @@ function bestShot(
   for (const e of enemies) {
     const pv = previewAttack(ctx, battle, u, e.pos!);
     if (!pv.legal) continue;
-    const kill = pv.expectedDamage >= e.hp ? 4 : 0;
-    const value =
-      pv.expectedDamage + kill + unitType(e.typeId).cost * 0.15 * (pv.pDirect + pv.pSplash);
+    const value = shotValue(pv.expectedDamage, pv.pDirect, pv.pSplash, [e]);
     if (!best || value > best.value) best = { cell: e.pos!, value };
   }
   return best;
@@ -143,7 +190,7 @@ function cellScore(
 }
 
 export function tacticalAiStep(state: GameState): GameAction {
-  return withVisionCache(() => decide(state));
+  return withRules(state.settings.rules, () => withVisionCache(() => decide(state)));
 }
 
 function decide(state: GameState): GameAction {
@@ -159,6 +206,10 @@ function decide(state: GameState): GameAction {
       const origin = ctx.world.mainByKey.get(battle.origin)!.center;
       const cells = [...warnedRangeCells(ctx, battle)]
         .filter((k) => (battle.forts[k] ?? 0) < mechanics().MAX_FORT)
+        .filter((key) => {
+          const preview = structuredClone(state);
+          return placeWarnedFort(contextFor(preview), preview.battle!, key).ok;
+        })
         .sort((a, b) => {
           const s = (k: HexKey): number =>
             h(ctx, k) * 1.5 -
@@ -197,6 +248,14 @@ function decide(state: GameState): GameAction {
 
     // Fire first if a good shot exists from here.
     const shotHere = bestShot(ctx, battle, u, enemies);
+    if (!shotHere) {
+      const target = campaignRazeTileOptions(state, u.id).find((quote) => quote.eligible);
+      if (target) return { type: 'razeTile', unitId: u.id, buildingId: target.buildingId };
+    }
+    if (u.stationed) {
+      if (shotHere) return { type: 'attack', unitId: u.id, cell: shotHere.cell };
+      continue;
+    }
     const fixed = t.placementCategory === 'combat_fixed';
 
     if (fixed) {

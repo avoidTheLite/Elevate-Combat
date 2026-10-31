@@ -2,6 +2,7 @@ import type { HexKey } from './hex.ts';
 import type { GridConfig } from './grid.ts';
 import type { Era } from './units.ts';
 import type { RulesOverride } from './rules.ts';
+import type { CampaignConfiguration, CampaignFoundationState } from './foundation/campaign.ts';
 
 export type Team = 'A' | 'B';
 
@@ -24,7 +25,7 @@ export interface ArmyUnit {
 export type HolderKind = 'commander' | 'garrison';
 
 /** Buildings that host a garrison. V1.0 has only the HQ. */
-export type BuildingKind = 'hq';
+export type BuildingKind = 'hq' | 'temporary' | 'node';
 
 /**
  * A strategic holder of units. Commanders move on the sub-hex grid; garrisons sit
@@ -40,6 +41,10 @@ export interface Army {
   at: HexKey;
   /** Garrisons only: the building they belong to. */
   building?: BuildingKind;
+  /** Infrastructure garrisons are bound to their persistent node, not a mobile order. */
+  nodeId?: string;
+  /** Final orientation of a deliberately stationed guard; absence retains legacy facing. */
+  stationedFacing?: number;
   units: ArmyUnit[];
   /** Strategic sub-hex steps left this turn (always 0 for garrisons). */
   movesLeft: number;
@@ -85,6 +90,10 @@ export interface BattleUnit {
    */
   exposed: boolean;
   firstStrikeUsed: boolean;
+  /** Deliberately left in a temporary tile garrison; firing orders only. */
+  stationed?: boolean;
+  /** Persistent holder identity, retained across deployment and campaign writeback. */
+  holderId?: string;
 }
 
 export interface BattleLogEntry {
@@ -142,6 +151,13 @@ export interface Battle {
   log: BattleLogEntry[];
   winner: Team | null;
   endReason: string | null;
+  /** Annex damage is tactical immediately and commits to nodes with the battle outcome. */
+  ruinedInfrastructureBuildingIds?: string[];
+  /** Explicit withdrawal event; outcome processing never infers it from prose or winner. */
+  withdrawnTeam?: Team;
+  departedUnitIds?: string[];
+  /** Existing campaign fallback/overrun losses, distinct from tactical damage. */
+  campaignLostUnitIds?: string[];
 }
 
 // ── Strategic campaign ──
@@ -167,6 +183,8 @@ export interface GameSettings {
   transferRule?: Partial<TransferRule>;
   /** Runtime unit/mechanics overrides (balance lab). Absent = baseline rules. */
   rules?: RulesOverride;
+  /** Explicit configured foundation rules; absent games retain their saved ruleset. */
+  infrastructure?: CampaignConfiguration;
 }
 
 export interface StrategicLogEntry {
@@ -202,4 +220,6 @@ export interface GameState {
   winner: Team | null;
   rng: number;
   nextId: number;
+  /** Durable foundation transactions and progress; loading never advances this state. */
+  infrastructure?: CampaignFoundationState;
 }

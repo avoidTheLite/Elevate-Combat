@@ -5,10 +5,17 @@ import { describe, expect, it } from 'vitest';
 import { apply } from './actions.ts';
 import {
   canEngage,
+  canMoveCommander,
   canTransfer,
   commanderReach,
   engageOrigin,
   transferTargets,
+  transferUnits,
+  formCommander,
+  moveCommander,
+  moveArmy,
+  engage,
+  holderCapacity,
 } from './command.ts';
 import { mainDistance, mainNeighbors } from './grid.ts';
 import { DIRECTIONS, hexAdd, hexDistance, hexKey, hexScale, neighbors } from './hex.ts';
@@ -29,6 +36,16 @@ import {
 import { checkVictory } from './tactical.ts';
 import { commanderOf } from './testBattle.ts';
 import type { Army, GameSettings, GameState, Team } from './types.ts';
+import { unitType } from './units.ts';
+import {
+  campaignBuildingData,
+  constructCampaignNodeRequest,
+  createCampaignInfrastructure,
+  refreshCampaignNodeSnapshot,
+} from './foundation/campaignNodes.ts';
+import { quoteCampaignRecruitment } from './foundation/campaignRecruitment.ts';
+import { beginFoundationCapture } from './foundation/capture.ts';
+import { createFoundationPlaytestConfiguration } from './foundation/playtestProfile.ts';
 
 function game(over: Partial<GameSettings> = {}): GameState {
   return createGame({
@@ -505,6 +522,362 @@ describe('formCommander', () => {
     expect(
       apply(s, { type: 'formCommander', fromId: g.id, unitIds: [g.units[0]!.id] }).error,
     ).toMatch(/free cell/);
+  });
+});
+
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: temporary garrison retrieval', () => {
+  function stationed(s: GameState, pos: string): Army {
+    const holder: Army = {
+      id: `stationed-${s.nextId++}`,
+      team: 'A',
+      kind: 'garrison',
+      building: 'temporary',
+      at: '',
+      pos,
+      movesLeft: 0,
+      units: [makeUnit(s, 'A', 'ww2_rifle_infantry')],
+    };
+    put(s, holder, pos);
+    s.armies.push(holder);
+    return holder;
+  }
+
+  it('retrieves into an existing nearby friendly commander and removes the emptied tile holder', () => {
+    const s = game();
+    const commander = commanderOf(s, 'A');
+    const temp = stationed(s, fromCentre(s, s.hq.A, 3, 1));
+    const unit = temp.units[0];
+    expect(canTransfer(s, temp, commander)).toMatchObject({ ok: true });
+    expect(transferUnits(s, temp.id, commander.id, [unit.id])).toMatchObject({ ok: true });
+    expect(commander.units).toContainEqual(unit);
+    expect(commander.movesLeft).toBe(0);
+    expect(s.armies.some((a) => a.id === temp.id)).toBe(false);
+    expect(garrisonOf(s, 'A')).toBeDefined();
+    expect(transferTargets(s, temp.id)).toEqual([]);
+  });
+
+  it('uses the normal garrison interaction distance and same-MainHex restrictions', () => {
+    const s = game();
+    const commander = commanderOf(s, 'A');
+    const temp = stationed(s, fromCentre(s, s.hq.A, 3, 1));
+    const { world } = worldOf(s);
+    const far = world.mainByKey
+      .get(temp.at)!
+      .subKeys.find(
+        (key) =>
+          hexDistance(world.subByKey.get(key)!.hex, world.subByKey.get(temp.pos)!.hex) >
+          COMMAND.transferRule(s.settings.grid.subRadius).radius!,
+      )!;
+    put(s, commander, far);
+    const before = JSON.stringify(s);
+    expect(canTransfer(s, temp, commander)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('within'),
+    });
+    expect(transferUnits(s, temp.id, commander.id, [temp.units[0].id]).ok).toBe(false);
+    expect(JSON.stringify(s)).toBe(before);
+    s.settings.transferRule = { radius: null, sameMainHex: true };
+    expect(canTransfer(s, temp, commander).ok).toBe(true);
+    put(s, commander, centerKey(world, mainAt(s, 2, 1)));
+    expect(canTransfer(s, temp, commander)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('share a main hex'),
+    });
+  });
+
+  it('permits only friendly commander retrieval and preserves commander capacity limits', () => {
+    const s = game();
+    const commander = commanderOf(s, 'A');
+    const temp = stationed(s, fromCentre(s, s.hq.A, 3, 1));
+    const hq = garrisonOf(s, 'A')!;
+    expect(canTransfer(s, temp, hq)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('commander'),
+    });
+    expect(canTransfer(s, temp, commanderOf(s, 'B'))).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('enemy'),
+    });
+    while (commander.units.length < ECONOMY.armyCap)
+      commander.units.push(makeUnit(s, 'A', 'ww2_rifle_infantry'));
+    expect(canTransfer(s, temp, commander)).toMatchObject({
+      ok: false,
+      error: `Receiver would exceed ${ECONOMY.armyCap} units`,
+    });
+  });
+
+  it('enforces capacity one and never creates stationing through ordinary transfers', () => {
+    const s = game();
+    const commander = commanderOf(s, 'A');
+    const temp = stationed(s, fromCentre(s, s.hq.A, 3, 1));
+    expect(canTransfer(s, commander, temp)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 1 units',
+    });
+    temp.units = [];
+    const before = JSON.stringify(s);
+    expect(transferUnits(s, commander.id, temp.id, [commander.units[0].id])).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('deliberate post-battle stationing'),
+    });
+    expect(JSON.stringify(s)).toBe(before);
+  });
+
+  it('cannot form a freestanding commander, move or initiate combat from a stationed unit', () => {
+    const s = game();
+    const temp = stationed(s, fromCentre(s, s.hq.A, 3, 1));
+    const before = JSON.stringify(s);
+    expect(formCommander(s, temp.id, [temp.units[0].id])).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('commander must retrieve'),
+    });
+    expect(moveCommander(s, temp.id, fromCentre(s, s.hq.A, 3, 2)).ok).toBe(false);
+    expect(engage(s, temp.id, commanderOf(s, 'B').id).ok).toBe(false);
+    expect(JSON.stringify(s)).toBe(before);
+  });
+
+  it('blocks direct ordinary command APIs while an independent capture choice is pending', () => {
+    const s = game();
+    const commander = commanderOf(s, 'A');
+    const hq = garrisonOf(s, 'A')!;
+    const { world } = worldOf(s);
+    const config = createFoundationPlaytestConfiguration(7, 3);
+    const base = createCampaignInfrastructure(s, world, config.nodes);
+    const node = base.capture.nodes.find((n) => n.owner === 'B')!;
+    const pending = beginFoundationCapture(
+      base.capture,
+      { requestId: 'pending-command-test', expectedVersion: 0 },
+      {
+        snapshotVersion: 0,
+        ownerTurn: { team: 'A', id: base.ownerTurns.A },
+        costs: config.nodes.captureCosts,
+        event: { kind: 'manual-battle-end', battleId: 'frozen-test-battle' },
+        candidates: [
+          {
+            nodeId: node.id,
+            liveGarrisonUnitIds: [],
+            liveCenterOccupants: [{ unitId: commander.units[0].id, team: 'A' }],
+            liveHostileMainHexUnitIds: [],
+            commanders: [],
+          },
+        ],
+      },
+    );
+    if (!pending.ok) throw new Error(pending.reason);
+    s.infrastructure = { ...base, capture: pending.state };
+    const dest = fromCentre(s, s.hq.A, 3, 2);
+    const before = JSON.stringify(s);
+    for (const result of [
+      canMoveCommander(s, commander, dest),
+      moveCommander(s, commander.id, dest),
+      moveArmy(s, commander.id, mainAt(s, 1, 1)),
+      canEngage(s, commander, commanderOf(s, 'B')),
+      engage(s, commander.id, commanderOf(s, 'B').id),
+      canTransfer(s, commander, hq),
+      transferUnits(s, commander.id, hq.id, [commander.units[0].id]),
+      formCommander(s, commander.id, [commander.units[0].id]),
+    ]) {
+      expect(result).toMatchObject({
+        ok: false,
+        error: expect.stringContaining('pending foundation event'),
+      });
+    }
+    expect([...commanderReach(s, commander)]).toEqual([[commander.pos, 0]]);
+    expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: node garrison capacity', () => {
+  it('combines fractional housing exactly before the shared whole-unit boundary', () => {
+    const base = createFoundationPlaytestConfiguration(7, 3);
+    const effects = { ...base.effects };
+    for (const [id, housing] of [
+      ['generic', 0.7],
+      ['barracks', 0.2],
+      ['workshop', 0.1],
+    ] as const) {
+      effects[id] = { ...effects[id], 1: { ...effects[id][1]!, housing } };
+    }
+    let s = game({ infrastructure: { ...base, effects } });
+    s.cp.A = 100;
+    refreshCampaignNodeSnapshot(s);
+    const site = s.infrastructure!.sites.find((candidate) => candidate.homeTeam === 'A')!;
+    const engineer = commanderOf(s, 'A').units.find((unit) => unitType(unit.typeId).engineer)!;
+    for (const [index, definitionId] of ['barracks', 'workshop'].entries()) {
+      const built = apply(s, {
+        type: 'nodeWork',
+        request: constructCampaignNodeRequest(s, {
+          kind: 'build',
+          nodeId: site.nodeId,
+          definitionId,
+          subHex: site.annexSubHexes[index],
+          tier: 1,
+          engineerUnitId: index === 0 ? null : engineer.id,
+        }),
+      });
+      expect(built.error).toBeNull();
+      s = built.state;
+    }
+    const hq = garrisonOf(s, 'A')!;
+    const commander = commanderOf(s, 'A');
+    expect(0.7 + 0.2 + 0.1).toBeLessThan(1); // The previous number-only quote rejected this slot.
+    expect(holderCapacity(s, hq)).toBe(1);
+    expect(quoteCampaignRecruitment(s, 'ww2_rifle_infantry', site.nodeId)).toMatchObject({
+      housing: 1,
+      allowed: true,
+    });
+    expect(canTransfer(s, commander, hq).ok).toBe(true);
+    expect(transferUnits(s, commander.id, hq.id, [commander.units[0].id]).ok).toBe(true);
+    expect(canTransfer(s, commander, hq)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 1 units',
+    });
+  });
+
+  it('uses identical configured HQ housing for recruitment, transfers and presentation', () => {
+    let s = game({ infrastructure: createFoundationPlaytestConfiguration(7, 3) });
+    const site = s.infrastructure!.sites.find((candidate) => candidate.homeTeam === 'A')!;
+    expect(holderCapacity(s, garrisonOf(s, 'A')!)).toBe(12);
+    expect(quoteCampaignRecruitment(s, 'ww2_rifle_infantry', site.nodeId).housing).toBe(12);
+    const nodeWork = constructCampaignNodeRequest(s, {
+      kind: 'build',
+      nodeId: site.nodeId,
+      definitionId: 'barracks',
+      subHex: site.annexSubHexes[2],
+      tier: 1,
+      engineerUnitId: null,
+    });
+    const built = apply(s, { type: 'nodeWork', request: nodeWork });
+    expect(built.error).toBeNull();
+    s = built.state;
+    const hq = garrisonOf(s, 'A')!;
+    const commander = commanderOf(s, 'A');
+    expect(holderCapacity(s, hq)).toBe(16);
+    expect(quoteCampaignRecruitment(s, 'ww2_rifle_infantry', site.nodeId).housing).toBe(16);
+    while (hq.units.length < 15) hq.units.push(makeUnit(s, 'A', 'ww2_rifle_infantry'));
+    expect(canTransfer(s, commander, hq)).toMatchObject({ ok: true });
+    expect(transferUnits(s, commander.id, hq.id, [commander.units[0].id])).toMatchObject({
+      ok: true,
+    });
+    expect(hq.units).toHaveLength(16);
+    expect(canTransfer(s, commander, hq)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 16 units',
+    });
+    const f = s.infrastructure!;
+    s.infrastructure = {
+      ...f,
+      capture: {
+        ...f.capture,
+        nodes: f.capture.nodes.map((node) =>
+          node.id === site.nodeId
+            ? {
+                ...node,
+                buildings: node.buildings.map((building) =>
+                  campaignBuildingData(building).placement === 'center'
+                    ? { ...building, ruined: true }
+                    : building,
+                ),
+              }
+            : node,
+        ),
+      },
+    };
+    expect(holderCapacity(s, hq)).toBe(0);
+    expect(quoteCampaignRecruitment(s, 'ww2_rifle_infantry', site.nodeId).housing).toBe(0);
+    expect(canTransfer(s, commander, hq)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 0 units',
+    });
+    expect(hq.units).toHaveLength(16);
+    const classic = game();
+    expect(holderCapacity(classic, garrisonOf(classic, 'A')!)).toBe(12);
+  });
+
+  it('quotes active node housing for transfers rather than the legacy HQ capacity', () => {
+    const s = game();
+    const { world } = worldOf(s);
+    const config = createFoundationPlaytestConfiguration(7, 3);
+    const base = createCampaignInfrastructure(s, world, config.nodes);
+    const site = base.sites.find((item) => item.homeTeam === null)!;
+    const node = base.capture.nodes.find((item) => item.id === site.nodeId)!;
+    const centerData = node.buildings[0].data;
+    if (!centerData || typeof centerData !== 'object' || Array.isArray(centerData))
+      throw new Error('Expected center payload');
+    s.infrastructure = {
+      ...base,
+      configuration: {
+        ...config,
+        effects: {
+          ...config.effects,
+          generic: {
+            ...config.effects.generic,
+            1: { ...config.effects.generic[1]!, housing: 2 },
+          },
+        },
+      },
+      capture: {
+        ...base.capture,
+        nodes: base.capture.nodes.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                owner: 'A',
+                buildings: [{ ...item.buildings[0], data: { ...centerData, active: true } }],
+              }
+            : item,
+        ),
+      },
+    };
+    const commander = commanderOf(s, 'A');
+    put(s, commander, site.annexSubHexes[0]);
+    const garrison: Army = {
+      id: 'node-test-garrison',
+      team: 'A',
+      kind: 'garrison',
+      building: 'node',
+      nodeId: node.id,
+      at: site.mainHex,
+      pos: site.centerSubHex,
+      movesLeft: 0,
+      units: [makeUnit(s, 'A', 'ww2_rifle_infantry')],
+    };
+    s.armies.push(garrison);
+    expect(canTransfer(s, commander, garrison)).toMatchObject({ ok: true });
+    expect(transferUnits(s, commander.id, garrison.id, [commander.units[0].id])).toMatchObject({
+      ok: true,
+    });
+    expect(garrison.units).toHaveLength(2);
+    expect(canTransfer(s, commander, garrison)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 2 units',
+    });
+    const f = s.infrastructure;
+    s.infrastructure = {
+      ...f,
+      capture: {
+        ...f.capture,
+        nodes: f.capture.nodes.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                buildings: item.buildings.map((building) => ({ ...building, ruined: true })),
+              }
+            : item,
+        ),
+      },
+    };
+    expect(canTransfer(s, commander, garrison)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 0 units',
+    });
+    expect(garrison.units).toHaveLength(2); // Capacity loss does not delete deployed troops.
+    garrison.nodeId = 'missing-node';
+    expect(canTransfer(s, commander, garrison)).toMatchObject({
+      ok: false,
+      error: 'Receiver would exceed 0 units',
+    });
+    expect(COMMAND.garrisonCap).toBe(12);
   });
 });
 

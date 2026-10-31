@@ -12,6 +12,7 @@ import {
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { RazeTileControl } from './RazeTileControl.tsx';
 
 const DIR_NAMES = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
 
@@ -53,6 +54,8 @@ export function TacticalSidebar({
     (preview.legal || (showHover && hoverUnit.team !== unit?.team) || t?.attackType === 'indirect');
 
   const deploying = battle.phase === 'deploy';
+  const canGiveOrders =
+    battle.phase === 'combat' && canAct && unit?.team === battle.active && !unit?.stationed;
   const myDeploy = deploying
     ? battle.units.filter((u) => u.team === battle.deployTeam && u.hp > 0)
     : [];
@@ -144,7 +147,13 @@ export function TacticalSidebar({
                   .filter(Boolean)
                   .join(' · ')}
               </div>
-              {battle.phase === 'combat' && canAct && unit.team === battle.active && (
+              {battle.phase === 'combat' && unit.stationed && (
+                <p className="text-[10px] text-[hsl(var(--warning))]">
+                  Stationed · fire or Raze Tile in place. A commander must retrieve this unit to
+                  move it.
+                </p>
+              )}
+              {canGiveOrders && (
                 <div className="flex flex-wrap gap-1">
                   {t.placementCategory === 'combat_fixed' &&
                     (unit.deployed ? (
@@ -212,6 +221,13 @@ export function TacticalSidebar({
                     FACE ↻
                   </Button>
                 </div>
+              )}
+              {battle.phase === 'combat' && (
+                <RazeTileControl
+                  game={game}
+                  unitId={unit.id}
+                  canAct={canAct && unit.team === battle.active}
+                />
               )}
               {t.specialRules.length > 0 && (
                 <details className="text-[10px] text-[hsl(var(--muted-foreground))]">

@@ -6,6 +6,8 @@
 // Schema history:
 //   1 — V0.9: a bare `GameState` (no envelope), armies on main hexes.
 //   2 — V1.0: envelope; commanders/garrisons on the sub-hex grid.
+//   3 — Optional durable infrastructure and temporary garrisons. Schema-2 state
+//       resumes unchanged; loading never starts or replays a campaign event.
 
 import type { World } from './grid.ts';
 import { GRID_LIMITS, buildWorld } from './grid.ts';
@@ -26,10 +28,14 @@ import {
 import { resolveBattleObjective } from './tactical.ts';
 import type { Army, GameState, Team } from './types.ts';
 import { UNIT_TYPES, unitType } from './units.ts';
+import {
+  validateCampaignConfiguration,
+  validateCampaignFoundationState,
+} from './foundation/campaign.ts';
 
 export const SAVE_FORMAT = 'iron-ridge-save';
-/** Current save schema. 1 = V0.9 bare GameState, 2 = V1.0 envelope + holders. */
-export const SAVE_SCHEMA = 2;
+/** 1 = bare armies; 2 = sub-hex holders; 3 = optional durable foundation progress. */
+export const SAVE_SCHEMA = 3;
 
 export interface SaveFile {
   format: typeof SAVE_FORMAT;
@@ -142,8 +148,7 @@ export function deserializeSave(text: string): DeserializeResult {
     const save: SaveFile = {
       format: SAVE_FORMAT,
       schema: SAVE_SCHEMA,
-      engineVersion:
-        schema === SAVE_SCHEMA && isStr(raw.engineVersion) ? raw.engineVersion : ENGINE_VERSION,
+      engineVersion: schema >= 2 && isStr(raw.engineVersion) ? raw.engineVersion : ENGINE_VERSION,
       savedAt,
       label: label || defaultSaveLabel(mig.state),
       state: mig.state,
@@ -192,6 +197,8 @@ export function migrateSave(raw: unknown, fromSchema = 1): MigrateResult {
       );
       migrate1to2(state, notes);
     }
+    // Schema 3 extends validation and the envelope only. In particular, absent
+    // infrastructure stays absent: do not initialize turns, budgets or forts here.
     return { ok: true, state, notes };
   } catch (e) {
     return {
@@ -347,6 +354,10 @@ export function validateGameState(raw: unknown): string[] {
           err('settings.transferRule.sameMainHex: must be a boolean');
       }
     }
+    if (s.infrastructure !== undefined) {
+      for (const problem of validateCampaignConfiguration(s.infrastructure))
+        err(`settings.infrastructure: ${problem}`);
+    }
     let rules: RulesOverride | undefined;
     let rulesOk = true;
     if (s.rules !== undefined) {
@@ -403,6 +414,8 @@ export function validateGameState(raw: unknown): string[] {
     // Holders
     const armyIds = new Set<string>();
     const unitIds = new Set<string>();
+    const holdersById = new Map<string, Obj>();
+    const holdersByUnitId = new Map<string, Obj>();
     const cells = new Map<string, string>();
     const checkUnitType = (path: string, typeId: unknown): boolean => {
       if (!isStr(typeId) || !UNIT_TYPES[typeId]) {
@@ -426,32 +439,73 @@ export function validateGameState(raw: unknown): string[] {
         if (!isObj(a)) return err(`${p}: must be an object`);
         if (!isStr(a.id) || !a.id) err(`${p}.id: missing`);
         else if (armyIds.has(a.id)) err(`${p}.id: duplicate ${a.id}`);
-        else armyIds.add(a.id);
+        else {
+          armyIds.add(a.id);
+          holdersById.set(a.id, a);
+        }
         if (!isTeam(a.team)) err(`${p}.team: invalid`);
         if (a.kind !== 'commander' && a.kind !== 'garrison')
           err(`${p}.kind: must be commander or garrison`);
-        if (a.kind === 'garrison' && a.building !== 'hq')
-          err(`${p}.building: garrison needs building "hq"`);
+        if (
+          a.kind === 'garrison' &&
+          a.building !== 'hq' &&
+          a.building !== 'node' &&
+          a.building !== 'temporary'
+        )
+          err(`${p}.building: garrison needs building "hq", "node" or "temporary"`);
         if (!isNum(a.movesLeft) || a.movesLeft < 0) err(`${p}.movesLeft: invalid`);
+        if (
+          a.stationedFacing !== undefined &&
+          (!isInt(a.stationedFacing) || a.stationedFacing < 0 || a.stationedFacing > 5)
+        )
+          err(`${p}.stationedFacing: must be an integer 0–5`);
+        if (
+          a.kind === 'garrison' &&
+          (a.building === 'temporary' || a.building === 'node') &&
+          a.movesLeft !== 0
+        )
+          err(`${p}.movesLeft: ${a.building} garrisons cannot move`);
+        if (a.kind === 'garrison' && a.building === 'node') {
+          if (!isStr(a.nodeId) || !a.nodeId) err(`${p}.nodeId: node garrison needs a node ID`);
+          const capture =
+            isObj(g.infrastructure) && isObj(g.infrastructure.capture)
+              ? g.infrastructure.capture
+              : null;
+          const node = Array.isArray(capture?.nodes)
+            ? capture.nodes.find((candidate) => isObj(candidate) && candidate.id === a.nodeId)
+            : undefined;
+          if (!isObj(node)) err(`${p}.nodeId: node garrison needs a known saved node`);
+          else {
+            if (a.team !== node.owner) err(`${p}.team: node garrison must match its node owner`);
+            if (a.at !== node.mainHex || a.pos !== node.centerSubHex)
+              err(`${p}.pos: node garrison must remain at its node center`);
+          }
+        }
         if (world) {
           if (!isSub(a.pos)) err(`${p}.pos: ${String(a.pos)} is not a sub-hex on this map`);
           else if (a.at !== world.subByKey.get(a.pos as string)!.main)
             err(`${p}.at: ${String(a.at)} does not contain pos ${String(a.pos)}`);
         }
         if (!Array.isArray(a.units)) return err(`${p}.units: must be an array`);
+        if (a.kind === 'garrison' && a.building === 'temporary' && a.units.length !== 1)
+          err(`${p}.units: temporary garrison requires exactly one living unit`);
         a.units.forEach((u: unknown, j: number) => {
           const up = `${p}.units[${j}]`;
           if (!isObj(u)) return err(`${up}: must be an object`);
           if (!isStr(u.id) || !u.id) err(`${up}.id: missing`);
           else if (unitIds.has(u.id)) err(`${up}.id: duplicate unit ${u.id}`);
-          else unitIds.add(u.id);
+          else {
+            unitIds.add(u.id);
+            holdersByUnitId.set(u.id, a);
+          }
           if (!isStr(u.label)) err(`${up}.label: missing`);
           if (checkUnitType(up, u.typeId)) {
             const max = maxHp(u.typeId as string);
             if (!isNum(u.hp) || u.hp <= 0 || u.hp > max) err(`${up}.hp: must be in (0, ${max}]`);
           }
         });
-        const present = a.kind === 'garrison' || a.units.length > 0;
+        const foundationMode = g.infrastructure !== undefined || s.infrastructure !== undefined;
+        const present = a.units.length > 0 || (a.kind === 'garrison' && !foundationMode);
         if (present && isStr(a.pos)) {
           const other = cells.get(a.pos);
           if (other) err(`${p}: shares sub-hex ${a.pos} with ${other}`);
@@ -482,15 +536,63 @@ export function validateGameState(raw: unknown): string[] {
     if (phase === 'battle-pending' && isObj(g.battle))
       err('phase is battle-pending but a battle is active');
 
-    if (isObj(g.battle))
+    if (isObj(g.battle)) {
+      const clock =
+        isObj(g.infrastructure) && isObj(g.infrastructure.clock) ? g.infrastructure.clock : null;
+      const resolvedBattle =
+        clock &&
+        isObj(clock.resolvingBattle) &&
+        g.battle.phase === 'over' &&
+        clock.resolvingBattle.id === g.battle.id
+          ? clock.resolvingBattle
+          : null;
+      const capture =
+        isObj(g.infrastructure) && isObj(g.infrastructure.capture)
+          ? g.infrastructure.capture
+          : null;
+      const captureEvent =
+        capture && isObj(capture.pending) && isObj(capture.pending.event)
+          ? capture.pending.event
+          : null;
+      const neutralCaptureResolution =
+        isObj(s.infrastructure) &&
+        resolvedBattle !== null &&
+        captureEvent?.kind === 'manual-battle-end' &&
+        captureEvent.battleId === g.battle.id;
+      const annexBuildings = new Map<string, string>();
+      if (Array.isArray(capture?.nodes)) {
+        for (const node of capture.nodes) {
+          if (!isObj(node) || !isStr(node.mainHex) || !Array.isArray(node.buildings)) continue;
+          for (const building of node.buildings) {
+            if (
+              isObj(building) &&
+              isStr(building.id) &&
+              isObj(building.data) &&
+              building.data.placement === 'annex'
+            )
+              annexBuildings.set(building.id, node.mainHex);
+          }
+        }
+      }
       validateBattle(g.battle, err, {
         era,
         armyIds,
         isMain,
         isSub,
         checkUnitType,
+        holdersById,
+        holdersByUnitId,
+        resolvedBattle,
+        configured: isObj(s.infrastructure),
+        neutralCaptureResolution,
+        annexBuildings,
         hasWorld: !!world,
       });
+    }
+    if (world && (g.infrastructure !== undefined || s.infrastructure !== undefined)) {
+      for (const problem of validateCampaignFoundationState(g as unknown as GameState, world))
+        err(`infrastructure: ${problem}`);
+    }
   } catch (e) {
     errors.push(`state: validation crashed (${e instanceof Error ? e.message : String(e)})`);
   }
@@ -506,15 +608,105 @@ function validateBattle(
     isMain: (k: unknown) => boolean;
     isSub: (k: unknown) => boolean;
     checkUnitType: (path: string, typeId: unknown) => boolean;
+    holdersById: ReadonlyMap<string, Obj>;
+    holdersByUnitId: ReadonlyMap<string, Obj>;
+    resolvedBattle: Obj | null;
+    configured: boolean;
+    neutralCaptureResolution: boolean;
+    annexBuildings: ReadonlyMap<string, string>;
     hasWorld: boolean;
   },
 ): void {
+  const resolvedUnits = Array.isArray(ctx.resolvedBattle?.units)
+    ? ctx.resolvedBattle.units.filter(isObj)
+    : [];
+  const battleUnits = Array.isArray(b.units) ? b.units.filter(isObj) : [];
+  const knownUnitIds = new Set(battleUnits.map((unit) => unit.id));
+  const unitList = (field: 'departedUnitIds' | 'campaignLostUnitIds'): Set<string> => {
+    const result = new Set<string>();
+    if (b[field] === undefined) return result;
+    if (!Array.isArray(b[field])) {
+      err(`battle.${field}: must be an array`);
+      return result;
+    }
+    for (const value of b[field]) {
+      if (!isStr(value) || !value || !knownUnitIds.has(value) || result.has(value))
+        err(`battle.${field}: must contain unique actual battle unit IDs`);
+      if (isStr(value)) result.add(value);
+    }
+    return result;
+  };
+  const departedIds = unitList('departedUnitIds');
+  const lostIds = unitList('campaignLostUnitIds');
+  if (b.withdrawnTeam !== undefined && (!isTeam(b.withdrawnTeam) || b.phase !== 'over'))
+    err('battle.withdrawnTeam: needs a valid team in a finished battle');
+  for (const unitId of departedIds) {
+    const unit = battleUnits.find((candidate) => candidate.id === unitId);
+    if (
+      !unit ||
+      !isTeam(b.withdrawnTeam) ||
+      unit.team !== b.withdrawnTeam ||
+      !isNum(unit.hp) ||
+      unit.hp <= 0 ||
+      unit.stationed === true
+    )
+      err('battle.departedUnitIds: requires living nonstationed units of the withdrawn team');
+  }
+  const archivedLost = (unit: Obj): boolean => {
+    const archived = resolvedUnits.find((candidate) => candidate.id === unit.id);
+    return (
+      ctx.configured &&
+      b.phase === 'over' &&
+      ctx.resolvedBattle !== null &&
+      isTeam(b.withdrawnTeam) &&
+      ctx.resolvedBattle.withdrawnTeam === b.withdrawnTeam &&
+      lostIds.has(unit.id as string) &&
+      departedIds.has(unit.id as string) &&
+      Array.isArray(ctx.resolvedBattle.campaignLostUnitIds) &&
+      ctx.resolvedBattle.campaignLostUnitIds.includes(unit.id) &&
+      Array.isArray(ctx.resolvedBattle.departedUnitIds) &&
+      ctx.resolvedBattle.departedUnitIds.includes(unit.id) &&
+      unit.team === b.withdrawnTeam &&
+      unit.stationed !== true &&
+      isNum(unit.hp) &&
+      unit.hp > 0 &&
+      isStr(unit.holderId) &&
+      !!unit.holderId &&
+      !ctx.holdersByUnitId.has(unit.id as string) &&
+      archived !== undefined &&
+      archived.team === unit.team &&
+      archived.holderId === unit.holderId &&
+      archived.pos === unit.pos &&
+      archived.hp === unit.hp
+    );
+  };
+  for (const unitId of lostIds) {
+    const unit = battleUnits.find((candidate) => candidate.id === unitId);
+    if (!departedIds.has(unitId) || !unit || !archivedLost(unit))
+      err('battle.campaignLostUnitIds: requires departed losses bound to the saved final battle');
+  }
+  const archivedParticipant = (holderId: unknown, team: unknown): boolean => {
+    if (!isStr(holderId) || !holderId) return false;
+    const units = resolvedUnits.filter((unit) => unit.holderId === holderId);
+    return (
+      units.length > 0 &&
+      units.every((unit) => unit.team === team && (unit.hp === 0 || archivedLost(unit)))
+    );
+  };
   if (!isStr(b.id)) err('battle.id: missing');
   if (b.era !== ctx.era) err('battle.era: does not match settings.era');
   if (!isTeam(b.attacker) || !isTeam(b.defender) || b.attacker === b.defender)
     err('battle.attacker/defender: must be the two different teams');
-  if (!ctx.armyIds.has(b.attackerArmyId as string)) err('battle.attackerArmyId: unknown holder');
-  if (!ctx.armyIds.has(b.defenderArmyId as string)) err('battle.defenderArmyId: unknown holder');
+  if (
+    !ctx.armyIds.has(b.attackerArmyId as string) &&
+    !archivedParticipant(b.attackerArmyId, b.attacker)
+  )
+    err('battle.attackerArmyId: unknown holder');
+  if (
+    !ctx.armyIds.has(b.defenderArmyId as string) &&
+    !archivedParticipant(b.defenderArmyId, b.defender)
+  )
+    err('battle.defenderArmyId: unknown holder');
   if (ctx.hasWorld) {
     if (!ctx.isMain(b.contested)) err('battle.contested: not a main hex');
     if (!ctx.isMain(b.origin)) err('battle.origin: not a main hex');
@@ -549,7 +741,34 @@ function validateBattle(
   if (!Array.isArray(b.log)) err('battle.log: must be an array');
   if (b.winner !== null && !isTeam(b.winner)) err('battle.winner: invalid');
   if (b.endReason !== null && !isStr(b.endReason)) err('battle.endReason: invalid');
-  if (b.phase === 'over' && !isTeam(b.winner)) err('battle.phase is over but no winner');
+  if (
+    b.phase === 'over' &&
+    !isTeam(b.winner) &&
+    !(b.winner === null && ctx.neutralCaptureResolution)
+  )
+    err('battle.phase is over but no winner');
+  if (b.ruinedInfrastructureBuildingIds !== undefined) {
+    const overlay = b.ruinedInfrastructureBuildingIds;
+    if (!Array.isArray(overlay)) err('battle.ruinedInfrastructureBuildingIds: must be an array');
+    else {
+      const seen = new Set<string>();
+      for (const buildingId of overlay) {
+        const mainHex = isStr(buildingId) ? ctx.annexBuildings.get(buildingId) : undefined;
+        if (
+          !isStr(buildingId) ||
+          !buildingId ||
+          seen.has(buildingId) ||
+          mainHex === undefined ||
+          !Array.isArray(b.mains) ||
+          !b.mains.includes(mainHex)
+        )
+          err(
+            'battle.ruinedInfrastructureBuildingIds: must contain unique known annexes in this battle',
+          );
+        if (isStr(buildingId)) seen.add(buildingId);
+      }
+    }
+  }
 
   if (!Array.isArray(b.units)) return err('battle.units: must be an array');
   const ids = new Set<string>();
@@ -572,6 +791,37 @@ function validateBattle(
     if (!isNum(u.movedDist)) err(`${p}.movedDist: invalid`);
     for (const f of ['moved', 'acted', 'deployed', 'suppressed', 'exposed', 'firstStrikeUsed'])
       if (typeof u[f] !== 'boolean') err(`${p}.${f}: must be a boolean`);
+    if (u.stationed !== undefined && typeof u.stationed !== 'boolean')
+      err(`${p}.stationed: must be a boolean`);
+    const holder = isStr(u.holderId) ? ctx.holdersById.get(u.holderId) : undefined;
+    const unitHolder = isStr(u.id) ? ctx.holdersByUnitId.get(u.id) : undefined;
+    const resolvedUnit = resolvedUnits.find((unit) => unit.id === u.id);
+    const historicalDead =
+      u.hp === 0 &&
+      resolvedUnit?.hp === 0 &&
+      resolvedUnit.team === u.team &&
+      resolvedUnit.holderId === u.holderId &&
+      resolvedUnit.pos === u.pos;
+    const historicalAbsent = historicalDead || archivedLost(u);
+    if (u.holderId !== undefined) {
+      if (!isStr(u.holderId) || !u.holderId || (!holder && !historicalAbsent))
+        err(`${p}.holderId: unknown holder`);
+      else if (!historicalAbsent && (unitHolder !== holder || holder?.team !== u.team))
+        err(`${p}.holderId: does not own this unit/team`);
+    }
+    const temporary = unitHolder?.kind === 'garrison' && unitHolder.building === 'temporary';
+    if (temporary && u.stationed !== true)
+      err(`${p}.stationed: temporary garrison unit must stay stationed`);
+    if (u.stationed === true) {
+      if (
+        !isStr(u.holderId) ||
+        !u.holderId ||
+        (!historicalDead && (!temporary || holder !== unitHolder))
+      )
+        err(`${p}.holderId: stationed unit requires its temporary garrison holder`);
+      else if (!historicalDead && u.pos !== holder?.pos)
+        err(`${p}.pos: stationed unit must stay on its holder's SubHex`);
+    }
     if (isStr(u.pos) && isNum(u.hp) && u.hp > 0) {
       const other = cells.get(u.pos);
       if (other) err(`${p}: shares ${u.pos} with ${other}`);

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { Army, GameState, Team } from '@iron-ridge/engine';
 import {
-  COMMAND,
   ECONOMY,
   armyStrength,
   attackCost,
   canTransfer,
+  holderCapacity,
   transferTargets,
   unitType,
 } from '@iron-ridge/engine';
@@ -43,7 +43,7 @@ export function ContentsPanel({
   const [picking, setPicking] = useState(false);
 
   const holder = seenHolders(game, view).find((a) => a.id === ui.selectedArmy) ?? null;
-  const cap = holder?.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap;
+  const cap = holder ? holderCapacity(game, holder) : ECONOMY.armyCap;
 
   const title = holder ? holderTitle(holder) : 'CONTENTS';
   const right = holder ? (
@@ -182,19 +182,26 @@ export function ContentsPanel({
               title={targets.length === 0 ? noTargetReason : undefined}
               onClick={() => setPicking((p) => !p)}
             >
-              TRANSFER TO ▸
+              {holder.building === 'temporary' ? 'RETRIEVE TO ▸' : 'TRANSFER TO ▸'}
             </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              variant="ghost"
-              disabled={formBlocked !== null}
-              title={formBlocked ?? 'Split the ticked units into a new commander'}
-              onClick={form}
-            >
-              NEW COMMANDER
-            </Button>
+            {holder.building !== 'temporary' && (
+              <Button
+                size="sm"
+                className="flex-1"
+                variant="ghost"
+                disabled={formBlocked !== null}
+                title={formBlocked ?? 'Split the ticked units into a new commander'}
+                onClick={form}
+              >
+                NEW COMMANDER
+              </Button>
+            )}
           </div>
+          {holder.building === 'temporary' && (
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              A commander must retrieve this stationed unit within normal interaction distance.
+            </p>
+          )}
           {targets.length === 0 ? (
             <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
               {noTargetReason}
@@ -217,8 +224,7 @@ export function ContentsPanel({
                     >
                       <span>▸ {holderName(to)}</span>
                       <span className="text-[hsl(var(--muted-foreground))]">
-                        {to.units.length}/
-                        {to.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap}
+                        {to.units.length}/{holderCapacity(game, to)}
                       </span>
                     </Button>
                   );

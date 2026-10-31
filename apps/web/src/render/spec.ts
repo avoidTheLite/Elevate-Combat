@@ -47,6 +47,8 @@ export interface TokenSpec {
   spent?: boolean;
   scale?: number;
   badge?: string;
+  /** A fixed strategic unit holder, picked on the map like a commander/building. */
+  stationed?: boolean;
 }
 
 export interface TrajectorySpec {
