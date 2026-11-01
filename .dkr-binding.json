@@ -1,13 +1,13 @@
 {
   "dkr": {
     "repo": "avoidTheLite/DKR",
-    "sha": "25d1929883a383716a56774c2a5da07d087812ab",
+    "sha": "e75ecf40c9b22887b055681461ad744a8bafd495",
     "id": "GAMES-ELEVATE",
     "path": "domains/games/Elevate-Combat/"
   },
   "implementation": {
     "repo": "avoidTheLite/Elevate-Combat",
-    "sha": "0116fe0c39e872f64d6a2b2153eea98c5c2c9c6a",
+    "sha": "4988fea9fba8f9f90272f672d9f7bacc32369529",
     "pr": "https://github.com/avoidTheLite/Elevate-Combat/pull/16"
   },
   "fidelity": "proto-ahead",

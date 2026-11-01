@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "0116fe0c39e872f64d6a2b2153eea98c5c2c9c6a",
+  "implementation_sha": "4988fea9fba8f9f90272f672d9f7bacc32369529",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -47,6 +47,51 @@
         {
           "path": "packages/engine/src/command.test.ts",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: garrisons and recruiting",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "packages/engine/src/campaignDefaults.test.ts",
+          "name": "approved new-campaign prices and saved configuration continuity charges the 15 CP default for a new commander split",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "packages/engine/src/campaignDefaults.test.ts",
+          "name": "approved new-campaign prices and saved configuration continuity defaults only new infrastructure recipes to Capture5/Raze2 and keeps explicit saved prices",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/foundation.journeys.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrastructure player journeys starts from approved defaults and rejects cleared or invalid capture prices",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/regularPlaytest.test.tsx",
+          "name": "ready regular strategic-objectives playtest uses generated central high ground and equally reachable near objectives, with only five centered sites",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/regularPlaytest.test.tsx",
+          "name": "ready regular strategic-objectives playtest loads an editable normal setup and starts VS AI with the same explicit trial rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/regularPlaytest.test.tsx",
+          "name": "ready regular strategic-objectives playtest loads an editable normal setup and starts HOTSEAT 2P with the same explicit trial rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/regularPlaytest.test.tsx",
+          "name": "ready regular strategic-objectives playtest loads an editable normal setup and starts AI vs AI with the same explicit trial rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/regularPlaytest.test.tsx",
+          "name": "ready regular strategic-objectives playtest removes preset infrastructure when switching from Ready to Classic before starting",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.journeys.test.tsx",
+          "name": "visible setup and scenario flows uses the approved new commander default and keeps Classic free of infrastructure rules",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
         }
       ]
@@ -388,6 +433,71 @@
           "path": "packages/engine/src/rulesOverride.test.ts",
           "name": "GAMES-ELEVATE-TACTICAL-UC-002: runtime rules overrides",
           "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance opts into trial rules without mutating the baseline or existing saved games",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance keeps tanks strictly shorter ranged than bazookas, with real upper limits",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance has a high-accuracy bazooka band at range 2 against a frontal heavy vehicle",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance has a high-accuracy bazooka band at range 3 against a frontal heavy vehicle",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance has a high-accuracy bazooka band at range 4 against a frontal heavy vehicle",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance has a high-accuracy bazooka band at range 5 against a frontal heavy vehicle",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance drops accuracy immediately after five and keeps the full distant band to ten",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance retains visibility, minimum range and elevation effects with the accurate profile",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance reduces tank movement penalty while preserving prior global movement overrides",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance improves vehicle side hit exposure separately from damage and armor",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance makes artillery fragile through HP only, preserving armor, range and firepower",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "packages/engine/src/playtestBalance.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: editable regular playtest balance validates and serializes editable accurate-band knobs with the selected trial profile",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
+        },
+        {
+          "path": "apps/web/src/balance/draft.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-002: trial profile remains editable in Balance Lab round-trips the bazooka unit profile and tank/accuracy mechanics through existing forms",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-002"
         }
       ]
     },
@@ -467,6 +577,26 @@
         {
           "path": "packages/engine/src/engagementSave.test.ts",
           "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects deployment through a different commander even if that cell belongs to its team union",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity retains pre-existing wounds in deployment and permits later tactical casualties (foundation=false)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity retains pre-existing wounds in deployment and permits later tactical casualties (foundation=true)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects forged dead or altered-HP selected deployment rosters (foundation=false)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects forged dead or altered-HP selected deployment rosters (foundation=true)",
           "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
         }
       ]
