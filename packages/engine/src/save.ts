@@ -1105,6 +1105,15 @@ function validateBattle(
         !(u.stationed === true && (holder?.building === 'temporary' || historicalDead))
       )
         err(`${p}.holderId: unit belongs to an unselected commander`);
+      if (b.phase === 'deploy' && participants.has(u.holderId as string)) {
+        // Deployment has no damage actions. Preserve wounds from the persistent
+        // roster, and reject forged casualties before auto-placement can skip them.
+        const source = Array.isArray(unitHolder?.units)
+          ? unitHolder.units.find((unit) => isObj(unit) && unit.id === u.id)
+          : undefined;
+        if (!isNum(u.hp) || u.hp <= 0 || !isObj(source) || u.hp !== source.hp)
+          err(`${p}.hp: deploying selected unit must match its living persistent source HP`);
+      }
       if (ctx.world && isStr(u.pos)) {
         const main = ctx.world.subByKey.get(u.pos)?.main;
         if (!Array.isArray(b.mains) || !b.mains.includes(main))

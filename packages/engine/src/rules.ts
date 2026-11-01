@@ -37,6 +37,12 @@ export interface Mechanics {
   EFFECT_MULT: Record<Effectiveness, number>;
   /** TN modifier for direct fire after moving. */
   MOVED_FIRE_TN: number;
+  /** Additive adjustment to ordinary moved-fire TN for tank cannons (baseline zero). */
+  TANK_MOVED_FIRE_ADJUSTMENT: number;
+  /** Accurate band of the opt-in bazooka range profile, using elevation-adjusted range. */
+  BAZOOKA_ACCURATE_RANGE: number;
+  BAZOOKA_CLOSE_TN: number;
+  BAZOOKA_FAR_TN: number;
   /** TN modifier for direct fire without moving (braced). */
   BRACED_FIRE_TN: number;
   /** TN modifier for marginal line of sight. */
@@ -95,6 +101,10 @@ export const DEFAULT_MECHANICS: Readonly<Mechanics> = deepFreeze({
   },
   EFFECT_MULT: { high: 1, medium: 0.75, low: 0.5, none: 0 },
   MOVED_FIRE_TN: 3,
+  TANK_MOVED_FIRE_ADJUSTMENT: 0,
+  BAZOOKA_ACCURATE_RANGE: 5,
+  BAZOOKA_CLOSE_TN: -5,
+  BAZOOKA_FAR_TN: 4,
   BRACED_FIRE_TN: -2,
   MARGINAL_LOS_TN: 2,
   SUPPRESSED_TN: 2,

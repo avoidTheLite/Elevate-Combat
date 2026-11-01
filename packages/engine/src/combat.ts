@@ -40,27 +40,27 @@ const BANDS: Band[] = [
   {
     name: 'Point-Blank',
     max: 1,
-    mod: { rifle_mg: -5, at_gun: -5, tank_cannon: null, indirect: null, melee: -5 },
+    mod: { rifle_mg: -5, at_gun: -5, bazooka: -5, tank_cannon: null, indirect: null, melee: -5 },
   },
   {
     name: 'Short',
     max: 3,
-    mod: { rifle_mg: 0, at_gun: 0, tank_cannon: 0, indirect: 0, melee: null },
+    mod: { rifle_mg: 0, at_gun: 0, bazooka: 0, tank_cannon: 0, indirect: 0, melee: null },
   },
   {
     name: 'Medium',
     max: 6,
-    mod: { rifle_mg: 3, at_gun: 2, tank_cannon: 2, indirect: 0, melee: null },
+    mod: { rifle_mg: 3, at_gun: 2, bazooka: 2, tank_cannon: 2, indirect: 0, melee: null },
   },
   {
     name: 'Long',
     max: 10,
-    mod: { rifle_mg: 6, at_gun: 4, tank_cannon: 4, indirect: 2, melee: null },
+    mod: { rifle_mg: 6, at_gun: 4, bazooka: 4, tank_cannon: 4, indirect: 2, melee: null },
   },
   {
     name: 'Extreme',
     max: Infinity,
-    mod: { rifle_mg: 10, at_gun: 4, tank_cannon: 4, indirect: 4, melee: null },
+    mod: { rifle_mg: 10, at_gun: 4, bazooka: 4, tank_cannon: 4, indirect: 4, melee: null },
   },
 ];
 
@@ -296,8 +296,18 @@ export function previewAttack(
   const armor: ArmorClass = defType?.armorClass ?? 'unarmored';
   const baseTn = M.BASE_TN[armor];
   const er = kind === 'melee' ? 1 : effectiveRange(dist, ha, hb);
-  const band = rangeBand(er);
-  const bandMod = band.mod[at.profile];
+  const ordinaryBand = rangeBand(er);
+  const bazookaClose = er <= M.BAZOOKA_ACCURATE_RANGE;
+  const band =
+    at.profile === 'bazooka'
+      ? { name: bazookaClose ? 'Bazooka accurate' : 'Bazooka distant' }
+      : ordinaryBand;
+  const bandMod =
+    at.profile === 'bazooka'
+      ? bazookaClose
+        ? M.BAZOOKA_CLOSE_TN
+        : M.BAZOOKA_FAR_TN
+      : ordinaryBand.mod[at.profile];
   if (bandMod === null)
     return illegal(kind, targetKey, target, `${band.name} not possible for this weapon`);
   mods.push({ label: `${band.name} range (eff ${er})`, value: bandMod });
@@ -305,7 +315,11 @@ export function previewAttack(
   if (kind === 'direct') {
     mods.push(
       attacker.moved
-        ? { label: 'Moved then fired', value: M.MOVED_FIRE_TN }
+        ? {
+            label: 'Moved then fired',
+            value:
+              M.MOVED_FIRE_TN + (at.profile === 'tank_cannon' ? M.TANK_MOVED_FIRE_ADJUSTMENT : 0),
+          }
         : { label: 'Braced', value: M.BRACED_FIRE_TN },
     );
   }

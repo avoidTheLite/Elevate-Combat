@@ -29,6 +29,8 @@ export interface SetupSelection {
   mode: 'ai' | 'hotseat' | 'spectate';
   campaignMode: 'classic' | 'simple' | 'advanced';
   additionalNodes: number;
+  /** Advanced node placement can use a different seed from the generated terrain. */
+  nodePlacementSeed?: number;
   commanderPrice: string;
   capturePrice: string;
   razePrice: string;

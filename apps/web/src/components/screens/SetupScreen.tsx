@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
-import { configurationDocument, parseCampaignConfiguration } from '../../lib/campaignScenarios.ts';
+import {
+  configurationDocument,
+  parseCampaignConfiguration,
+  regularPlaytestDocument,
+  regularPlaytestSettings,
+} from '../../lib/campaignScenarios.ts';
 import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import {
   GRID_LIMITS,
+  DEFAULT_CAMPAIGN_PRICES,
   EXPERIMENTAL_ENGAGEMENT_PROFILE,
   clusterSize,
   createFoundationPlaytestConfiguration,
@@ -100,13 +106,22 @@ export function SetupScreen(): React.ReactElement {
   );
   const [demoScenario, setDemoScenario] = useState<FoundationDemoSelection>('standard');
   const [demoError, setDemoError] = useState<string | null>(null);
-  const [commanderPrice, setCommanderPrice] = useState(restored?.commanderPrice ?? '');
+  const [commanderPrice, setCommanderPrice] = useState(
+    restored?.commanderPrice ?? String(DEFAULT_CAMPAIGN_PRICES.commanderTraining),
+  );
   const commanderCp = Number(commanderPrice);
   const validCommanderPrice =
     commanderPrice.trim() !== '' && Number.isSafeInteger(commanderCp) && commanderCp > 0;
   const [additionalNodes, setAdditionalNodes] = useState(restored?.additionalNodes ?? 16);
-  const [capturePrice, setCapturePrice] = useState(restored?.capturePrice ?? '');
-  const [razePrice, setRazePrice] = useState(restored?.razePrice ?? '');
+  const [nodePlacementSeed, setNodePlacementSeed] = useState(
+    restored?.nodePlacementSeed ?? settings.seed,
+  );
+  const [capturePrice, setCapturePrice] = useState(
+    restored?.capturePrice ?? String(DEFAULT_CAMPAIGN_PRICES.captureNode),
+  );
+  const [razePrice, setRazePrice] = useState(
+    restored?.razePrice ?? String(DEFAULT_CAMPAIGN_PRICES.razeNode),
+  );
   const captureCp = Number(capturePrice);
   const razeCp = Number(razePrice);
   const validPrices =
@@ -127,6 +142,7 @@ export function SetupScreen(): React.ReactElement {
     mode,
     campaignMode,
     additionalNodes,
+    nodePlacementSeed,
     commanderPrice,
     capturePrice,
     razePrice,
@@ -149,8 +165,10 @@ export function SetupScreen(): React.ReactElement {
         : mode === 'hotseat'
           ? { A: 'human', B: 'human' }
           : { A: 'ai', B: 'ai' };
+    const { infrastructure: _previousInfrastructure, ...baseSettings } = settings;
+    void _previousInfrastructure;
     const candidate: GameSettings = {
-      ...settings,
+      ...baseSettings,
       controllers,
       ...(validCommanderPrice ? { commanderTrainingCp: commanderCp } : {}),
       ...(campaignMode !== 'classic' && validPrices
@@ -163,7 +181,7 @@ export function SetupScreen(): React.ReactElement {
                   campaignMode === 'advanced'
                     ? {
                         mode: 'advanced' as const,
-                        seed: settings.seed,
+                        seed: nodePlacementSeed,
                         additionalNodes: advancedCount,
                       }
                     : { mode: 'simple' as const },
@@ -196,19 +214,42 @@ export function SetupScreen(): React.ReactElement {
     } else newGame(withActiveRules(setup));
   };
 
-  const exportConfiguration = (): void => {
-    const setup = configured();
-    if (!setup) return;
-    const blob = new Blob(
-      [JSON.stringify(configurationDocument(withActiveRules(setup)), null, 2)],
-      { type: 'application/json' },
-    );
+  const downloadConfiguration = (recipe: unknown, filename: string): void => {
+    const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'iron-ridge-campaign-configuration.json';
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  };
+  const exportConfiguration = (): void => {
+    const setup = configured();
+    if (!setup) return;
+    downloadConfiguration(
+      configurationDocument(withActiveRules(setup)),
+      'iron-ridge-campaign-configuration.json',
+    );
+  };
+  const useRegularPlaytest = (): void => {
+    const setup = regularPlaytestSettings();
+    const balance = useBalanceStore.getState();
+    const errors = balance.importJson(JSON.stringify(setup.rules));
+    if (errors.length) {
+      setDemoError(errors.join('; '));
+      return;
+    }
+    balance.applyAll();
+    setSettings(setup);
+    setMode('ai');
+    setCampaignMode('advanced');
+    setDemoScenario('standard');
+    setCommanderPrice(String(DEFAULT_CAMPAIGN_PRICES.commanderTraining));
+    setCapturePrice(String(DEFAULT_CAMPAIGN_PRICES.captureNode));
+    setRazePrice(String(DEFAULT_CAMPAIGN_PRICES.razeNode));
+    setAdditionalNodes(3);
+    setNodePlacementSeed(4277);
+    setDemoError(null);
   };
   const loadConfiguration = async (file: File | undefined): Promise<void> => {
     if (!file) return;
@@ -232,6 +273,29 @@ export function SetupScreen(): React.ReactElement {
       <div className="w-full max-w-[560px] border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-4 flex flex-col gap-4">
         <div className="text-[11px] text-[hsl(var(--primary))] tracking-widest">
           [ NEW CAMPAIGN ]
+        </div>
+
+        <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-2">
+          <div className="text-xs font-bold">READY REGULAR PLAYTEST</div>
+          <p className="text-[11px] leading-4">
+            Generated WW2 campaign, 7×5 MainHexes, seed 20261101: three extra strategic objectives
+            plus two HQ nodes. The middle objective is on natural height 7; each side has a nearer
+            objective. Ordinary starting forces and income apply.
+          </p>
+          <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">
+            Loads the tentative combat profile into Balance Lab for editing, with Capture 5 CP, Raze
+            2 CP and new commanders 15 CP. Multi-commander engagements are enabled. Then choose an
+            opponent below and start. Existing saves keep their own settings.
+          </p>
+          <Button onClick={useRegularPlaytest}>USE READY PLAYTEST SETUP</Button>
+          <Button
+            variant="ghost"
+            onClick={() =>
+              downloadConfiguration(regularPlaytestDocument(), 'strategic-objectives-playtest.json')
+            }
+          >
+            DOWNLOAD READY PLAYTEST CONFIG
+          </Button>
         </div>
 
         <Choice<Era>
@@ -326,19 +390,41 @@ export function SetupScreen(): React.ReactElement {
             id="commander-price-hint"
             className="text-[10px] text-[hsl(var(--muted-foreground))]"
           >
-            Enter a positive whole CP price for each NEW COMMANDER order, including splits. No
-            balance price is preselected.
+            Default 15 CP for each NEW COMMANDER order, including splits. You can change the price
+            for this new game; existing saved configurations retain their price.
           </span>
         </label>
         {campaignMode === 'advanced' && !prepared && (
-          <NumberField
-            label="NON-HQ NODES"
-            value={advancedCount}
-            min={0}
-            max={maximumAdditionalNodes}
-            onChange={setAdditionalNodes}
-            hint={`${advancedCount + 2} nodes total; both Home HQs are guaranteed. Map seed controls placement.`}
-          />
+          <>
+            <NumberField
+              label="NON-HQ NODES"
+              value={advancedCount}
+              min={0}
+              max={maximumAdditionalNodes}
+              onChange={setAdditionalNodes}
+              hint={`${advancedCount + 2} nodes total; both Home HQs are guaranteed. Each extra node occupies one selected MainHex center.`}
+            />
+            <label className="text-[11px] flex flex-col gap-1">
+              <span>NODE PLACEMENT SEED</span>
+              <input
+                aria-label="NODE PLACEMENT SEED"
+                type="number"
+                min={0}
+                max={0xffffffff}
+                value={nodePlacementSeed}
+                onChange={(event) =>
+                  setNodePlacementSeed(
+                    Math.min(0xffffffff, Math.abs(Math.floor(Number(event.target.value) || 0))),
+                  )
+                }
+                className="bg-transparent border border-[hsl(var(--border-bright))] p-1"
+              />
+              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                Controls the sparse node selection separately from generated terrain. Ready playtest
+                uses 4277.
+              </span>
+            </label>
+          </>
         )}
         {campaignMode !== 'classic' && (
           <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-3">
@@ -459,23 +545,27 @@ export function SetupScreen(): React.ReactElement {
                     aria-label="MAP SEED"
                     type="number"
                     value={settings.seed}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const seed = Math.min(
+                        0xffffffff,
+                        Math.abs(Math.floor(Number(e.target.value) || 0)),
+                      );
+                      setNodePlacementSeed(seed);
                       setSettings({
                         ...settings,
-                        seed: Math.min(
-                          0xffffffff,
-                          Math.abs(Math.floor(Number(e.target.value) || 0)),
-                        ),
-                      })
-                    }
+                        seed,
+                      });
+                    }}
                     className="min-w-0 flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
                   />
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() =>
-                      setSettings({ ...settings, seed: Math.floor(Math.random() * 1e6) })
-                    }
+                    onClick={() => {
+                      const seed = Math.floor(Math.random() * 1e6);
+                      setNodePlacementSeed(seed);
+                      setSettings({ ...settings, seed });
+                    }}
                   >
                     RANDOM
                   </Button>
@@ -532,7 +622,9 @@ export function SetupScreen(): React.ReactElement {
           />
           <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
             Starts a fresh run from the file's map, rules and CP prices. Export a configuration
-            above to customize or share. To resume exact progress, use saved games below.
+            above to customize or share. Imported configurations use their own rules, including the
+            baseline when no rules are supplied; applied Balance Lab overrides are not added. To
+            resume exact progress, use saved games below.
           </span>
         </label>
         {!prepared && (

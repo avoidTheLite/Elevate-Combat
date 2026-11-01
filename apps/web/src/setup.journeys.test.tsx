@@ -27,8 +27,11 @@ function file(text: string): File {
 }
 
 describe('visible setup and scenario flows', () => {
-  it('requires an explicit commander price and keeps Classic free of infrastructure rules', () => {
+  it('uses the approved new commander default and keeps Classic free of infrastructure rules', () => {
     render(<App />);
+    expect(screen.getByLabelText('Commander training price (CP)')).toHaveValue(15);
+    expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeEnabled();
+    price('Commander training price (CP)', '');
     expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'TURN-START CAPTURE' })).toBeVisible();
     enterPrices(false);

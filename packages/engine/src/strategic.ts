@@ -32,6 +32,7 @@ import type {
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { withRules } from './rules.ts';
 import { STARTING_ARMY, unitType } from './units.ts';
+import { DEFAULT_CAMPAIGN_PRICES } from './campaignDefaults.ts';
 import {
   initializeCampaignFoundation,
   campaignOwnedCount,
@@ -98,6 +99,7 @@ export function defaultSettings(): GameSettings {
     controllers: { A: 'human', B: 'ai' },
     fog: true,
     battleRounds: 10,
+    commanderTrainingCp: DEFAULT_CAMPAIGN_PRICES.commanderTraining,
     battleObjective: {
       kind: 'capture_point',
       captureRadius: 1,

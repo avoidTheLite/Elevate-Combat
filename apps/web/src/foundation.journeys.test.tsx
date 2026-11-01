@@ -51,11 +51,13 @@ function turnStartCaptureFixture(): GameState {
 }
 
 describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrastructure player journeys', () => {
-  it('requires explicit capture prices before starting the named playtest in the normal game', () => {
+  it('starts from approved defaults and rejects cleared or invalid capture prices', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
-    expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(null);
-    expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(null);
+    expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(5);
+    expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(2);
+    expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '7' } });
     fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: '7' } });

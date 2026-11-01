@@ -117,6 +117,10 @@ describe('SetupScreen integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
     fireEvent.change(screen.getByLabelText('MAP SEED'), { target: { value: '42' } });
     fireEvent.change(screen.getByLabelText('NON-HQ NODES'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     expect(screen.getByRole('button', { name: /apply & new game/i })).toBeDisabled();
@@ -176,7 +180,7 @@ describe('SetupScreen integration', () => {
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     expect(useBalanceStore.getState().view).toBe('lab');
     expect(useBalanceStore.getState().setupSelection?.settings.era).toBe('medieval');
-    expect(useBalanceStore.getState().setupError).toMatch(/commander training/);
+    expect(useBalanceStore.getState().setupError).toBeNull();
     expect(screen.getByText(/▲ BALANCE LAB/)).toBeInTheDocument();
   });
 });

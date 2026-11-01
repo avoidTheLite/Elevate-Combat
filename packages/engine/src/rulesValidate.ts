@@ -28,7 +28,14 @@ const POOL_BOUNDS: Record<string, { min: number; max: number }> = {
 };
 
 const BOOL_FIELDS = new Set(['suppresses', 'firstStrike', 'charge', 'braced', 'engineer']);
-const PROFILES: RangeProfile[] = ['rifle_mg', 'at_gun', 'tank_cannon', 'indirect', 'melee'];
+const PROFILES: RangeProfile[] = [
+  'rifle_mg',
+  'at_gun',
+  'bazooka',
+  'tank_cannon',
+  'indirect',
+  'melee',
+];
 
 /** Every UnitStats field the balance lab may edit. */
 export const EDITABLE_UNIT_FIELDS = [
@@ -42,6 +49,7 @@ export const EDITABLE_UNIT_FIELDS = [
 
 const MECH_BOUNDS: Record<string, { min: number; max: number; int?: boolean }> = {
   MAX_FORT: { min: 0, max: 10, int: true },
+  BAZOOKA_ACCURATE_RANGE: { min: 0, max: 40, int: true },
   EFFECT_MULT: { min: 0, max: 5 },
   CHARGE_MIN_MOVE: { min: 0, max: 30, int: true },
   FIRST_STRIKE_DENY_MOVE: { min: 0, max: 30, int: true },

@@ -110,6 +110,7 @@ describe('GAMES-ELEVATE-SESSION-UC-001: commander participation continuity', () 
   it('uses schema 4 to prevent older builds ignoring deployment provenance, without rewriting schemas 2/3', () => {
     expect(SAVE_SCHEMA).toBe(4);
     const legacy = createGame(defaultSettings());
+    delete legacy.settings.commanderTrainingCp;
     for (const schema of [2, 3]) {
       const restored = migrateSave(legacy, schema);
       expect(restored.ok).toBe(true);
@@ -177,6 +178,24 @@ describe('GAMES-ELEVATE-SESSION-UC-001: commander participation continuity', () 
           before.movesLeft,
         ]);
       }
+    },
+  );
+
+  it.each([false, true])(
+    'retains pre-existing wounds in deployment and permits later tactical casualties (foundation=%s)',
+    (foundation) => {
+      const fixture = battleFixture(foundation);
+      const holder = fixture.state.armies.find((army) => army.id === fixture.extraDefender)!;
+      holder.units[0]!.hp = 3;
+      let state = roundTrip(step(ready(fixture), { type: 'startBattle' }));
+      const unitId = holder.units[0]!.id;
+      expect(state.battle!.units.find((unit) => unit.id === unitId)!.hp).toBe(3);
+      state = roundTrip(step(state, { type: 'finishDeploy' }));
+      state = roundTrip(step(state, { type: 'finishDeploy' }));
+      state.battle!.units.find((unit) => unit.id === unitId)!.hp = 0;
+      state = roundTrip(state);
+      state = roundTrip(step(state, { type: 'retreat' }));
+      expect(state.battle!.phase).toBe('over');
     },
   );
 
@@ -367,6 +386,38 @@ describe('GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are reject
     ])
       corrupt(state, mutation, /participants|participationCosts|provenance|committed participant/);
   });
+
+  it.each([false, true])(
+    'rejects forged dead or altered-HP selected deployment rosters (foundation=%s)',
+    (foundation) => {
+      const fixture = battleFixture(foundation);
+      let state = step(ready(fixture), { type: 'startBattle' });
+      for (let stage = 0; stage < 2; stage++) {
+        for (const holderId of [
+          fixture.attacker,
+          fixture.defender,
+          fixture.extraAttacker,
+          fixture.extraDefender,
+        ]) {
+          corrupt(
+            state,
+            (raw) => {
+              for (const unit of raw.battle.units) if (unit.holderId === holderId) unit.hp = 0;
+            },
+            /deploying selected unit must match its living persistent source HP/,
+          );
+        }
+        corrupt(
+          state,
+          (raw) => {
+            raw.battle.units[0].hp -= 1;
+          },
+          /deploying selected unit must match its living persistent source HP/,
+        );
+        state = step(state, { type: 'finishDeploy' });
+      }
+    },
+  );
 
   it('rejects deployment through a different commander even if that cell belongs to its team union', () => {
     const fixture = battleFixture();

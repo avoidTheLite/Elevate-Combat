@@ -37,3 +37,5 @@ export * from './foundation/campaignRecruitment.ts';
 export * from './foundation/campaignRoads.ts';
 export * from './foundation/campaignRaze.ts';
 export * from './foundation/campaignWithdrawal.ts';
+export * from './playtestBalance.ts';
+export * from './campaignDefaults.ts';

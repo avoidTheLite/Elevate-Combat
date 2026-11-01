@@ -138,7 +138,9 @@ describe('configured commander CP transactions', () => {
     }
   });
   it('restores old saves without charging existing commanders but requires an explicit price for new formation', () => {
-    const game = createGame(defaultSettings());
+    const settings = defaultSettings();
+    delete settings.commanderTrainingCp;
+    const game = createGame(settings);
     const commander = game.armies.find(
       (holder) => holder.team === 'A' && holder.kind === 'commander',
     )!;

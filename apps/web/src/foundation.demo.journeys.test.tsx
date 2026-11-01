@@ -18,9 +18,9 @@ beforeEach(() => {
 function start(label: string, capture = '7', raze = '3'): void {
   fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
   fireEvent.click(screen.getByRole('button', { name: label }));
-  expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
-  expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(null);
-  expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(null);
+  expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeEnabled();
+  expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(5);
+  expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(2);
   fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), {
     target: { value: capture },
   });

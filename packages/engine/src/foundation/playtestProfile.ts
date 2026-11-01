@@ -2,14 +2,16 @@ import type { CampaignConfiguration, CampaignBuildingEffects } from './campaign.
 import type { CampaignNodeDefinition } from './campaignNodes.ts';
 import type { BuildingSpecialty, BuildingTier } from './attributes.ts';
 import { validateFoundationCaptureCosts } from './capture.ts';
+import { DEFAULT_CAMPAIGN_PRICES } from '../campaignDefaults.ts';
 
 /**
- * Explicit review ruleset, selected by the player. None of this tuning is a production default.
- * Takeover prices remain required inputs; callers must not silently supply the suggested 25/10.
+ * Explicit infrastructure review ruleset. New configurations use the approved Capture/Raze
+ * defaults; explicit configured prices and existing saves remain authoritative.
+ * The other infrastructure tuning remains provisional.
  */
 export function createFoundationPlaytestConfiguration(
-  capture: number,
-  raze: number,
+  capture: number = DEFAULT_CAMPAIGN_PRICES.captureNode,
+  raze: number = DEFAULT_CAMPAIGN_PRICES.razeNode,
 ): CampaignConfiguration {
   const problem = validateFoundationCaptureCosts({ capture, raze });
   if (problem) throw new Error(problem);

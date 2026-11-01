@@ -1,10 +1,42 @@
 import type { GameSettings } from '@iron-ridge/engine';
 import {
   GRID_LIMITS,
+  DEFAULT_CAMPAIGN_PRICES,
+  EXPERIMENTAL_ENGAGEMENT_PROFILE,
+  PLAYTEST_BALANCE_RULES,
+  createFoundationPlaytestConfiguration,
+  defaultSettings,
   createGame,
   validateGameState,
   validateEngagementProfile,
 } from '@iron-ridge/engine';
+
+/** A normal generated campaign, with no prepared armies, CP grants, or terrain edits. */
+export function regularPlaytestSettings(): GameSettings {
+  const infrastructure = createFoundationPlaytestConfiguration();
+  return {
+    ...defaultSettings(),
+    seed: 20261101,
+    commanderTrainingCp: DEFAULT_CAMPAIGN_PRICES.commanderTraining,
+    engagement: { ...EXPERIMENTAL_ENGAGEMENT_PROFILE },
+    rules: structuredClone(PLAYTEST_BALANCE_RULES),
+    infrastructure: {
+      ...infrastructure,
+      nodes: {
+        ...infrastructure.nodes,
+        // Normal Advanced selection, chosen for these generated terrain objectives.
+        placement: { mode: 'advanced', seed: 4277, additionalNodes: 3 },
+      },
+    },
+  };
+}
+
+export function regularPlaytestDocument(): CampaignScenarioDocument {
+  return {
+    ...configurationDocument(regularPlaytestSettings()),
+    name: 'Strategic objectives — regular WW2 playtest',
+  };
+}
 
 /** A new-run recipe, deliberately separate from a SaveDocument's exact GameState. */
 export interface CampaignScenarioDocument {
