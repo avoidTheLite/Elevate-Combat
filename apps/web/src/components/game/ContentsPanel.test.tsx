@@ -118,6 +118,7 @@ describe('ContentsPanel', () => {
 
   it('requires an explicit one-time price in a legacy game before creating another commander', () => {
     const s = withRecruits(strategicGame(true), 2);
+    delete s.settings.commanderTrainingCp; // Explicit legacy fixture, before the new-game default.
     const g = alphaGarrison(s);
     load(s, g.id);
     render(<Harness />);

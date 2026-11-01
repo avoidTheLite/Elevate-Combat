@@ -107,6 +107,10 @@ describe('experimental engagement setup', () => {
     expect(experimental).not.toBeChecked();
     fireEvent.click(experimental);
     fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
+    // Blank-price gating remains explicit now that new games default to 15 CP.
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     expect(screen.getByRole('button', { name: /apply & new game/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /back to setup/i }));

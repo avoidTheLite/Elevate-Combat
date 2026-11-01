@@ -106,7 +106,7 @@ describe('ready regular strategic-objectives playtest', () => {
   it('removes preset infrastructure when switching from Ready to Classic before starting', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'USE READY PLAYTEST SETUP' }));
-    fireEvent.click(screen.getByRole('button', { name: 'CLASSIC', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'CLASSIC' }));
     fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
     const game = useGameStore.getState().game!;
     expect(game.settings.infrastructure).toBeUndefined();
