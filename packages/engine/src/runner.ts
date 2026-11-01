@@ -15,6 +15,11 @@ export function actingTeam(state: GameState): Team | null {
   if (state.phase === 'over') return null;
   const pendingTeam = foundationPendingTeam(state);
   if (pendingTeam) return pendingTeam;
+  if (state.phase === 'battle-pending' && state.pending?.participation) {
+    const p = state.pending;
+    const id = p.participation!.stage === 'defender' ? p.defenderArmyId : p.attackerArmyId;
+    return state.armies.find((army) => army.id === id)?.team ?? null;
+  }
   if (state.phase === 'battle' && state.battle) {
     const b = state.battle;
     if (b.phase === 'over') return state.active;
@@ -27,6 +32,12 @@ export function isAiTurn(state: GameState): boolean {
   const team = actingTeam(state);
   if (!team) return false;
   if (foundationHasPending(state)) return state.settings.controllers[team] === 'ai';
+  if (
+    state.phase === 'battle-pending' &&
+    state.pending?.participation &&
+    state.pending.participation.stage !== 'ready'
+  )
+    return state.settings.controllers[team] === 'ai';
   const { A, B } = state.settings.controllers;
   // Pending-battle choices and battle results are shown to any human involved.
   if (
@@ -42,7 +53,7 @@ export function aiStep(state: GameState): GameAction {
   return withRules(state.settings.rules, () => {
     const pending = foundationAiStep(state);
     if (pending) return pending;
-    if (state.phase === 'battle-pending') return aiPendingDecision();
+    if (state.phase === 'battle-pending') return aiPendingDecision(state);
     if (state.phase === 'battle') return tacticalAiStep(state);
     return strategicAiStep(state);
   });

@@ -3,6 +3,7 @@ import { configurationDocument, parseCampaignConfiguration } from '../../lib/cam
 import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
 import {
   GRID_LIMITS,
+  EXPERIMENTAL_ENGAGEMENT_PROFILE,
   clusterSize,
   createFoundationPlaytestConfiguration,
   defaultSettings,
@@ -253,6 +254,39 @@ export function SetupScreen(): React.ReactElement {
             ]}
             onChange={setMode}
           />
+        )}
+
+        {!prepared && (
+          <fieldset className="flex flex-col gap-1 text-[11px]">
+            <legend className="text-[hsl(var(--muted-foreground))] tracking-widest">
+              ENGAGEMENT RULES
+            </legend>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                aria-label="Experimental multi-commander engagements"
+                checked={settings.engagement?.profile === 'multi-commander-v1'}
+                onChange={(event) => {
+                  const { engagement: _previous, ...rest } = settings;
+                  void _previous;
+                  setSettings(
+                    event.target.checked
+                      ? { ...rest, engagement: { ...EXPERIMENTAL_ENGAGEMENT_PROFILE } }
+                      : rest,
+                  );
+                }}
+                className="accent-[hsl(var(--primary))]"
+              />
+              <span>Experimental multi-commander engagements</span>
+            </label>
+            <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">
+              Choose each side’s commanders before deployment. Trial attack price: 5 CP plus 2 per
+              additional attacker. Initial defense is free; each additional defender costs 2 CP.
+              Additional commanders keep their position and movement; their units deploy around
+              their own commander. Move before engaging to reposition a zone. These trial prices are
+              separate from new commander training.
+            </p>
+          </fieldset>
         )}
 
         <Choice<CampaignMode>

@@ -1,17 +1,21 @@
 import type { Era } from '@iron-ridge/engine';
 import * as THREE from 'three';
-import { makeKit, makeKitFrom, type ModelOptions, type V3 } from '../shared/index.ts';
+import { makeKit, makeKitFrom, type ModelOptions } from '../shared/index.ts';
 import { horseman } from '../units/medieval/horseman.ts';
-import { buildUnitModel } from '../units/builders.ts';
+import { assembleFormation, rosterModelMember, type RosterModelUnit } from '../formation.ts';
 import { commandTruck } from './commandTruck.ts';
 import { horseCart } from './horseCart.ts';
-import { armyEscorts } from './escorts.ts';
 
 /**
- * Strategic army token: commander (+ baggage) and a small escort sample.
- * Faces +X; the scene turns it toward the enemy.
+ * Strategic commander marker and every actual constituent unit. Each unit's
+ * facing determines its region; commander identity never replaces the roster.
  */
-export function buildArmyModel(era: Era, typeIds: string[], o: ModelOptions): THREE.Group {
+export function buildArmyModel(
+  era: Era,
+  units: readonly (string | RosterModelUnit)[],
+  o: ModelOptions,
+  markerFacing = 0,
+): THREE.Group {
   const k = makeKit(o);
   if (era === 'ww2') {
     const truck = new THREE.Group();
@@ -27,19 +31,22 @@ export function buildArmyModel(era: Era, typeIds: string[], o: ModelOptions): TH
     horseman(sub, { crown: true });
     k.root.add(cmd);
   }
-  // Escorts in a loose arc ahead of the commander.
-  const slots: V3[] = [
-    [1.1, 0, -0.7],
-    [1.35, 0, 0.12],
-    [1.0, 0, 0.9],
-  ];
-  armyEscorts(typeIds).forEach((id, i) => {
-    const e = buildUnitModel(id, o);
-    e.name = 'escort';
-    e.position.set(...slots[i]!);
-    e.scale.setScalar(0.72);
-    k.root.add(e);
-  });
-  k.root.name = 'army';
-  return k.root;
+  const roster = units.map((unit, index) =>
+    typeof unit === 'string' ? { id: `roster-${index}`, typeId: unit, facing: 0 } : unit,
+  );
+  const unitIds = new Set(roster.map((unit) => unit.id));
+  let markerId = 'commander-marker';
+  while (unitIds.has(markerId)) markerId += ':';
+  const root = assembleFormation([
+    ...roster.map((unit) => rosterModelMember(unit, o)),
+    {
+      id: markerId,
+      model: k.root,
+      facing: markerFacing,
+      role: 'support',
+      infantry: false,
+    },
+  ]);
+  root.name = 'army';
+  return root;
 }

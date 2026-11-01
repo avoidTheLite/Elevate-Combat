@@ -955,14 +955,29 @@ function captureFacts(
     liveGarrisonUnitIds: garrisons.flatMap((a) => a.units.filter(living).map((u) => u.id)),
     liveCenterOccupants:
       event.kind === 'manual-battle-end'
-        ? state
-            .battle!.units.filter(
-              (u) =>
-                u.hp > 0 &&
-                u.pos === node.centerSubHex &&
-                !state.battle!.departedUnitIds?.includes(u.id),
-            )
-            .map((u) => ({ unitId: u.id, team: u.team }))
+        ? [
+            ...state
+              .battle!.units.filter(
+                (u) =>
+                  u.hp > 0 &&
+                  u.pos === node.centerSubHex &&
+                  !state.battle!.departedUnitIds?.includes(u.id),
+              )
+              .map((u) => ({ unitId: u.id, team: u.team })),
+            // Declining battle does not remove a real center occupant. For
+            // selected units the final tactical position remains authoritative.
+            ...holders
+              .filter((holder) => holder.pos === node.centerSubHex)
+              .flatMap((holder) =>
+                holder.units
+                  .filter(
+                    (unit) =>
+                      living(unit) &&
+                      !state.battle!.units.some((deployed) => deployed.id === unit.id),
+                  )
+                  .map((unit) => ({ unitId: unit.id, team: holder.team })),
+              ),
+          ]
         : holders
             .filter((a) => a.pos === node.centerSubHex)
             .flatMap((a) => a.units.filter(living).map((u) => ({ unitId: u.id, team: a.team }))),

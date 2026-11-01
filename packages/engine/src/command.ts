@@ -26,6 +26,7 @@ import type { StratResult } from './strategic.ts';
 import type { Army, GameState, TransferRule } from './types.ts';
 import { TEAM_NAME } from './types.ts';
 import { campaignNodeCapacity, foundationHasPending } from './foundation/campaign.ts';
+import { validateEngagementProfile } from './engagement.ts';
 
 function findHolder(state: GameState, id: string): Army | undefined {
   return state.armies.find((a) => a.id === id);
@@ -145,8 +146,11 @@ export function canEngage(
     return { ok: false, error: `Target is beyond engage range (${range})` };
   if (!visibleArmies(state, att.team).some((a) => a.id === target.id))
     return { ok: false, error: 'Target is not in sight' };
-  if (state.cp[att.team] < attackCost(att))
-    return { ok: false, error: `Opening a deployment costs ${attackCost(att)} CP` };
+  const profileError = validateEngagementProfile(state.settings.engagement);
+  if (profileError) return { ok: false, error: profileError };
+  const price = state.settings.engagement?.attackBaseCp ?? attackCost(att);
+  if (state.cp[att.team] < price)
+    return { ok: false, error: `Opening a deployment costs ${price} CP` };
   return { ok: true };
 }
 
@@ -167,6 +171,15 @@ export function engage(state: GameState, armyId: string, targetId: string): Stra
     defenderArmyId: def!.id,
     origin: engageOrigin(world, att!, def!),
     target: def!.at,
+    ...(state.settings.engagement
+      ? {
+          participation: {
+            attackerIds: [att!.id],
+            defenderIds: [def!.id],
+            stage: 'attacker' as const,
+          },
+        }
+      : {}),
   };
   state.phase = 'battle-pending';
   logStrategic(state, `${TEAM_NAME[att!.team]} commander ${att!.id} assaults ${def!.at}!`);

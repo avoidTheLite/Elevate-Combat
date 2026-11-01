@@ -5,7 +5,7 @@ import { roadEdgeKey } from './battleMap.ts';
 // first, until one side is wiped out, retreats, or the round limit expires.
 
 import type { HexKey } from './hex.ts';
-import { directionTo, hexDistance, hexKey, parseKey, spiral } from './hex.ts';
+import { directionTo, hexDistance, hexKey, hexLine, parseKey, spiral } from './hex.ts';
 import type { World } from './grid.ts';
 import { mainNeighbors } from './grid.ts';
 import type { BattleContext } from './battleMap.ts';
@@ -27,6 +27,7 @@ import type {
 import { TEAM_NAME, otherTeam } from './types.ts';
 import { mechanics } from './rules.ts';
 import { unitType } from './units.ts';
+import { engagementParticipantSnapshots } from './engagement.ts';
 
 export const WARNED_CAP = { placements: 4, range: 6 } as const;
 
@@ -93,10 +94,8 @@ function toBattleUnit(army: Army, idx: number): BattleUnit {
     maxHp: t.hp,
     pos: stationed ? army.pos : null,
     facing: stationed
-      ? (army.stationedFacing ?? (army.team === 'A' ? 0 : 3))
-      : army.team === 'A'
-        ? 0
-        : 3,
+      ? (army.stationedFacing ?? au.facing ?? (army.team === 'A' ? 0 : 3))
+      : (au.facing ?? (army.team === 'A' ? 0 : 3)),
     mp: stationed ? 0 : t.move,
     moved: false,
     movedDist: 0,
@@ -118,7 +117,42 @@ export function createBattle(
   target: HexKey,
   world: World,
 ): Battle {
-  const mains = [target, ...mainNeighbors(world, target).map((m) => m.key)];
+  const participants =
+    state.pending?.participation &&
+    state.pending.attackerArmyId === attackerArmy.id &&
+    state.pending.defenderArmyId === defenderArmy.id
+      ? engagementParticipantSnapshots(state, state.pending)
+      : undefined;
+  const mainKeys = new Set([target, ...mainNeighbors(world, target).map((m) => m.key)]);
+  if (participants) {
+    for (const participant of participants.filter((candidate) => !candidate.primary)) {
+      for (const cell of spiral(parseKey(participant.pos), world.config.subRadius)) {
+        const sub = world.subByKey.get(hexKey(cell));
+        if (sub) mainKeys.add(sub.main);
+      }
+      // Include a continuous map corridor; this records geography, never a
+      // strategic move or its movement/claim effects.
+      const anchors = [attackerArmy.pos, defenderArmy.pos];
+      const nearest = anchors.sort(
+        (a, b) =>
+          hexDistance(parseKey(participant.pos), parseKey(a)) -
+          hexDistance(parseKey(participant.pos), parseKey(b)),
+      )[0]!;
+      for (const cell of hexLine(parseKey(participant.pos), parseKey(nearest))) {
+        const sub = world.subByKey.get(hexKey(cell));
+        if (sub) mainKeys.add(sub.main);
+      }
+    }
+  }
+  const mains = [...mainKeys];
+  const selectedIds = new Set(
+    participants?.map((participant) => participant.armyId) ?? [attackerArmy.id, defenderArmy.id],
+  );
+  const selectedArmies = participants
+    ? participants.map((participant) =>
+        state.armies.find((army) => army.id === participant.armyId)!,
+      )
+    : [attackerArmy, defenderArmy];
   const forts: Record<HexKey, number> = {};
   for (const mk of mains) {
     for (const sk of world.mainByKey.get(mk)!.subKeys) {
@@ -132,8 +166,7 @@ export function createBattle(
         a.kind === 'garrison' &&
         a.building === 'temporary' &&
         mains.includes(a.at) &&
-        a.id !== attackerArmy.id &&
-        a.id !== defenderArmy.id,
+        !selectedIds.has(a.id),
     )
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const objective = resolveBattleObjective(state, target, world);
@@ -153,10 +186,10 @@ export function createBattle(
     maxRounds: state.settings.battleRounds,
     active: defenderArmy.team,
     units: [
-      ...attackerArmy.units.map((_, i) => toBattleUnit(attackerArmy, i)),
-      ...defenderArmy.units.map((_, i) => toBattleUnit(defenderArmy, i)),
+      ...selectedArmies.flatMap((army) => army.units.map((_, i) => toBattleUnit(army, i))),
       ...stationedHolders.flatMap((army) => army.units.map((_, i) => toBattleUnit(army, i))),
     ],
+    ...(participants ? { participants } : {}),
     forts,
     warningTurns: warning,
     warnedPlacements: Math.min(WARNED_CAP.placements, warning * 2),
@@ -215,7 +248,7 @@ export function deployUnit(
     refreshOccupancy(ctx, battle);
     return { ok: true };
   }
-  if (!deploymentZone(ctx, battle, u.team).includes(key))
+  if (!deploymentZone(ctx, battle, u.team, u.holderId).includes(key))
     return { ok: false, error: 'Outside deployment zone' };
   const occ = ctx.unitAt.get(key);
   if (occ && occ.id !== u.id) return { ok: false, error: 'Cell occupied' };
@@ -227,7 +260,7 @@ function placeUnit(ctx: BattleContext, battle: Battle, u: BattleUnit, key: HexKe
   u.pos = key;
   const enemyMain = u.team === battle.defender ? battle.origin : battle.contested;
   const enemyCentre = ctx.world.mainByKey.get(enemyMain)!.center;
-  u.facing = bestFacing(key, `${enemyCentre.q},${enemyCentre.r}`);
+  if (!battle.participants) u.facing = bestFacing(key, `${enemyCentre.q},${enemyCentre.r}`);
   refreshOccupancy(ctx, battle);
 }
 
@@ -281,6 +314,14 @@ function deployScore(ctx: BattleContext, battle: Battle, team: Team, key: HexKey
 }
 
 export function autoDeploy(ctx: BattleContext, battle: Battle, team: Team, rng: Rng): void {
+  if (battle.participants) {
+    const assignment = deploymentAssignment(ctx, battle, team);
+    if (!assignment) return;
+    for (const unit of battle.units.filter((candidate) => assignment.has(candidate.id))) {
+      placeUnit(ctx, battle, unit, assignment.get(unit.id)!);
+    }
+    return;
+  }
   const zone = deploymentZone(ctx, battle, team);
   const free = zone.filter((k) => !ctx.unitAt.has(k));
   free.sort((a, b) => deployScore(ctx, battle, team, b) - deployScore(ctx, battle, team, a));
@@ -299,6 +340,55 @@ export function autoDeploy(ctx: BattleContext, battle: Battle, team: Team, rng: 
   }
 }
 
+/** Complete matching, rather than greedy placement, respects narrow per-holder zones. */
+function deploymentAssignment(
+  ctx: BattleContext,
+  battle: Battle,
+  team?: Team,
+): Map<string, HexKey> | null {
+  const pending = battle.units.filter(
+    (unit) => unit.hp > 0 && !unit.pos && (team === undefined || unit.team === team),
+  );
+  const options = new Map(
+    pending.map((unit) => [
+      unit.id,
+      deploymentZone(ctx, battle, unit.team, unit.holderId)
+        .filter((cell) => !ctx.unitAt.has(cell))
+        .sort(
+          (a, b) =>
+            deployScore(ctx, battle, unit.team, b) - deployScore(ctx, battle, unit.team, a) ||
+            a.localeCompare(b),
+        ),
+    ]),
+  );
+  pending.sort(
+    (a, b) =>
+      options.get(a.id)!.length - options.get(b.id)!.length ||
+      frontRank(a) - frontRank(b) ||
+      a.id.localeCompare(b.id),
+  );
+  const assigned = new Map<HexKey, string>();
+  const find = (unitId: string, visited: Set<HexKey>): boolean => {
+    for (const cell of options.get(unitId)!) {
+      if (visited.has(cell)) continue;
+      visited.add(cell);
+      const previous = assigned.get(cell);
+      if (!previous || find(previous, visited)) {
+        assigned.set(cell, unitId);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const unit of pending) if (!find(unit.id, new Set())) return null;
+  return new Map([...assigned].map(([cell, unitId]) => [unitId, cell]));
+}
+
+/** Precommit guard includes both teams and all immovable stationed occupants. */
+export function hasDeploymentCapacity(ctx: BattleContext, battle: Battle): boolean {
+  return deploymentAssignment(ctx, battle) !== null;
+}
+
 function frontRank(u: BattleUnit): number {
   const t = unitType(u.typeId);
   if (t.attackType === 'indirect') return 3;
@@ -311,6 +401,12 @@ export function finishDeployment(ctx: BattleContext, battle: Battle, rng: Rng): 
   if (battle.phase !== 'deploy') return { ok: false, error: 'Not in deployment' };
   const team = battle.deployTeam;
   autoDeploy(ctx, battle, team, rng); // place any stragglers
+  if (battle.participants && battle.units.some((u) => u.team === team && u.hp > 0 && !u.pos))
+    return {
+      ok: false,
+      error:
+        'Not enough legal cells in every commander deployment zone; redeploy units to make room',
+    };
   sys(battle, `${TEAM_NAME[team]} deployment complete`);
   if (team === battle.defender) {
     battle.deployTeam = battle.attacker;

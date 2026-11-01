@@ -30,6 +30,9 @@ import {
 import type { Army, GameState, PendingBattle, Team } from '../types.ts';
 import { otherTeam } from '../types.ts';
 import { unitType, unitsForEra } from '../units.ts';
+import { engagementCandidates, engagementCosts } from '../engagement.ts';
+import { buildContext } from '../battleMap.ts';
+import { createBattle, hasDeploymentCapacity } from '../tactical.ts';
 
 const RECRUIT_MIX: Record<string, string[]> = {
   ww2: [
@@ -250,7 +253,8 @@ function chooseStep(state: GameState, army: Army, seen: Army[]): string | null {
     .map((t) => ({ t, odds: autoResolveOdds(state, pendingFor(world, army, t)) }))
     .filter(
       ({ t, odds }) =>
-        odds >= attackThreshold(state, army, t.at) && state.cp[team] >= attackCost(army),
+        odds >= attackThreshold(state, army, t.at) &&
+        state.cp[team] >= (state.settings.engagement?.attackBaseCp ?? attackCost(army)),
     )
     .sort(
       (a, b) =>
@@ -301,7 +305,43 @@ function attackThreshold(state: GameState, army: Army, target: string): number {
   return Math.max(0.28, t);
 }
 
-/** AI-vs-AI pending battles are always auto-resolved. */
-export function aiPendingDecision(): GameAction {
+/** Same explicit selection stages as a player; ready AI-vs-AI battles auto-resolve. */
+export function aiPendingDecision(state?: GameState): GameAction {
+  const p = state?.pending;
+  if (state && p?.participation && p.participation.stage !== 'ready') {
+    const attacker = state.armies.find((army) => army.id === p.attackerArmyId)!;
+    const defender = state.armies.find((army) => army.id === p.defenderArmyId)!;
+    const team = p.participation.stage === 'attacker' ? attacker.team : defender.team;
+    const field = p.participation.stage === 'attacker' ? 'attackerIds' : 'defenderIds';
+    const selected = [field === 'attackerIds' ? attacker.id : defender.id];
+    const candidates = engagementCandidates(state, team)
+      .filter((candidate) => !candidate.reason && !selected.includes(candidate.armyId))
+      .sort((a, b) => {
+        const force = (id: string): number =>
+          armyStrength(state.armies.find((army) => army.id === id)!);
+        return force(b.armyId) - force(a.armyId) || a.armyId.localeCompare(b.armyId);
+      });
+    for (const candidate of candidates) {
+      const draft = structuredClone(state);
+      draft.pending!.participation![field] = [...selected, candidate.armyId];
+      const costs = engagementCosts(draft, draft.pending!);
+      if (costs[team] > state.cp[team]) continue;
+      // A legal AI roster must fit too. This is a preview on a clone, not commitment.
+      const world = worldOf(draft).world;
+      const trial = createBattle(
+        draft,
+        draft.armies.find((army) => army.id === p.attackerArmyId)!,
+        draft.armies.find((army) => army.id === p.defenderArmyId)!,
+        p.origin,
+        p.target,
+        world,
+      );
+      if (hasDeploymentCapacity(buildContext(draft.settings, trial), trial))
+        selected.push(candidate.armyId);
+    }
+    if (JSON.stringify(selected) !== JSON.stringify(p.participation[field]))
+      return { type: 'engagementSelect', team, armyIds: selected };
+    return { type: 'engagementLock', team };
+  }
   return { type: 'autoResolve' };
 }

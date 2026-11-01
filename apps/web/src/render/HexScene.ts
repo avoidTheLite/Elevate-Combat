@@ -25,7 +25,13 @@ import {
 import type { AttackFx } from './effects.ts';
 import type { ActiveEffect, FxEnv } from './fx.ts';
 import { createAttackEffects } from './fx.ts';
-import { buildArmyModel, buildHqModel, buildUnitModel, hasUnitModel } from './unitModels.ts';
+import {
+  buildArmyModel,
+  buildFormationModel,
+  buildHqModel,
+  hasUnitModel,
+  modelTop,
+} from './unitModels.ts';
 import { FORT_LEVEL_HEIGHT, buildHqWall, fortMaterial, fortRingGeometry } from './fortModels.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
@@ -70,12 +76,6 @@ interface TokenObj {
 /** How long a removed token lingers, and the tail of that spent shrinking away. */
 const TOKEN_LINGER = 1.3;
 const TOKEN_FADE = 0.45;
-/** Unit models are authored ~0.65 tall; scale them up to read at tactical zoom. */
-const UNIT_MODEL_SCALE = 1.3;
-/** Army clusters span ~2.4 units before scaling; the token scale fits them to one sub-hex. */
-const ARMY_MODEL_SCALE = 1.15;
-/** Local x of the cluster's visual centre (before scaling). */
-const ARMY_MODEL_CENTER = 0.4;
 
 let glowTexture: THREE.Texture | null = null;
 function getGlowTexture(): THREE.Texture {
@@ -566,13 +566,14 @@ export class HexScene {
     const color = TEAM_COLOR[t.team];
     const g = new THREE.Group();
     if (t.army) {
-      // Commander cluster: command vehicle / mounted commander + escort sample.
-      const model = buildArmyModel(t.army.era, t.army.units, { color, opacity: t.spent ? 0.5 : 1 });
-      // The cluster spans x ≈ −0.8…1.6 (escorts ahead); centre it on the cell.
-      model.position.x = -ARMY_MODEL_CENTER * ARMY_MODEL_SCALE;
-      model.scale.setScalar(ARMY_MODEL_SCALE);
+      // The fitted cluster includes every actual unit and its own facing.
+      const model = buildArmyModel(
+        t.army.era,
+        t.army.units,
+        { color, opacity: t.spent ? 0.5 : 1 },
+        t.team === 'A' ? 0 : 3,
+      );
       const heading = new THREE.Group();
-      heading.rotation.y = -(t.yaw ?? 0);
       heading.userData.pickable = true;
       heading.add(model);
       // Invisible click target covering the cell, so the small cluster is easy to hit.
@@ -585,11 +586,10 @@ export class HexScene {
       heading.add(proxy);
       g.add(heading);
     } else if (t.model && hasUnitModel(t.model)) {
-      // Detailed unit model; its own shape shows which way it faces.
-      const model = buildUnitModel(t.model, { color, opacity: t.spent ? 0.5 : 1 });
-      const d = hexToWorld(DIRECTIONS[t.facing ?? 0]!);
-      model.rotation.y = -Math.atan2(d.z, d.x);
-      model.scale.setScalar(UNIT_MODEL_SCALE);
+      const model = buildFormationModel([{ id: t.id, typeId: t.model, facing: t.facing ?? 0 }], {
+        color,
+        opacity: t.spent ? 0.5 : 1,
+      });
       g.add(model);
     } else {
       this.addMarkerBody(g, t, color);
@@ -666,7 +666,10 @@ export class HexScene {
               .map((y) => y.toFixed(2))
               .join(',')
           : '';
-      const sig = `${t.kind}|${ring}|${t.model}|${t.army?.units.join(',')}|${t.era}|${t.yaw?.toFixed(2)}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
+      const roster = t.army?.units
+        .map((unit) => `${unit.id}:${unit.typeId}:${unit.facing}`)
+        .join(',');
+      const sig = `${t.kind}|${ring}|${t.model}|${roster}|${t.era}|${t.yaw?.toFixed(2)}|${t.team}|${t.facing}|${t.spent}|${t.ready}|${t.scale}`;
       let obj = this.tokens.get(t.id);
       if (!obj) {
         const group = new THREE.Group();
@@ -690,7 +693,9 @@ export class HexScene {
       obj.target.copy(pos);
       obj.pickKey = t.kind === 'army' || t.kind === 'hq' || t.stationed ? t.key : undefined;
       const s = t.scale ?? 1;
-      obj.label.position.set(0, (t.kind === 'army' ? 2.4 : t.kind === 'hq' ? 1.6 : 1.25) * s, 0);
+      const labelY =
+        t.army || t.model ? modelTop(obj.body) + 0.18 : (t.kind === 'hq' ? 1.6 : 1.25) * s;
+      obj.label.position.set(0, labelY, 0);
       const teamHex = `#${TEAM_COLOR[t.team].toString(16).padStart(6, '0')}`;
       setTokenLabel(obj.labelEl, {
         name: t.label,

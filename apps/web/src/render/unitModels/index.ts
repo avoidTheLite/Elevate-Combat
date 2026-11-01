@@ -11,6 +11,8 @@
 //   hq/       — strategic HQ buildings
 
 export type { ModelOptions } from './shared/index.ts';
+export type { RosterModelUnit } from './formation.ts';
+export { buildFormationModel, modelTop } from './formation.ts';
 export { buildUnitModel, hasUnitModel } from './units/index.ts';
 export type { ArmyCategory } from './army/index.ts';
 export { MAX_ESCORTS, armyCategory, armyEscorts, buildArmyModel } from './army/index.ts';

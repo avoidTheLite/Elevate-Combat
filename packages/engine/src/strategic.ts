@@ -16,7 +16,9 @@ import { lineOfSight } from './los.ts';
 import { createRng } from './rng.ts';
 import type { Rng } from './rng.ts';
 import { MAX_FORT } from './combat.ts';
-import { createBattle } from './tactical.ts';
+import { createBattle, hasDeploymentCapacity } from './tactical.ts';
+import { buildContext } from './battleMap.ts';
+import { commitEngagementCosts, engagementCosts, validatePendingEngagement } from './engagement.ts';
 import type {
   Army,
   ArmyUnit,
@@ -579,18 +581,44 @@ export function fortify(state: GameState, key: HexKey): StratResult {
 export function startPendingBattle(state: GameState): StratResult {
   const p = state.pending;
   if (state.phase !== 'battle-pending' || !p) return { ok: false, error: 'No pending battle' };
+  const prepared = preparePendingBattle(state);
+  if (!prepared.ok) return prepared;
   const att = state.armies.find((a) => a.id === p.attackerArmyId)!;
-  const def = state.armies.find((a) => a.id === p.defenderArmyId)!;
-  const { world } = worldOf(state);
-  state.cp[att.team] -= attackCost(att);
-  state.battle = createBattle(state, att, def, p.origin, p.target, world);
+  const costs = engagementCosts(state, p);
+  const paid = commitEngagementCosts(state, p);
+  if (!paid.ok) return paid;
+  state.nextId = prepared.nextId;
+  state.battle = prepared.battle;
+  if (p.participation) state.battle.participationCosts = costs;
   state.phase = 'battle';
   log(
     state,
-    `Deployment opened (−${attackCost(att)} CP). Tactical battle begins at ${p.target}.`,
+    `Deployment opened (−${costs[att.team]} CP). Tactical battle begins at ${p.target}.`,
     att.team,
   );
   return { ok: true };
+}
+
+function preparePendingBattle(
+  state: GameState,
+): { ok: true; battle: Battle; nextId: number } | { ok: false; error: string } {
+  const valid = validatePendingEngagement(state);
+  if (!valid.ok) return valid;
+  const draft = structuredClone(state);
+  const p = draft.pending!;
+  const att = draft.armies.find((army) => army.id === p.attackerArmyId)!;
+  const def = draft.armies.find((army) => army.id === p.defenderArmyId)!;
+  const { world } = worldOf(draft);
+  const battle = createBattle(draft, att, def, p.origin, p.target, world);
+  if (p.participation && new Set(battle.units.map((unit) => unit.id)).size !== battle.units.length)
+    return { ok: false, error: 'Selected holder rosters contain duplicate unit identities' };
+  if (p.participation && !hasDeploymentCapacity(buildContext(draft.settings, battle), battle))
+    return {
+      ok: false,
+      error:
+        'Selected forces do not fit their commander deployment zones; select fewer participants',
+    };
+  return { ok: true, battle, nextId: draft.nextId };
 }
 
 export function cancelPendingBattle(state: GameState): StratResult {
@@ -617,8 +645,17 @@ export function autoResolveOdds(state: GameState, p: PendingBattle): number {
   const hDef = terrain.mainHeight.get(p.target) ?? 0;
   const hAtt = terrain.mainHeight.get(p.origin) ?? 0;
   const defMult = 1 + Math.min(0.6, forts * 0.08) + 0.04 * Math.max(0, hDef - hAtt);
-  const sa = armyStrength(att);
-  const sd = armyStrength(def) * defMult;
+  const sa = p.participation
+    ? state.armies
+        .filter((army) => p.participation!.attackerIds.includes(army.id))
+        .reduce((total, army) => total + armyStrength(army), 0)
+    : armyStrength(att);
+  const sd =
+    (p.participation
+      ? state.armies
+          .filter((army) => p.participation!.defenderIds.includes(army.id))
+          .reduce((total, army) => total + armyStrength(army), 0)
+      : armyStrength(def)) * defMult;
   return sa / Math.max(0.001, sa + sd);
 }
 
@@ -635,17 +672,24 @@ function bleed(rng: Rng, army: Army, fraction: number): void {
 export function autoResolve(state: GameState): StratResult {
   const p = state.pending;
   if (state.phase !== 'battle-pending' || !p) return { ok: false, error: 'No pending battle' };
+  const prepared = preparePendingBattle(state);
+  if (!prepared.ok) return prepared;
   const rng = createRng(state.rng);
   const att = state.armies.find((a) => a.id === p.attackerArmyId)!;
   const def = state.armies.find((a) => a.id === p.defenderArmyId)!;
-  state.cp[att.team] -= attackCost(att);
+  const paid = commitEngagementCosts(state, p);
+  if (!paid.ok) return paid;
   const pA = autoResolveOdds(state, p);
   const attackerWins = rng.next() < pA;
   const pWin = attackerWins ? pA : 1 - pA;
   const winner = attackerWins ? att : def;
   const loser = attackerWins ? def : att;
-  bleed(rng, winner, 0.1 + 0.3 * (1 - pWin));
-  bleed(rng, loser, 0.35 + 0.35 * pWin);
+  const selected = p.participation
+    ? new Set([...p.participation.attackerIds, ...p.participation.defenderIds])
+    : new Set([winner.id, loser.id]);
+  for (const army of state.armies.filter((holder) => selected.has(holder.id))) {
+    bleed(rng, army, army.team === winner.team ? 0.1 + 0.3 * (1 - pWin) : 0.35 + 0.35 * pWin);
+  }
   state.rng = rng.state();
   log(
     state,
@@ -664,13 +708,26 @@ export function concludeBattle(state: GameState): StratResult {
   if (state.infrastructure) return concludeFoundationBattle(state);
   if (!b.winner) return { ok: false, error: 'Battle not finished' };
   const { world } = worldOf(state);
-  for (const army of state.armies.filter(
-    (a) => a.id === b.attackerArmyId || a.id === b.defenderArmyId,
+  const represented = new Set(b.units.map((unit) => unit.id));
+  for (const army of state.armies.filter((a) =>
+    b.participants
+      ? a.units.some((unit) => represented.has(unit.id))
+      : a.id === b.attackerArmyId || a.id === b.defenderArmyId,
   )) {
     army.units = army.units
-      .map((u) => ({ ...u, hp: b.units.find((bu) => bu.id === u.id)?.hp ?? u.hp }))
+      .map((u) => {
+        const final = b.units.find((bu) => bu.id === u.id);
+        return final
+          ? { ...u, hp: final.hp, ...(b.participants ? { facing: final.facing } : {}) }
+          : u;
+      })
       .filter((u) => u.hp > 0);
   }
+  if (b.participants && b.withdrawnTeam) {
+    const withdrawal = applyCampaignWithdrawal(state, world, b);
+    if (!withdrawal.ok) return withdrawal;
+  }
+  restoreAdditionalParticipantPosture(state, b);
   // Battlefield fortifications persist as strategic assets.
   for (const mk of b.mains) {
     for (const sk of world.mainByKey.get(mk)!.subKeys) {
@@ -690,7 +747,7 @@ export function concludeBattle(state: GameState): StratResult {
     b.winner,
   );
   const extracted = b.extracted;
-  applyBattleOutcome(state, p, b.winner, extracted);
+  applyBattleOutcome(state, p, b.winner, extracted, b);
   return { ok: true };
 }
 
@@ -699,6 +756,7 @@ function applyBattleOutcome(
   p: PendingBattle,
   winner: Team,
   extracted = false,
+  resolvedBattle?: Battle,
 ): void {
   const { world } = worldOf(state);
   const att = state.armies.find((a) => a.id === p.attackerArmyId);
@@ -709,11 +767,14 @@ function applyBattleOutcome(
   if (att) att.movesLeft = 0;
 
   if (att && winner === att.team) {
-    if (def && def.units.length && def.kind === 'garrison') {
+    const withdrawn =
+      def &&
+      resolvedBattle?.departedUnitIds?.some((id) => def.units.some((unit) => unit.id === id));
+    if (def && !withdrawn && def.units.length && def.kind === 'garrison') {
       // A beaten garrison is emptied in place; the building (holder) remains.
       log(state, `${TEAM_NAME[def.team]} garrison at ${def.at} is overrun`, def.team);
       def.units = [];
-    } else if (def && def.units.length) {
+    } else if (def && !withdrawn && def.units.length) {
       // Defender survivors fall back to a free cell of adjacent friendly ground, or are lost.
       const fallback = mainNeighbors(world, p.target)
         .filter(
@@ -795,6 +856,16 @@ function packFoundationSurvivors(state: GameState, battle: Battle): void {
   const { world } = worldOf(state);
   const centerKeys = new Set(state.infrastructure!.sites.map((s) => s.centerSubHex));
   for (const army of state.armies.filter((a) => a.kind === 'commander')) {
+    const participant = battle.participants?.find((candidate) => candidate.armyId === army.id);
+    if (participant && !participant.primary) {
+      // Deployment was anchored at this holder; participation is not a
+      // strategic journey. Explicit defeated withdrawals were settled first.
+      if (!army.units.some((unit) => battle.departedUnitIds?.includes(unit.id))) {
+        setHolderPos(world, army, participant.pos);
+        army.movesLeft = participant.movesLeft;
+      }
+      continue;
+    }
     const ids = new Set(army.units.map((u) => u.id));
     if (army.units.some((unit) => battle.departedUnitIds?.includes(unit.id))) {
       army.movesLeft = 0;
@@ -820,6 +891,18 @@ function packFoundationSurvivors(state: GameState, battle: Battle): void {
   }
 }
 
+/** Ordinary combat/extraction never moves or exhausts an additional commander. */
+function restoreAdditionalParticipantPosture(state: GameState, battle: Battle): void {
+  if (!battle.participants) return;
+  const { world } = worldOf(state);
+  for (const participant of battle.participants.filter((candidate) => !candidate.primary)) {
+    const army = state.armies.find((holder) => holder.id === participant.armyId);
+    if (!army || army.units.some((unit) => battle.departedUnitIds?.includes(unit.id))) continue;
+    setHolderPos(world, army, participant.pos);
+    army.movesLeft = participant.movesLeft;
+  }
+}
+
 function concludeFoundationBattle(state: GameState): StratResult {
   const b = state.battle!;
   let f = state.infrastructure!;
@@ -832,7 +915,9 @@ function concludeFoundationBattle(state: GameState): StratResult {
     holder.units = holder.units
       .map((u) => {
         const final = finalUnits.get(u.id);
-        return final ? { ...u, hp: final.hp } : u;
+        return final
+          ? { ...u, hp: final.hp, ...(b.participants ? { facing: final.facing } : {}) }
+          : u;
       })
       .filter((u) => u.hp > 0);
     if (holder.building === 'temporary' && holder.units[0]) {

@@ -12,6 +12,7 @@ import {
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { holderName } from '../../lib/holders.ts';
 import { RoadRepairPanel } from './RoadRepairPanel.tsx';
 import { RazeTileControl } from './RazeTileControl.tsx';
 
@@ -356,10 +357,26 @@ export function TacticalSidebar({
         ) : deploying ? (
           <>
             <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-              Pick a unit, then click a green cell. combat_fixed units start packed and must SET UP
-              before firing.
+              Pick a unit, then click a green cell.{' '}
+              {battle.participants
+                ? 'Green cells belong to that unit’s commander. Additional commanders keep their strategic position and movement.'
+                : ''}{' '}
+              combat_fixed units start packed and must SET UP before firing.
             </div>
-            <ul className="flex flex-col gap-0.5 max-h-48 overflow-auto">
+            {battle.participants && unit?.holderId && (
+              <p data-testid="deployment-owner" className="text-[10px] text-[hsl(var(--primary))]">
+                {game.armies.some((holder) => holder.id === unit.holderId)
+                  ? holderName(game.armies.find((holder) => holder.id === unit.holderId)!)
+                  : `Force ${unit.holderId}`}{' '}
+                · zone anchor{' '}
+                {battle.participants.find((participant) => participant.armyId === unit.holderId)
+                  ?.pos ?? 'fixed garrison'}
+              </p>
+            )}
+            <ul
+              aria-label="Deployment roster"
+              className="flex flex-col gap-0.5 max-h-48 overflow-auto"
+            >
               {myDeploy.map((u) => (
                 <li key={u.id}>
                   <Button
@@ -370,6 +387,13 @@ export function TacticalSidebar({
                   >
                     <span>
                       {u.label} {unitType(u.typeId).name}
+                      {battle.participants && (
+                        <span className="block text-[9px] text-[hsl(var(--muted-foreground))]">
+                          {game.armies.some((holder) => holder.id === u.holderId)
+                            ? holderName(game.armies.find((holder) => holder.id === u.holderId)!)
+                            : `Force ${u.holderId ?? 'unknown'}`}
+                        </span>
+                      )}
                     </span>
                     <span>{u.pos ? '✓' : '—'}</span>
                   </Button>
@@ -422,7 +446,9 @@ export function TacticalSidebar({
                     disabled={!battle.objective.extractionAtOrigin}
                     title={
                       battle.objective.extractionAtOrigin
-                        ? `Free extract to deploy hex ${battle.origin} — you still capture the contested hex`
+                        ? battle.participants
+                          ? 'Extract each force to its recorded commander origin; units keep their commander. The secured objective is retained.'
+                          : `Free extract to deploy hex ${battle.origin} — you still capture the contested hex`
                         : 'This map has no extraction zone'
                     }
                     onClick={() => dispatch({ type: 'extract' })}

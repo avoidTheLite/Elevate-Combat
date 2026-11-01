@@ -42,7 +42,8 @@ import {
   moveCommander,
   transferUnits,
 } from './command.ts';
-import type { GameState } from './types.ts';
+import type { GameState, Team } from './types.ts';
+import { lockEngagementParticipants, selectEngagementParticipants } from './engagement.ts';
 import { withRules } from './rules.ts';
 import type { CampaignNodeAction } from './foundation/campaignNodes.ts';
 import {
@@ -72,6 +73,8 @@ import { applyCampaignRazeTile } from './foundation/campaignRaze.ts';
 export type GameAction =
   | { type: 'moveCommander'; armyId: string; dest: HexKey }
   | { type: 'engage'; armyId: string; targetId: string }
+  | { type: 'engagementSelect'; team: Team; armyIds: string[] }
+  | { type: 'engagementLock'; team: Team }
   | { type: 'transferUnits'; fromId: string; toId: string; unitIds: string[] }
   | { type: 'formCommander'; fromId: string; unitIds: string[] }
   | { type: 'configureCommanderTraining'; cpCost: number }
@@ -148,6 +151,12 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
       break;
     case 'engage':
       res = engage(state, action.armyId, action.targetId);
+      break;
+    case 'engagementSelect':
+      res = selectEngagementParticipants(state, action.team, action.armyIds);
+      break;
+    case 'engagementLock':
+      res = lockEngagementParticipants(state, action.team);
       break;
     case 'transferUnits':
       res = transferUnits(state, action.fromId, action.toId, action.unitIds);
@@ -324,6 +333,9 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
         'repairRoad',
         'endTurn',
         'concludeBattle',
+        'startBattle',
+        'engagementSelect',
+        'engagementLock',
       ].includes(action.type)
     )
       refreshCampaignNodeSnapshot(state);

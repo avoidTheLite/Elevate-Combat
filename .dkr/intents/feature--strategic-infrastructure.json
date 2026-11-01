@@ -3,9 +3,9 @@
   "dkr_sha": "ad92313f5268d652e6f2f9e950c2ea3ae9ab072f",
   "mode": "amend",
   "refs": [
-    "GAMES-ELEVATE-CAMPAIGN-UC-001"
+    "GAMES-ELEVATE-CAMPAIGN-UC-002"
   ],
   "twin_pr": "https://github.com/avoidTheLite/DKR/pull/199",
-  "dkr_sync_sha": "f769dc788006f606b46ddee8bc2732b8231b3f39",
+  "dkr_sync_sha": null,
   "product_pr": "https://github.com/avoidTheLite/Elevate-Combat/pull/16"
 }

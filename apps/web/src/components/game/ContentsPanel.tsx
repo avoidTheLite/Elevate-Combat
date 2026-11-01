@@ -120,7 +120,10 @@ export function ContentsPanel({
       {holder.kind === 'commander' && (
         <>
           <Stat label="Strength" value={armyStrength(holder).toFixed(1)} />
-          <Stat label="Attack deployment cost" value={`${attackCost(holder)} CP`} />
+          <Stat
+            label="Attack deployment cost"
+            value={`${game.settings.engagement?.attackBaseCp ?? attackCost(holder)} CP${game.settings.engagement ? ' + selected commanders' : ''}`}
+          />
         </>
       )}
       {holder.units.length === 0 ? (

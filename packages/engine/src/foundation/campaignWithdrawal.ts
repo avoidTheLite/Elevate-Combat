@@ -106,13 +106,19 @@ export function applyCampaignWithdrawal(
       holder.units = []; // Existing primary defending building overrun rule, no new HP formula.
       continue;
     }
+    const recorded = battle.participants?.find((participant) => participant.armyId === holder.id);
+    const originMain = recorded && !recorded.primary ? recorded.at : battle.origin;
+    const originPosition = recorded && !recorded.primary ? recorded.pos : holder.pos;
     let destination: string | null | undefined;
     if (withdrawnTeam === battle.attacker) {
-      destination = freeSubNear(draft, world, holder.pos, battle.origin, holder.id);
+      destination = freeSubNear(draft, world, originPosition, originMain, holder.id);
       if (destination === null)
         return { ok: false, error: 'No free origin cell for the withdrawing attacker' };
     } else
-      destination = mainNeighbors(world, battle.contested)
+      destination = mainNeighbors(
+        world,
+        recorded && !recorded.primary ? recorded.at : battle.contested,
+      )
         .filter(
           (main) =>
             draft.hexes[main.key]?.owner === holder.team &&
@@ -120,7 +126,8 @@ export function applyCampaignWithdrawal(
         )
         .map((main) => freeSubNear(draft, world, holder.pos, main.key, holder.id))
         .find((key) => key !== null);
-    holder.movesLeft = 0;
+    holder.movesLeft =
+      recorded && !recorded.primary && destination === recorded.pos ? recorded.movesLeft : 0;
     for (const unit of units) covered.add(unit.id);
     if (destination !== undefined && destination !== null) setHolderPos(world, holder, destination);
     else {

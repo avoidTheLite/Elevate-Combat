@@ -1,7 +1,7 @@
 // ── Battle-map context: the sub-hex cells of the contested main hex + neighbours ──
 
 import type { HexKey } from './hex.ts';
-import { hexDistance, parseKey } from './hex.ts';
+import { hexDistance, hexKey, parseKey, spiral } from './hex.ts';
 import type { World } from './grid.ts';
 import { buildWorld } from './grid.ts';
 import type { Terrain } from './terrain.ts';
@@ -77,7 +77,7 @@ export const DEPLOY_BUFFER = 2;
  * origin), minus a no-man's-land strip along the shared border so battles open
  * with a gap to close rather than point-blank.
  */
-export function deploymentZone(ctx: BattleContext, battle: Battle, team: Team): HexKey[] {
+function primaryDeploymentZone(ctx: BattleContext, battle: Battle, team: Team): HexKey[] {
   const own = team === battle.defender ? battle.contested : battle.origin;
   const other = team === battle.defender ? battle.origin : battle.contested;
   const n = ctx.world.config.subRadius;
@@ -85,6 +85,56 @@ export function deploymentZone(ctx: BattleContext, battle: Battle, team: Team): 
   return ctx.world.mainByKey
     .get(own)!
     .subKeys.filter((k) => hexDistance(parseKey(k), otherCentre) > n + DEPLOY_BUFFER);
+}
+
+/**
+ * A participating commander's deploy cells follow its recorded location, not
+ * a reinforcement journey. Primary holders retain the existing deploy zones.
+ * Opposing overlapping zones are divided by nearest recorded zone anchor,
+ * with holder identity breaking ties, so first deployment cannot consume the
+ * other side's finite deployment space.
+ */
+export function deploymentZone(
+  ctx: BattleContext,
+  battle: Battle,
+  team: Team,
+  holderId?: string,
+): HexKey[] {
+  if (!battle.participants) return primaryDeploymentZone(ctx, battle, team);
+  const zones = battle.participants.map((participant) => {
+    const anchor = participant.primary
+      ? hexKey(
+          ctx.world.mainByKey.get(
+            participant.team === battle.defender ? battle.contested : battle.origin,
+          )!.center,
+        )
+      : participant.pos;
+    const cells = participant.primary
+      ? primaryDeploymentZone(ctx, battle, participant.team)
+      : spiral(parseKey(anchor), ctx.world.config.subRadius)
+          .map(hexKey)
+          .filter((key) => ctx.world.subByKey.has(key) && ctx.cells.has(key));
+    return { ...participant, anchor, cells: new Set(cells) };
+  });
+  const allowed = new Set<string>();
+  for (const zone of zones.filter(
+    (candidate) => candidate.team === team && (!holderId || candidate.armyId === holderId),
+  )) {
+    for (const key of zone.cells) {
+      const contenders = zones.filter((candidate) => candidate.cells.has(key));
+      if (!contenders.some((candidate) => candidate.team !== team)) {
+        allowed.add(key);
+        continue;
+      }
+      contenders.sort(
+        (a, b) =>
+          hexDistance(parseKey(key), parseKey(a.anchor)) -
+            hexDistance(parseKey(key), parseKey(b.anchor)) || a.armyId.localeCompare(b.armyId),
+      );
+      if (contenders[0]!.team === team) allowed.add(key);
+    }
+  }
+  return [...allowed].sort();
 }
 
 export function roadEdgeKey(a: HexKey, b: HexKey): string {

@@ -1,5 +1,10 @@
 import type { GameSettings } from '@iron-ridge/engine';
-import { GRID_LIMITS, createGame, validateGameState } from '@iron-ridge/engine';
+import {
+  GRID_LIMITS,
+  createGame,
+  validateGameState,
+  validateEngagementProfile,
+} from '@iron-ridge/engine';
 
 /** A new-run recipe, deliberately separate from a SaveDocument's exact GameState. */
 export interface CampaignScenarioDocument {
@@ -19,6 +24,7 @@ export function configurationDocument(settings: GameSettings): CampaignScenarioD
     requiredCodeCapabilities: [
       'campaign-configuration-v1',
       'commander-training-cp-v1',
+      ...(settings.engagement ? ['multi-commander-engagement-v1'] : []),
       ...(settings.infrastructure ? ['infrastructure-nodes-v1'] : []),
       ...(settings.infrastructure?.roads?.length ? ['tactical-road-repair-v1'] : []),
       ...(settings.infrastructure?.nodes.placement?.mode === 'advanced' ? ['seeded-nodes-v1'] : []),
@@ -45,6 +51,7 @@ export function parseCampaignConfiguration(text: string): GameSettings {
     'infrastructure-nodes-v1',
     'seeded-nodes-v1',
     'tactical-road-repair-v1',
+    'multi-commander-engagement-v1',
   ]);
   if (
     doc.requiredCodeCapabilities !== undefined &&
@@ -80,6 +87,8 @@ export function parseCampaignConfiguration(text: string): GameSettings {
     throw new Error(
       'Invalid campaign settings: include a valid map, players, seed and positive commander training CP price.',
     );
+  const engagementProblem = validateEngagementProfile(s.engagement);
+  if (engagementProblem) throw new Error(engagementProblem);
   const errors = validateGameState(createGame(s));
   if (errors.length) throw new Error(errors.join('; '));
   return s;

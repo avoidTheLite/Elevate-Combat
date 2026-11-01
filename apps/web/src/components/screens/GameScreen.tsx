@@ -5,6 +5,8 @@ import {
   actingTeam,
   attackCost,
   autoResolveOdds,
+  engagementCandidates,
+  engagementCosts,
   isAiTurn,
   liveUnits,
   previewAttack,
@@ -19,7 +21,7 @@ import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
 import { OverlayBar } from '../game/OverlayBar.tsx';
 import { SceneView } from '../game/SceneView.tsx';
 import { useViewStore } from '../../stores/useViewStore.ts';
-import { seenHolders } from '../../lib/holders.ts';
+import { holderName, seenHolders } from '../../lib/holders.ts';
 import { strategicClick } from '../../lib/strategicClick.ts';
 import { StrategicSidebar } from '../game/StrategicSidebar.tsx';
 import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
@@ -247,7 +249,7 @@ export function GameScreen(): React.ReactElement {
             onClick={onClick}
           />
           <OverlayBar battle={inBattle ? game.battle! : null} />
-          {error && (
+          {error && game.phase !== 'battle-pending' && (
             <div
               role="alert"
               className="absolute top-2 left-1/2 -translate-x-1/2 border border-[hsl(var(--destructive))] bg-[hsl(var(--panel))] text-[hsl(var(--destructive))] text-[11px] px-3 py-1"
@@ -275,9 +277,11 @@ export function GameScreen(): React.ReactElement {
         </aside>
       </div>
 
-      {game.phase === 'battle-pending' && game.pending && !aiTurn && !foundationPending && (
-        <PendingBattle game={game} />
-      )}
+      {game.phase === 'battle-pending' &&
+        game.pending &&
+        !aiTurn &&
+        !foundationPending &&
+        !handoff && <PendingBattle game={game} />}
       {inBattle && game.battle!.phase === 'over' && !aiTurn && !foundationPending && (
         <BattleOver game={game} />
       )}
@@ -331,7 +335,11 @@ function QuitDialog(): React.ReactElement {
 function Overlay({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-[hsl(var(--background)/0.86)] p-4">
-      <div className="border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-5 max-w-[520px] w-full flex flex-col items-center gap-3 text-center">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-5 max-w-[520px] max-h-[92dvh] overflow-y-auto w-full flex flex-col items-center gap-3 text-center"
+      >
         {children}
       </div>
     </div>
@@ -340,37 +348,210 @@ function Overlay({ children }: { children: React.ReactNode }): React.ReactElemen
 
 function PendingBattle({ game }: { game: GameState }): React.ReactElement {
   const dispatch = useGameStore((s) => s.dispatch);
+  const error = useGameStore((s) => s.error);
   const p = game.pending!;
   const att = game.armies.find((a) => a.id === p.attackerArmyId)!;
-  const odds = autoResolveOdds(game, p);
-  const attackerHuman = game.settings.controllers[att.team] === 'human';
+  const def = game.armies.find((a) => a.id === p.defenderArmyId)!;
+  const participation = p.participation;
+  const selecting = participation && participation.stage !== 'ready';
+  const costs = participation ? engagementCosts(game, p) : null;
+  const humanInvolved = Object.values(game.settings.controllers).includes('human');
+  const canAfford = costs ? costs.A <= game.cp.A && costs.B <= game.cp.B : true;
+
   return (
     <Overlay>
       <div className="text-lg font-bold tracking-widest text-[hsl(var(--warning))]">
         ⚔ ENGAGEMENT AT {p.target}
       </div>
-      <div className="text-xs">
-        <span className={teamClass(att.team)}>{TEAM_NAME[att.team]}</span> assaults from {p.origin}.
-        Opening the deployment costs {attackCost(att)} CP.
-      </div>
-      <div className="text-xs text-[hsl(var(--muted-foreground))]">
-        Auto-resolve estimate (terrain + fortification + force ratio): attacker{' '}
-        {Math.round(odds * 100)}%
-      </div>
-      <div className="flex gap-2 flex-wrap justify-center">
-        <Button size="lg" onClick={() => dispatch({ type: 'startBattle' })}>
-          FIGHT TACTICAL BATTLE
+      {error && (
+        <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
+          {error}
+        </p>
+      )}
+      {selecting ? (
+        <ParticipantChoices game={game} />
+      ) : (
+        <>
+          <div className="text-xs">
+            <span className={teamClass(att.team)}>{TEAM_NAME[att.team]}</span> assaults from{' '}
+            {p.origin}.
+            {costs
+              ? ` Confirmed participation: ${TEAM_NAME[att.team]} ${costs[att.team]} CP; ${TEAM_NAME[def.team]} ${costs[def.team]} CP.`
+              : ` Opening the deployment costs ${attackCost(att)} CP.`}
+          </div>
+          {participation && (
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Both sides have locked their commanders. Commit once to open deployment. Additional
+              commanders keep their positions and strategic movement; units retain their commander.
+            </p>
+          )}
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            Auto-resolve estimate (terrain + fortification + force ratio): attacker{' '}
+            {Math.round(autoResolveOdds(game, p) * 100)}%
+          </div>
+          {!canAfford && (
+            <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
+              A side no longer has enough CP for the confirmed participants.
+            </p>
+          )}
+          {participation && (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2 flex-wrap justify-center">
+                {[att, def]
+                  .filter((holder) => game.settings.controllers[holder.team] === 'human')
+                  .map((holder) => (
+                    <Button
+                      key={holder.id}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        dispatch({
+                          type: 'engagementSelect',
+                          team: holder.team,
+                          armyIds:
+                            holder.id === att.id
+                              ? participation.attackerIds
+                              : participation.defenderIds,
+                        })
+                      }
+                    >
+                      EDIT {TEAM_NAME[holder.team]} COMMANDERS
+                    </Button>
+                  ))}
+              </div>
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                Edit your side to change participants before spending. Editing the attacker asks the
+                defender to choose again.
+              </p>
+            </div>
+          )}
+          <div className="flex gap-2 flex-wrap justify-center">
+            <Button
+              size="lg"
+              disabled={!canAfford}
+              onClick={() => dispatch({ type: 'startBattle' })}
+            >
+              FIGHT TACTICAL BATTLE
+            </Button>
+            <Button
+              size="lg"
+              variant="ghost"
+              disabled={!canAfford}
+              onClick={() => dispatch({ type: 'autoResolve' })}
+            >
+              AUTO-RESOLVE
+            </Button>
+          </div>
+        </>
+      )}
+      {humanInvolved && (participation || game.settings.controllers[att.team] === 'human') && (
+        <Button size="sm" variant="ghost" onClick={() => dispatch({ type: 'cancelBattle' })}>
+          {participation ? 'ABORT ENGAGEMENT — NO SPEND' : 'CANCEL'}
         </Button>
-        <Button size="lg" variant="ghost" onClick={() => dispatch({ type: 'autoResolve' })}>
-          AUTO-RESOLVE
-        </Button>
-        {attackerHuman && (
-          <Button size="lg" variant="ghost" onClick={() => dispatch({ type: 'cancelBattle' })}>
-            CANCEL
-          </Button>
-        )}
-      </div>
+      )}
+      {participation && <SaveMenu />}
     </Overlay>
+  );
+}
+
+function ParticipantChoices({ game }: { game: GameState }): React.ReactElement {
+  const dispatch = useGameStore((s) => s.dispatch);
+  const p = game.pending!;
+  const selection = p.participation!;
+  const attacker = game.armies.find((army) => army.id === p.attackerArmyId)!;
+  const defender = game.armies.find((army) => army.id === p.defenderArmyId)!;
+  const side = selection.stage === 'defender' ? defender.team : attacker.team;
+  const primary = side === attacker.team ? attacker : defender;
+  const selectedIds = side === attacker.team ? selection.attackerIds : selection.defenderIds;
+  const candidates = engagementCandidates(game, side).filter(
+    (candidate) => candidate.armyId !== primary.id,
+  );
+  const costs = engagementCosts(game, p);
+  const enoughCp = costs[side] <= game.cp[side];
+  const additionalPrice =
+    side === attacker.team
+      ? game.settings.engagement!.additionalAttackerCp
+      : game.settings.engagement!.additionalDefenderCp;
+  const choose = (id: string): void => {
+    const ids = selectedIds.includes(id)
+      ? selectedIds.filter((candidate) => candidate !== id)
+      : [...selectedIds, id];
+    dispatch({ type: 'engagementSelect', team: side, armyIds: ids });
+  };
+
+  return (
+    <section
+      aria-label={`${TEAM_NAME[side]} participant selection`}
+      className="flex flex-col gap-3 text-left w-full"
+    >
+      <h2 className={`text-sm font-bold tracking-widest ${teamClass(side)}`}>
+        {TEAM_NAME[side]} — CHOOSE COMMANDERS
+      </h2>
+      <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        {selection.stage === 'attacker'
+          ? 'Attacker chooses first.'
+          : 'The attacker has locked its choices.'}{' '}
+        Only your side’s choices are shown. Additional commanders stay in place and keep their
+        strategic movement. Their units use deployment zones around their own commander.
+      </p>
+      <p className="text-xs">
+        Mandatory: {holderName(primary)} · {primary.units.length} units
+      </p>
+      <ul
+        aria-label="Additional commanders"
+        className="flex flex-col gap-2 max-h-[38dvh] overflow-y-auto"
+      >
+        {candidates.map((candidate) => {
+          const commander = game.armies.find((army) => army.id === candidate.armyId)!;
+          const included = selectedIds.includes(commander.id);
+          const unaffordable = !included && costs[side] + additionalPrice > game.cp[side];
+          return (
+            <li key={commander.id} className="border border-[hsl(var(--border))] p-2">
+              <label className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  aria-label={`Include commander ${commander.id}`}
+                  checked={included}
+                  disabled={!!candidate.reason || unaffordable}
+                  onChange={() => choose(commander.id)}
+                />
+                <span>
+                  <span className="font-bold">{holderName(commander)}</span> ·{' '}
+                  {commander.units.length} units
+                  <span className="block text-[10px] text-[hsl(var(--muted-foreground))]">
+                    Zone anchor {commander.pos} · {commander.movesLeft} strategic steps remain
+                  </span>
+                  <span className="block text-[10px]">
+                    {candidate.reason ??
+                      (unaffordable
+                        ? 'Not enough CP to add this commander'
+                        : candidate.alreadyPresent
+                          ? 'Already in an initial battle MainHex'
+                          : `Qualifies by a legal ${candidate.steps}-step route; no travel is performed`)}
+                  </span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {candidates.length === 0 && <p className="text-xs">No additional commanders.</p>}
+      <p className="text-xs font-bold" data-testid="participation-total">
+        {TEAM_NAME[side]} participation: {costs[side]} CP / {game.cp[side]} available
+      </p>
+      {!enoughCp && (
+        <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
+          Not enough CP for this selection.
+        </p>
+      )}
+      <Button disabled={!enoughCp} onClick={() => dispatch({ type: 'engagementLock', team: side })}>
+        LOCK {TEAM_NAME[side]} COMMANDERS
+      </Button>
+      <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+        Locking spends nothing. Both sides’ costs commit together when the battle starts. Declined
+        commanders remain outside this battle and still affect territorial control.
+      </p>
+    </section>
   );
 }
 
@@ -447,9 +628,11 @@ function Help({ onClose }: { onClose: () => void }): React.ReactElement {
           <p>
             <b className="text-[hsl(var(--primary))]">Battle:</b> fought on the sub-hex grid of the
             contested hex and its neighbours. Defender deploys in the orange hex, attacker in the
-            hex it came from. Each unit may move (terrain cost: 1 + climb) and then act once. Hover
-            a target for the full to-hit breakdown; the arc is green (clear), amber (marginal) or
-            red (blocked).
+            hex it came from. In experimental multi-commander games, each additional commander
+            supplies a zone at its current position; pick a unit to see its own green zone.
+            Participation preserves additional commanders’ strategic movement. Each unit may move
+            (terrain cost: 1 + climb) and then act once. Hover a target for the full to-hit
+            breakdown; the arc is green (clear), amber (marginal) or red (blocked).
           </p>
           <p>
             <b className="text-[hsl(var(--primary))]">Rules:</b> d20 ≥ TN. Base TN heavy 7 / light

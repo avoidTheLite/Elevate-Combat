@@ -8,13 +8,14 @@ import {
   garrisonOf,
   hexFortLevel,
   income,
+  engageTargets,
   unitsForEra,
   worldOf,
 } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
-import { holderName, seenHolders } from '../../lib/holders.ts';
+import { canOrder, holderName, seenHolders } from '../../lib/holders.ts';
 import { ContentsPanel } from './ContentsPanel.tsx';
 import { NodePanel } from './NodePanel.tsx';
 import { SupplyPanel } from './SupplyPanel.tsx';
@@ -42,6 +43,13 @@ export function StrategicSidebar({
   const garrisonFull = (garrison?.units.length ?? 0) >= COMMAND.garrisonCap;
   const n = game.settings.grid.subRadius;
   const projectedIncome = useMemo(() => income(game, team), [game, team]);
+  const selectedCommander = game.armies.find(
+    (holder) => holder.id === ui.selectedArmy && holder.kind === 'commander',
+  );
+  const engagementTargets =
+    canAct && canOrder(game, selectedCommander, view)
+      ? engageTargets(game, selectedCommander!.id)
+      : [];
   const mainKey = main?.key ?? null;
   const fortifyQuote = useMemo(
     () =>
@@ -86,11 +94,35 @@ export function StrategicSidebar({
         <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
           Select a commander: green cells are reachable this turn ({COMMAND.commandMove(n)} sub-hex
           steps, double when every unit is fast). Red marks an enemy within engage range (
-          {COMMAND.engageRange(n)} sub-hexes) — click it to attack for {ECONOMY.attackBaseCost} +{' '}
-          {ECONOMY.attackPerUnitCost}/unit CP. Your holders see enemies within{' '}
-          {COMMAND.sightRange(n)} sub-hexes with clear line of sight. Click your HQ to manage its
-          garrison.
+          {COMMAND.engageRange(n)} sub-hexes) — click it to engage.
+          {game.settings.engagement
+            ? ` Trial attack price: ${game.settings.engagement.attackBaseCp} CP plus ${game.settings.engagement.additionalAttackerCp} per additional attacker; choose participants before spending.`
+            : ` Attack price: ${ECONOMY.attackBaseCost} + ${ECONOMY.attackPerUnitCost}/unit CP.`}{' '}
+          Your holders see enemies within {COMMAND.sightRange(n)} sub-hexes with clear line of
+          sight. Click your HQ to manage its garrison.
         </div>
+        {engagementTargets.length > 0 && (
+          <ul aria-label="Eligible engagement targets" className="flex flex-col gap-1">
+            {engagementTargets.map((target) => (
+              <li key={target.id}>
+                <Button
+                  size="sm"
+                  variant="attack"
+                  className="w-full text-left"
+                  onClick={() =>
+                    dispatch({
+                      type: 'engage',
+                      armyId: selectedCommander!.id,
+                      targetId: target.id,
+                    })
+                  }
+                >
+                  ENGAGE {TEAM_NAME[target.team]} {holderName(target)} · MainHex {target.at}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Panel>
 
       <Panel id="hex" title={main ? `HEX ${main.col},${main.row}` : 'HEX'}>

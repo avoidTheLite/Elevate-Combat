@@ -19,6 +19,8 @@ export interface ArmyUnit {
   typeId: string;
   label: string;
   hp: number;
+  /** Last explicit tactical facing; legacy units use their team's initial facing. */
+  facing?: number;
 }
 
 /** A strategic unit holder: a mobile commander, or a garrison bound to a building. */
@@ -126,6 +128,10 @@ export interface Battle {
   defender: Team;
   attackerArmyId: string;
   defenderArmyId: string;
+  /** Committed commander/holder provenance; absent for legacy single-pair battles. */
+  participants?: BattleParticipant[];
+  /** Exactly-once opening spend recorded with a committed experimental battle. */
+  participationCosts?: Record<Team, number>;
   /** Main hex being fought over. */
   contested: HexKey;
   /** Main hex the attack came from. */
@@ -172,6 +178,24 @@ export interface MainHexState {
 
 export type Controller = 'human' | 'ai';
 
+/** Explicit experimental profile. Omission retains the saved legacy engagement rules. */
+export interface EngagementProfile {
+  profile: 'multi-commander-v1';
+  attackBaseCp: number;
+  additionalAttackerCp: number;
+  additionalDefenderCp: number;
+}
+
+export interface BattleParticipant {
+  armyId: string;
+  team: Team;
+  /** Strategic deployment anchor recorded before commitment; participation never moves it. */
+  pos: HexKey;
+  at: HexKey;
+  movesLeft: number;
+  primary: boolean;
+}
+
 export interface GameSettings {
   era: Era;
   grid: GridConfig;
@@ -181,6 +205,8 @@ export interface GameSettings {
   battleRounds: number;
   /** Positive CP cost per newly formed commander, including splits. Absence preserves old save restoration but requires explicit price selection before NEW training. */
   commanderTrainingCp?: number;
+  /** Optional commander-selection experiment; no production price is implied. */
+  engagement?: EngagementProfile;
   /** Optional overrides; omitted fields use V0.9 defaults per map/seed. */
   battleObjective?: Partial<BattleObjective>;
   /** Optional transfer-rule override; omitted fields use `COMMAND.transferRule`. */
@@ -204,6 +230,12 @@ export interface PendingBattle {
   defenderArmyId: string;
   origin: HexKey;
   target: HexKey;
+  /** Both primaries are always included; each side explicitly locks its additions. */
+  participation?: {
+    attackerIds: string[];
+    defenderIds: string[];
+    stage: 'attacker' | 'defender' | 'ready';
+  };
 }
 
 export interface GameState {

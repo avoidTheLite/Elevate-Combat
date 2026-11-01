@@ -325,7 +325,14 @@ describe('scene building', () => {
     expect(tokens).toHaveLength(2);
     for (const t of tokens) {
       const a = s.armies.find((x) => x.id === t.id)!;
-      expect(t.army).toEqual({ era: 'ww2', units: a.units.map((u) => u.typeId) });
+      expect(t.army).toEqual({
+        era: 'ww2',
+        units: a.units.map((unit) => ({
+          id: unit.id,
+          typeId: unit.typeId,
+          facing: unit.facing ?? (a.team === 'A' ? 0 : 3),
+        })),
+      });
     }
     // Alpha (west) and Bravo (east) face roughly opposite ways.
     const [ya, yb] = [
@@ -348,6 +355,13 @@ describe('command layer on the strategic map', () => {
       const t = tokens.find((x) => x.id === c.id)!;
       expect(t.key).toBe(c.pos);
       expect(t.scale).toBe(COMMANDER_SCALE);
+      expect(t.army!.units).toEqual(
+        c.units.map((unit) => ({
+          id: unit.id,
+          typeId: unit.typeId,
+          facing: unit.facing ?? (c.team === 'A' ? 0 : 3),
+        })),
+      );
     }
     // A moved commander's token follows its pos.
     const a = commanderOf(s, 'A');

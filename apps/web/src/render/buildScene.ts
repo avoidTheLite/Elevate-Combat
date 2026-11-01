@@ -296,7 +296,14 @@ export function buildStrategicScene(
       selected: a.id === ui.selectedArmy,
       spent: mine && a.movesLeft === 0,
       ready: mine && a.movesLeft > 0,
-      army: { era: game.settings.era, units: a.units.map((u) => u.typeId) },
+      army: {
+        era: game.settings.era,
+        units: a.units.map((u) => ({
+          id: u.id,
+          typeId: u.typeId,
+          facing: u.facing ?? (a.team === 'A' ? 0 : 3),
+        })),
+      },
       yaw: yawToward(here, world.mainByKey.get(game.hq[a.team === 'A' ? 'B' : 'A'])!.center),
       scale: COMMANDER_SCALE,
     });
@@ -403,8 +410,13 @@ export function buildTacticalScene(
   if (battle.phase === 'deploy') {
     const team = battle.deployTeam;
     if (!view || view === team) {
-      for (const k of deploymentZone(ctx, battle, team))
-        overlays.push({ key: k, color: 0x33ff88, opacity: 0.18 });
+      const selected = ui.deployPick
+        ? battle.units.find((unit) => unit.id === ui.deployPick && unit.team === team)
+        : undefined;
+      // A picked unit may deploy through its own commander only. With no pick,
+      // show the available zones more softly until a roster selection is made.
+      for (const k of deploymentZone(ctx, battle, team, selected?.holderId))
+        overlays.push({ key: k, color: 0x33ff88, opacity: selected ? 0.25 : 0.12 });
       if (ui.placingFort)
         for (const k of warnedRangeCells(ctx, battle))
           overlays.push({ key: k, color: 0xffb020, opacity: 0.3 });
