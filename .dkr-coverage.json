@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "d1e5919ee3b7f154c9faddf03235e4f5bbeb8ea9",
+  "implementation_sha": "0116fe0c39e872f64d6a2b2153eea98c5c2c9c6a",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -73,6 +73,161 @@
           "path": "packages/engine/src/game.test.ts",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: a forced engagement produces a playable tactical battle",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation uses a trial base price independently of army size and preserves legacy affordability",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation includes a same-MainHex commander with zero movement without moving it",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation qualifies defender reinforcements from actual remaining movement without active-side orders",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation rejects a geometrically near commander whose actual paths are blocked",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation requires mandatory unique own holders and locks attacker before defender",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation quotes 9 CP for three attackers, bills extras to their own side and changes no movement",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation keeps initial defense legal at zero CP and atomically rejects stale opposing affordability",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation cannot commit an unlocked selection and cancellation spends nothing",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation keeps all previews pure and blocks start/auto before both sides lock",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation invalidates downstream defender choices when a ready attacker selection is reopened",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation selects and locks for AI sides but stops for each human choice",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation validates explicit profile inputs and preserves omission for old saves",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation resumes an established legacy pending fight without replaying new-attack eligibility",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagement.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: explicit commander participation keeps current initiation checks mandatory for an opted-in pending selection",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (Classic) commits both prices and actual zones without relocating or exhausting additions or including declines",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (Classic) rejects a stale defender affordability failure before spending either side or publishing a battle",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (Classic) keeps additional commanders and declined local presence intact through normal final-snapshot writeback",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (foundation) commits both prices and actual zones without relocating or exhausting additions or including declines",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (foundation) rejects a stale defender affordability failure before spending either side or publishing a battle",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "independent engagement integration (foundation) keeps additional commanders and declined local presence intact through normal final-snapshot writeback",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "rejects using another commander zone for a primary unit, while that zone remains usable by its owner",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "keeps declined hostile center presence distinct from unrelated field presence (onCenter=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "packages/engine/src/engagementIntegration.test.ts",
+          "name": "keeps declined hostile center presence distinct from unrelated field presence (onCenter=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "experimental engagement setup is opt-in and survives the validated Battle Lab round trip",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "experimental engagement setup exports the code capability and preserves profile prices while rejecting bad profiles",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection offers Engage for an eligible adjacent MainHex enemy without moving into its cell",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection quotes own choices, saves pending selection and aborts without spending or moving",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection hands over even with fog off and commits both side totals only after locks",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection lets a player reduce an infeasible ready roster without aborting or spending CP",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection offers the human defender its own choice after an AI attacker locks",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/engagement.ui.test.tsx",
+          "name": "private participant selection uses the picked unit\u2019s commander zone in the scene and accessible roster",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
     },
@@ -112,6 +267,81 @@
         {
           "path": "packages/engine/src/review-fixes.test.ts",
           "name": "GAMES-ELEVATE-TACTICAL-UC-001: capture point objective",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance commits five commanders with distinct lineage, no extra travel/movement spend and both CP totals",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance only deploys a constituent in its own zone and retains explicit facing through auto placement",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance rejects infeasible forces atomically before charging or allocating a battle ID",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance preserves extra holder posture and unit identity on successful extraction (foundation=false)",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance preserves extra holder posture and unit identity on successful extraction (foundation=true)",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance includes every selected army in auto-resolve casualties while declined force remains exact",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "packages/engine/src/tacticalParticipation.test.ts",
+          "name": "GAMES-ELEVATE-TACTICAL-UC-001: commander anchored deployment and provenance retains the exact legacy primary deployment rule when participants are absent",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation uses area limits rather than shrinking linear dimensions by a percentage",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation places opposite-facing units back to back on opposite sides of the centroid",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation gives three evenly spaced facings equal thirds",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation uses one shared fit factor when one facing also has a support marker",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation keeps same-facing military side by side and support directly behind",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation retains every dense roster member, fits full footprints, and is input-order independent",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation moving a facing changes placement and keeps the declared direction",
+          "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
+        },
+        {
+          "path": "apps/web/src/render/formationLayout.test.ts",
+          "name": "procedural facing formation rejects duplicate identities and invalid inputs instead of losing units",
           "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
         }
       ]
@@ -177,6 +407,66 @@
         {
           "path": "packages/engine/src/save.test.ts",
           "name": "GAMES-ELEVATE-SESSION-UC-001: migrateSave (schema 1 \u2192 2)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity uses schema 4 to prevent older builds ignoring deployment provenance, without rewriting schemas 2/3",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity resumes each side selection stage without spending CP or qualifying movement",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity round-trips committed provenance, both deployment stages and combat (foundation=false)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity round-trips committed provenance, both deployment stages and combat (foundation=true)",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity round-trips real auto-resolve results without another participation or creation charge",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity reopens attacker choices without carrying private defender additions into the new stage",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity restores foundation capture choices after defeated participant holders have been removed",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity retains extraction holder provenance before and after campaign writeback",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects missing profile fields, invalid prices, unknown profile fields and corrupt saved facing",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects incomplete, wrong-side, premature or duplicate choices and shifted initial anchors",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects forged committed anchors, changed movement, missing roster members and price receipts",
+          "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
+        },
+        {
+          "path": "packages/engine/src/engagementSave.test.ts",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: corrupted participation saves are rejected rejects deployment through a different commander even if that cell belongs to its team union",
           "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
         }
       ]
