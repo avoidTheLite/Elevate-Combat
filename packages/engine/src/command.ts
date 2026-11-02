@@ -25,6 +25,8 @@ import {
 import type { StratResult } from './strategic.ts';
 import type { Army, GameState, TransferRule } from './types.ts';
 import { TEAM_NAME } from './types.ts';
+import { campaignNodeCapacity, foundationHasPending } from './foundation/campaign.ts';
+import { validateEngagementProfile } from './engagement.ts';
 
 function findHolder(state: GameState, id: string): Army | undefined {
   return state.armies.find((a) => a.id === id);
@@ -38,6 +40,8 @@ function subDistance(world: World, a: HexKey, b: HexKey): number {
 
 function ordersCheck(state: GameState, army: Army | undefined): StratResult {
   if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
+  if (foundationHasPending(state))
+    return { ok: false, error: 'Finish the pending foundation event first' };
   if (!army) return { ok: false, error: 'No such holder' };
   if (army.team !== state.active) return { ok: false, error: 'Not your holder' };
   return { ok: true };
@@ -51,7 +55,7 @@ function ordersCheck(state: GameState, army: Army | undefined): StratResult {
  */
 export function commanderReach(state: GameState, army: Army): Map<HexKey, number> {
   const out = new Map<HexKey, number>([[army.pos, 0]]);
-  if (army.kind !== 'commander' || army.movesLeft <= 0) return out;
+  if (foundationHasPending(state) || army.kind !== 'commander' || army.movesLeft <= 0) return out;
   const { world } = worldOf(state);
   const blocked = occupiedSubs(state, army.id);
   let frontier = [army.pos];
@@ -142,8 +146,11 @@ export function canEngage(
     return { ok: false, error: `Target is beyond engage range (${range})` };
   if (!visibleArmies(state, att.team).some((a) => a.id === target.id))
     return { ok: false, error: 'Target is not in sight' };
-  if (state.cp[att.team] < attackCost(att))
-    return { ok: false, error: `Opening a deployment costs ${attackCost(att)} CP` };
+  const profileError = validateEngagementProfile(state.settings.engagement);
+  if (profileError) return { ok: false, error: profileError };
+  const price = state.settings.engagement?.attackBaseCp ?? attackCost(att);
+  if (state.cp[att.team] < price)
+    return { ok: false, error: `Opening a deployment costs ${price} CP` };
   return { ok: true };
 }
 
@@ -164,6 +171,15 @@ export function engage(state: GameState, armyId: string, targetId: string): Stra
     defenderArmyId: def!.id,
     origin: engageOrigin(world, att!, def!),
     target: def!.at,
+    ...(state.settings.engagement
+      ? {
+          participation: {
+            attackerIds: [att!.id],
+            defenderIds: [def!.id],
+            stage: 'attacker' as const,
+          },
+        }
+      : {}),
   };
   state.phase = 'battle-pending';
   logStrategic(state, `${TEAM_NAME[att!.team]} commander ${att!.id} assaults ${def!.at}!`);
@@ -180,9 +196,43 @@ export function transferRule(state: GameState): TransferRule {
   };
 }
 
-function capOf(army: Army): number {
-  return army.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap;
+function capOf(state: GameState, army: Army): number {
+  if (
+    army.kind === 'garrison' &&
+    state.infrastructure &&
+    (army.building === 'node' || army.building === 'hq')
+  ) {
+    const home =
+      army.building === 'hq'
+        ? state.infrastructure.sites.find(
+            (site) => site.homeTeam === army.team && site.centerSubHex === army.pos,
+          )
+        : undefined;
+    const node = state.infrastructure.capture.nodes.find(
+      (candidate) => candidate.id === (army.building === 'hq' ? home?.nodeId : army.nodeId),
+    );
+    if (
+      !node ||
+      node.owner !== army.team ||
+      node.mainHex !== army.at ||
+      node.centerSubHex !== army.pos
+    )
+      return 0;
+    try {
+      return campaignNodeCapacity(state, node.id, 'housing');
+    } catch {
+      return 0;
+    }
+  }
+  return army.kind === 'garrison'
+    ? army.building === 'temporary'
+      ? 1
+      : COMMAND.garrisonCap
+    : ECONOMY.armyCap;
 }
+
+/** Shared UI/engine quote: temporary tiles, configured node/HQ housing and classic limits. */
+export const holderCapacity = capOf;
 
 /**
  * May `count` units pass from one holder to another? Same active team, strategic
@@ -199,14 +249,18 @@ export function canTransfer(
   if (!chk.ok) return chk;
   if (!to || to.id === from!.id) return { ok: false, error: 'No receiving holder' };
   if (to.team !== from!.team) return { ok: false, error: 'Cannot transfer to the enemy' };
+  if (from!.kind === 'garrison' && from!.building === 'temporary' && to.kind !== 'commander')
+    return { ok: false, error: 'Only a friendly commander can retrieve a temporary garrison' };
   const rule = transferRule(state);
   const { world } = worldOf(state);
   if (rule.sameMainHex && from!.at !== to.at)
     return { ok: false, error: 'Holders must share a main hex' };
   if (rule.radius !== null && subDistance(world, from!.pos, to.pos) > rule.radius)
     return { ok: false, error: `Holders must be within ${rule.radius} sub-hexes` };
-  if (to.units.length + count > capOf(to))
-    return { ok: false, error: `Receiver would exceed ${capOf(to)} units` };
+  if (to.units.length + count > capOf(state, to))
+    return { ok: false, error: `Receiver would exceed ${capOf(state, to)} units` };
+  if (to.kind === 'garrison' && to.building === 'temporary')
+    return { ok: false, error: 'Temporary garrisons require deliberate post-battle stationing' };
   return { ok: true };
 }
 
@@ -225,7 +279,10 @@ function pickUnits(from: Army, unitIds: string[]): StratResult {
 }
 
 function removeEmpty(state: GameState, army: Army): void {
-  if (army.kind === 'commander' && army.units.length === 0)
+  if (
+    (army.kind === 'commander' || (army.kind === 'garrison' && army.building === 'temporary')) &&
+    army.units.length === 0
+  )
     state.armies = state.armies.filter((a) => a.id !== army.id);
 }
 
@@ -254,6 +311,23 @@ export function transferUnits(
   return { ok: true };
 }
 
+/** One-time explicit price selection for a restored game whose old settings omitted training CP. */
+export function configureCommanderTraining(state: GameState, cpCost: number): StratResult {
+  if (state.phase !== 'strategic') return { ok: false, error: 'Not in strategic phase' };
+  if (foundationHasPending(state))
+    return { ok: false, error: 'Finish the pending foundation event first' };
+  if (state.settings.commanderTrainingCp !== undefined)
+    return { ok: false, error: 'Commander training CP price is already configured' };
+  if (!Number.isSafeInteger(cpCost) || cpCost <= 0)
+    return { ok: false, error: 'Commander training requires a positive whole CP price' };
+  state.settings = { ...state.settings, commanderTrainingCp: cpCost };
+  logStrategic(
+    state,
+    `Commander training price configured: ${cpCost} CP per new commander, including splits`,
+  );
+  return { ok: true };
+}
+
 /**
  * Split units off a holder into a new commander on the nearest free sub-hex in
  * the same main hex. From a garrison the new commander has 0 moves this turn;
@@ -263,6 +337,11 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   const from = findHolder(state, fromId);
   const chk = ordersCheck(state, from);
   if (!chk.ok) return chk;
+  if (from!.kind === 'garrison' && from!.building === 'temporary')
+    return {
+      ok: false,
+      error: 'A commander must retrieve stationed troops before they can form a commander',
+    };
   const pick = pickUnits(from!, unitIds);
   if (!pick.ok) return pick;
   if (from!.kind === 'commander' && unitIds.length >= from!.units.length)
@@ -272,6 +351,17 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   const { world } = worldOf(state);
   const cell = freeSubNear(state, world, from!.pos, from!.at);
   if (!cell) return { ok: false, error: 'No free cell in this main hex' };
+  const trainingCp = state.settings.commanderTrainingCp;
+  if (trainingCp === undefined)
+    return {
+      ok: false,
+      error: 'Configure a commander training CP price before creating a new commander',
+    };
+  if (!Number.isSafeInteger(trainingCp) || trainingCp <= 0)
+    return { ok: false, error: 'Invalid commander training CP configuration' };
+  if (state.cp[from!.team] < trainingCp)
+    return { ok: false, error: `Training a commander costs ${trainingCp} CP` };
+  state.cp[from!.team] -= trainingCp;
   const army: Army = {
     id: newId(state, `${from!.team}army`),
     team: from!.team,
@@ -283,7 +373,10 @@ export function formCommander(state: GameState, fromId: string, unitIds: string[
   };
   from!.units = from!.units.filter((u) => !unitIds.includes(u.id));
   state.armies.push(army);
-  logStrategic(state, `New commander ${army.id} formed with ${army.units.length} unit(s)`);
+  logStrategic(
+    state,
+    `New commander ${army.id} formed with ${army.units.length} unit(s) (−${trainingCp} CP)`,
+  );
   return { ok: true };
 }
 

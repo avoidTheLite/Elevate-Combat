@@ -4,7 +4,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { actingTeam, deserializeSave } from '@iron-ridge/engine';
+import { SAVE_SCHEMA, actingTeam, deserializeSave } from '@iron-ridge/engine';
 import type { GameState } from '@iron-ridge/engine';
 import App from './App.tsx';
 import { useGameStore } from './stores/useGameStore.ts';
@@ -250,7 +250,7 @@ describe('corrupt and legacy saves', () => {
     const env = JSON.parse(localStorage.getItem(slotKey('autosave'))!);
     expect(env).toMatchObject({
       format: 'iron-ridge-save',
-      schema: 2,
+      schema: SAVE_SCHEMA,
       label: 'Autosave (from V0.9)',
     });
     act(() => {

@@ -40,27 +40,27 @@ const BANDS: Band[] = [
   {
     name: 'Point-Blank',
     max: 1,
-    mod: { rifle_mg: -5, at_gun: -5, tank_cannon: null, indirect: null, melee: -5 },
+    mod: { rifle_mg: -5, at_gun: -5, bazooka: -5, tank_cannon: null, indirect: null, melee: -5 },
   },
   {
     name: 'Short',
     max: 3,
-    mod: { rifle_mg: 0, at_gun: 0, tank_cannon: 0, indirect: 0, melee: null },
+    mod: { rifle_mg: 0, at_gun: 0, bazooka: 0, tank_cannon: 0, indirect: 0, melee: null },
   },
   {
     name: 'Medium',
     max: 6,
-    mod: { rifle_mg: 3, at_gun: 2, tank_cannon: 2, indirect: 0, melee: null },
+    mod: { rifle_mg: 3, at_gun: 2, bazooka: 2, tank_cannon: 2, indirect: 0, melee: null },
   },
   {
     name: 'Long',
     max: 10,
-    mod: { rifle_mg: 6, at_gun: 4, tank_cannon: 4, indirect: 2, melee: null },
+    mod: { rifle_mg: 6, at_gun: 4, bazooka: 4, tank_cannon: 4, indirect: 2, melee: null },
   },
   {
     name: 'Extreme',
     max: Infinity,
-    mod: { rifle_mg: 10, at_gun: 4, tank_cannon: 4, indirect: 4, melee: null },
+    mod: { rifle_mg: 10, at_gun: 4, bazooka: 4, tank_cannon: 4, indirect: 4, melee: null },
   },
 ];
 
@@ -296,8 +296,18 @@ export function previewAttack(
   const armor: ArmorClass = defType?.armorClass ?? 'unarmored';
   const baseTn = M.BASE_TN[armor];
   const er = kind === 'melee' ? 1 : effectiveRange(dist, ha, hb);
-  const band = rangeBand(er);
-  const bandMod = band.mod[at.profile];
+  const ordinaryBand = rangeBand(er);
+  const bazookaClose = er <= M.BAZOOKA_ACCURATE_RANGE;
+  const band =
+    at.profile === 'bazooka'
+      ? { name: bazookaClose ? 'Bazooka accurate' : 'Bazooka distant' }
+      : ordinaryBand;
+  const bandMod =
+    at.profile === 'bazooka'
+      ? bazookaClose
+        ? M.BAZOOKA_CLOSE_TN
+        : M.BAZOOKA_FAR_TN
+      : ordinaryBand.mod[at.profile];
   if (bandMod === null)
     return illegal(kind, targetKey, target, `${band.name} not possible for this weapon`);
   mods.push({ label: `${band.name} range (eff ${er})`, value: bandMod });
@@ -305,7 +315,11 @@ export function previewAttack(
   if (kind === 'direct') {
     mods.push(
       attacker.moved
-        ? { label: 'Moved then fired', value: M.MOVED_FIRE_TN }
+        ? {
+            label: 'Moved then fired',
+            value:
+              M.MOVED_FIRE_TN + (at.profile === 'tank_cannon' ? M.TANK_MOVED_FIRE_ADJUSTMENT : 0),
+          }
         : { label: 'Braced', value: M.BRACED_FIRE_TN },
     );
   }
@@ -387,6 +401,11 @@ export interface AttackOutcome {
   killed: string[];
   hits: AttackHit[];
   log: BattleLogEntry[];
+}
+
+/** Strategic holders pack multiple real units into one SubHex; ordinary battles omit this. */
+export interface AttackOptions {
+  readonly packedUnitIds?: readonly string[];
 }
 
 function push(
@@ -502,6 +521,7 @@ function rangedShot(
   shooter: BattleUnit,
   pv: AttackPreview,
   tag: string,
+  packedUnitIds: ReadonlySet<string>,
 ): { roll: number; result: 'direct' | 'splash' | 'miss'; damage: number } {
   const at = unitType(shooter.typeId);
   const roll = rng.die(20);
@@ -531,26 +551,61 @@ function rangedShot(
         tag: direct ? 'Direct' : 'Splash',
       });
     }
-    // Area splash to other units around the impact point.
-    if (at.splash && at.splashRadius > 0) {
-      const centre = parseKey(pv.targetKey);
-      for (const c of spiral(centre, at.splashRadius)) {
-        const k = hexKey(c);
-        if (k === pv.targetKey) continue;
-        const u = ctx.unitAt.get(k);
-        if (!u || u.hp <= 0 || u.id === shooter.id) continue;
+    // The primary attack roll is shared. Additional packed units at impact take
+    // the existing splash pool, exactly as other units within the blast do.
+    if (at.splash && packedUnitIds.size) {
+      for (const u of battle.units) {
+        if (
+          !packedUnitIds.has(u.id) ||
+          u.id === pv.target?.id ||
+          u.id === shooter.id ||
+          u.hp <= 0 ||
+          u.pos !== pv.targetKey
+        )
+          continue;
         const arc =
           unitType(u.typeId).armorClass === 'unarmored'
             ? null
-            : facingArc(k, u.facing, shooter.pos!);
+            : facingArc(u.pos, u.facing, shooter.pos!);
         damage += applyHit(rng, battle, log, {
           attacker: shooter,
           defender: u,
           pool: at.splash,
           facingDmg: arc ? mechanics().FACING_MODS[arc].dmg : 0,
           bonus: 0,
-          tag: `Splash r${hexDistance(c, centre)}`,
+          tag: 'Packed splash',
         });
+      }
+    }
+    // Area splash to other units around the impact point.
+    if (at.splash && at.splashRadius > 0) {
+      const centre = parseKey(pv.targetKey);
+      for (const c of spiral(centre, at.splashRadius)) {
+        const k = hexKey(c);
+        if (k === pv.targetKey) continue;
+        const occupant = ctx.unitAt.get(k);
+        const impacted = packedUnitIds.size
+          ? battle.units.filter(
+              (u) => u.pos === k && (packedUnitIds.has(u.id) || u.id === occupant?.id),
+            )
+          : occupant
+            ? [occupant]
+            : [];
+        for (const u of impacted) {
+          if (u.hp <= 0 || u.id === shooter.id) continue;
+          const arc =
+            unitType(u.typeId).armorClass === 'unarmored'
+              ? null
+              : facingArc(k, u.facing, shooter.pos!);
+          damage += applyHit(rng, battle, log, {
+            attacker: shooter,
+            defender: u,
+            pool: at.splash,
+            facingDmg: arc ? mechanics().FACING_MODS[arc].dmg : 0,
+            bonus: 0,
+            tag: `Splash r${hexDistance(c, centre)}`,
+          });
+        }
       }
     }
     // Siege is the only damage type that can reduce a fortification.
@@ -584,7 +639,26 @@ export function resolveAttack(
   battle: Battle,
   attacker: BattleUnit,
   targetKey: HexKey,
+  options: AttackOptions = {},
 ): AttackOutcome | { error: string } {
+  const packed = new Set<string>();
+  if (options.packedUnitIds !== undefined) {
+    if (!Array.isArray(options.packedUnitIds)) return { error: 'Invalid packed unit list' };
+    for (let i = 0; i < options.packedUnitIds.length; i++) {
+      const id = options.packedUnitIds[i];
+      const unit = battle.units.find((u) => u.id === id);
+      if (
+        !Object.hasOwn(options.packedUnitIds, i) ||
+        typeof id !== 'string' ||
+        packed.has(id) ||
+        !unit ||
+        unit.hp <= 0 ||
+        !unit.pos
+      )
+        return { error: 'Invalid packed unit list' };
+      packed.add(id);
+    }
+  }
   const pv = previewAttack(ctx, battle, attacker, targetKey);
   if (!pv.legal) return { error: pv.reason ?? 'Illegal attack' };
   const log: BattleLogEntry[] = [];
@@ -650,7 +724,7 @@ export function resolveAttack(
       meleeStrike(rng, battle, log, defender, attacker, 0, '↳ counter');
     }
   } else {
-    const shot = rangedShot(ctx, rng, battle, log, attacker, pv, '');
+    const shot = rangedShot(ctx, rng, battle, log, attacker, pv, '', packed);
     roll = shot.roll;
     result = shot.result;
     damage = shot.damage;

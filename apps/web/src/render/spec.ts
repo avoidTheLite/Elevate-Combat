@@ -38,7 +38,7 @@ export interface TokenSpec {
   /** HQ: era selects the building model. */
   era?: Era;
   /** Strategic army: era + unit roster, rendered as a commander cluster. */
-  army?: { era: Era; units: string[] };
+  army?: { era: Era; units: { id: string; typeId: string; facing: number }[] };
   /** Heading in the world group's local frame (radians, atan2(z, x)); 0 = +X. */
   yaw?: number;
   /** Can still act this turn (glow). Undefined = always glow (HQs). */
@@ -47,6 +47,8 @@ export interface TokenSpec {
   spent?: boolean;
   scale?: number;
   badge?: string;
+  /** A fixed strategic unit holder, picked on the map like a commander/building. */
+  stationed?: boolean;
 }
 
 export interface TrajectorySpec {

@@ -5,9 +5,11 @@ import {
   MAX_ESCORTS,
   armyEscorts,
   buildArmyModel,
+  buildFormationModel,
   buildHqModel,
   buildUnitModel,
   hasUnitModel,
+  modelTop,
 } from './unitModels.ts';
 
 const build = (id: string): THREE.Group => buildUnitModel(id, { color: 0x00f0ff, opacity: 1 });
@@ -172,7 +174,7 @@ describe('army commander clusters', () => {
     expect(gold(star)).toBe(true);
     // Star sits on the hood (front of the truck).
     expect(star.position.x).toBeCloseTo(find(cmd, 'hood')[0]!.position.x, 5);
-    expect(find(g, 'escort')).toHaveLength(3);
+    expect(find(g, 'roster-unit')).toHaveLength(ww2.length);
   });
 
   it('medieval commander rides a horse with a gold crown, beside a horse-cart', () => {
@@ -197,6 +199,82 @@ describe('army commander clusters', () => {
       colours.delete(team);
       expect([...colours].sort()).toEqual([0xdfe8ee, 0xffcc33].sort());
     }
+  });
+
+  it('uses each actual roster identity, duplicate type and facing instead of an escort sample', () => {
+    const roster = [...ww2, ...ww2].map((typeId, index) => ({
+      id: `unit-${index}`,
+      typeId,
+      facing: index % 6,
+    }));
+    const g = buildArmyModel('ww2', roster, { color: 0x00f0ff, opacity: 1 });
+    const shown = find(g, 'roster-unit');
+    expect(shown).toHaveLength(roster.length);
+    expect(shown.map((unit) => unit.userData.unitId).sort()).toEqual(
+      roster.map((unit) => unit.id).sort(),
+    );
+    for (const unit of shown) {
+      const source = roster.find((entry) => entry.id === unit.userData.unitId)!;
+      expect(unit.userData.facing).toBe(source.facing);
+      expect(unit.userData.typeId).toBe(source.typeId);
+    }
+    const reversed = buildArmyModel('ww2', [...roster].reverse(), { color: 0x00f0ff, opacity: 1 });
+    expect(reversed.children.map((unit) => unit.userData)).toEqual(
+      g.children.map((unit) => unit.userData),
+    );
+  });
+
+  it('keeps the actual full geometry inside the hex for both eras and tactical tokens', () => {
+    const models = [army('ww2', [...ww2, ...ww2]), army('medieval', [...med, ...med])];
+    for (const typeId of Object.keys(UNIT_TYPES))
+      for (let facing = 0; facing < 6; facing++)
+        models.push(
+          buildFormationModel([{ id: typeId, typeId, facing }], { color: 0x00f0ff, opacity: 1 }),
+        );
+    const point = new THREE.Vector3();
+    const normals = Array.from({ length: 6 }, (_, side) => ({
+      x: Math.cos((side * Math.PI) / 3),
+      z: Math.sin((side * Math.PI) / 3),
+    }));
+    let maximumProjection = -Infinity;
+    for (const model of models) {
+      model.updateMatrixWorld(true);
+      model.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        const positions = mesh.geometry?.getAttribute('position');
+        if (!positions) return;
+        for (let i = 0; i < positions.count; i++) {
+          point.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+          for (const normal of normals)
+            maximumProjection = Math.max(
+              maximumProjection,
+              point.x * normal.x + point.z * normal.z,
+            );
+        }
+      });
+    }
+    expect(maximumProjection).toBeLessThanOrEqual(Math.sqrt(3) / 2 + 1e-7);
+  });
+
+  it('places token labels above actual models, excluding glows, hidden proxies and world height', () => {
+    const parent = new THREE.Group();
+    parent.position.set(10, 20, 30);
+    const body = new THREE.Group();
+    const visible = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+    visible.position.y = 0.5;
+    body.add(visible);
+    const hidden = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20));
+    hidden.visible = false;
+    body.add(hidden);
+    const glow = new THREE.Sprite();
+    glow.scale.setScalar(50);
+    body.add(glow);
+    body.scale.setScalar(0.75);
+    parent.add(body);
+    expect(modelTop(body)).toBeCloseTo(0.75);
+    const fitted = army('ww2', ww2);
+    expect(modelTop(fitted)).toBeGreaterThan(0);
+    expect(modelTop(fitted)).toBeLessThan(1);
   });
 });
 

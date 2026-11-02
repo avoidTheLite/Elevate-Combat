@@ -12,6 +12,9 @@ import {
 import { Button } from '../ui/Button.tsx';
 import { Panel, PanelStack, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
+import { holderName } from '../../lib/holders.ts';
+import { RoadRepairPanel } from './RoadRepairPanel.tsx';
+import { RazeTileControl } from './RazeTileControl.tsx';
 
 const DIR_NAMES = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
 
@@ -53,6 +56,8 @@ export function TacticalSidebar({
     (preview.legal || (showHover && hoverUnit.team !== unit?.team) || t?.attackType === 'indirect');
 
   const deploying = battle.phase === 'deploy';
+  const canGiveOrders =
+    battle.phase === 'combat' && canAct && unit?.team === battle.active && !unit?.stationed;
   const myDeploy = deploying
     ? battle.units.filter((u) => u.team === battle.deployTeam && u.hp > 0)
     : [];
@@ -62,7 +67,7 @@ export function TacticalSidebar({
   const pct = (p: number): string => `${Math.round(p * 100)}%`;
 
   return (
-    <PanelStack priority={['battle', 'battle-log', 'orders', 'unit']}>
+    <PanelStack priority={['battle', 'battle-log', 'orders', 'roads', 'unit']}>
       <Panel id="battle" title={`BATTLE FOR ${battle.contested}`}>
         <Stat
           label="Attacker"
@@ -97,6 +102,14 @@ export function TacticalSidebar({
         </div>
       </Panel>
 
+      {battle.phase === 'combat' && unit && (
+        <RoadRepairPanel
+          game={game}
+          mainHex={unit.pos ? (ctx.world.subByKey.get(unit.pos)?.main ?? null) : null}
+          engineerUnitId={unit.id}
+          canAct={canAct && unit.team === battle.active}
+        />
+      )}
       {/* Fixed-size box: hovering never changes its dimensions. */}
       <Panel
         id="unit"
@@ -144,7 +157,13 @@ export function TacticalSidebar({
                   .filter(Boolean)
                   .join(' · ')}
               </div>
-              {battle.phase === 'combat' && canAct && unit.team === battle.active && (
+              {battle.phase === 'combat' && unit.stationed && (
+                <p className="text-[10px] text-[hsl(var(--warning))]">
+                  Stationed · fire or Raze Tile in place. A commander must retrieve this unit to
+                  move it.
+                </p>
+              )}
+              {canGiveOrders && (
                 <div className="flex flex-wrap gap-1">
                   {t.placementCategory === 'combat_fixed' &&
                     (unit.deployed ? (
@@ -212,6 +231,13 @@ export function TacticalSidebar({
                     FACE ↻
                   </Button>
                 </div>
+              )}
+              {battle.phase === 'combat' && (
+                <RazeTileControl
+                  game={game}
+                  unitId={unit.id}
+                  canAct={canAct && unit.team === battle.active}
+                />
               )}
               {t.specialRules.length > 0 && (
                 <details className="text-[10px] text-[hsl(var(--muted-foreground))]">
@@ -331,10 +357,26 @@ export function TacticalSidebar({
         ) : deploying ? (
           <>
             <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-              Pick a unit, then click a green cell. combat_fixed units start packed and must SET UP
-              before firing.
+              Pick a unit, then click a green cell.{' '}
+              {battle.participants
+                ? 'Green cells belong to that unit’s commander. Additional commanders keep their strategic position and movement.'
+                : ''}{' '}
+              combat_fixed units start packed and must SET UP before firing.
             </div>
-            <ul className="flex flex-col gap-0.5 max-h-48 overflow-auto">
+            {battle.participants && unit?.holderId && (
+              <p data-testid="deployment-owner" className="text-[10px] text-[hsl(var(--primary))]">
+                {game.armies.some((holder) => holder.id === unit.holderId)
+                  ? holderName(game.armies.find((holder) => holder.id === unit.holderId)!)
+                  : `Force ${unit.holderId}`}{' '}
+                · zone anchor{' '}
+                {battle.participants.find((participant) => participant.armyId === unit.holderId)
+                  ?.pos ?? 'fixed garrison'}
+              </p>
+            )}
+            <ul
+              aria-label="Deployment roster"
+              className="flex flex-col gap-0.5 max-h-48 overflow-auto"
+            >
               {myDeploy.map((u) => (
                 <li key={u.id}>
                   <Button
@@ -345,6 +387,13 @@ export function TacticalSidebar({
                   >
                     <span>
                       {u.label} {unitType(u.typeId).name}
+                      {battle.participants && (
+                        <span className="block text-[9px] text-[hsl(var(--muted-foreground))]">
+                          {game.armies.some((holder) => holder.id === u.holderId)
+                            ? holderName(game.armies.find((holder) => holder.id === u.holderId)!)
+                            : `Force ${u.holderId ?? 'unknown'}`}
+                        </span>
+                      )}
                     </span>
                     <span>{u.pos ? '✓' : '—'}</span>
                   </Button>
@@ -397,7 +446,9 @@ export function TacticalSidebar({
                     disabled={!battle.objective.extractionAtOrigin}
                     title={
                       battle.objective.extractionAtOrigin
-                        ? `Free extract to deploy hex ${battle.origin} — you still capture the contested hex`
+                        ? battle.participants
+                          ? 'Extract each force to its recorded commander origin; units keep their commander. The secured objective is retained.'
+                          : `Free extract to deploy hex ${battle.origin} — you still capture the contested hex`
                         : 'This map has no extraction zone'
                     }
                     onClick={() => dispatch({ type: 'extract' })}

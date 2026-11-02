@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { baseUnitType, unitType, validateRulesOverride, withRules } from '@iron-ridge/engine';
+import {
+  PLAYTEST_BALANCE_RULES,
+  baseUnitType,
+  unitType,
+  validateRulesOverride,
+  withRules,
+} from '@iron-ridge/engine';
 import {
   changedFields,
   formToOverride,
@@ -99,4 +105,25 @@ describe('mechanics form', () => {
 
 it('normalizeRules drops empty sections', () => {
   expect(normalizeRules({ units: {}, mechanics: {} })).toEqual({});
+});
+
+describe('GAMES-ELEVATE-TACTICAL-UC-002: trial profile remains editable in Balance Lab', () => {
+  it('round-trips the bazooka unit profile and tank/accuracy mechanics through existing forms', () => {
+    const unit = PLAYTEST_BALANCE_RULES.units!.ww2_at_infantry!;
+    expect(formToOverride('ww2_at_infantry', unitForm('ww2_at_infantry', unit))).toEqual({
+      override: unit,
+      errors: [],
+    });
+    const form = mechForm(PLAYTEST_BALANCE_RULES.mechanics);
+    form.TANK_MOVED_FIRE_ADJUSTMENT = '-1';
+    form.BAZOOKA_ACCURATE_RANGE = '4';
+    const result = mechFormToOverride(form);
+    expect(result.errors).toEqual([]);
+    expect(result.override).toMatchObject({
+      TANK_MOVED_FIRE_ADJUSTMENT: -1,
+      BAZOOKA_ACCURATE_RANGE: 4,
+      FACING_MODS: { side: { tn: -3 } },
+    });
+    expect(validateRulesOverride({ mechanics: result.override }).ok).toBe(true);
+  });
 });

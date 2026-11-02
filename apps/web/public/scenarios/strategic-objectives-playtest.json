@@ -1,0 +1,624 @@
+{
+  "kind": "iron-ridge-campaign-configuration",
+  "version": 1,
+  "name": "Strategic objectives — regular WW2 playtest",
+  "requiredCodeCapabilities": [
+    "campaign-configuration-v1",
+    "commander-training-cp-v1",
+    "multi-commander-engagement-v1",
+    "infrastructure-nodes-v1",
+    "seeded-nodes-v1"
+  ],
+  "settings": {
+    "era": "ww2",
+    "grid": {
+      "mainCols": 7,
+      "mainRows": 5,
+      "subRadius": 4
+    },
+    "seed": 20261101,
+    "controllers": {
+      "A": "human",
+      "B": "ai"
+    },
+    "fog": true,
+    "battleRounds": 10,
+    "commanderTrainingCp": 15,
+    "battleObjective": {
+      "kind": "capture_point",
+      "captureRadius": 1,
+      "extractionAtOrigin": true
+    },
+    "engagement": {
+      "profile": "multi-commander-v1",
+      "attackBaseCp": 5,
+      "additionalAttackerCp": 2,
+      "additionalDefenderCp": 2
+    },
+    "rules": {
+      "units": {
+        "ww2_tank": {
+          "maxRange": 8
+        },
+        "ww2_at_infantry": {
+          "maxRange": 10,
+          "profile": "bazooka"
+        },
+        "ww2_artillery": {
+          "hp": 8
+        }
+      },
+      "mechanics": {
+        "TANK_MOVED_FIRE_ADJUSTMENT": -2,
+        "BAZOOKA_ACCURATE_RANGE": 5,
+        "BAZOOKA_CLOSE_TN": -5,
+        "BAZOOKA_FAR_TN": 4,
+        "FACING_MODS": {
+          "side": {
+            "tn": -3
+          }
+        }
+      }
+    },
+    "infrastructure": {
+      "id": "foundation-playtest",
+      "name": "Strategic infrastructure playtest",
+      "tuningStatus": "playtest",
+      "nodes": {
+        "id": "foundation-playtest-nodes",
+        "activationCp": 5,
+        "captureCosts": {
+          "capture": 5,
+          "raze": 2
+        },
+        "initialGenericCenterDefinitionId": "generic",
+        "homeCenterDefinitionId": "generic",
+        "homeCenterTier": 1,
+        "activationCenterDefinitionIds": [
+          "generic",
+          "industrial",
+          "military",
+          "medical",
+          "logistics"
+        ],
+        "definitions": [
+          {
+            "id": "generic",
+            "name": "Town center",
+            "role": "generic",
+            "specialty": "generic",
+            "centerEligible": true,
+            "annexEligible": false,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 3,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": true,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "industrial",
+            "name": "Industrial center",
+            "role": "industrial",
+            "specialty": "industrial",
+            "centerEligible": true,
+            "annexEligible": false,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 2,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": true,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "military",
+            "name": "Military center",
+            "role": "military",
+            "specialty": "military",
+            "centerEligible": true,
+            "annexEligible": false,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 2,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": true,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "medical",
+            "name": "Medical center",
+            "role": "medical",
+            "specialty": "medical",
+            "centerEligible": true,
+            "annexEligible": false,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 2,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": true,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "logistics",
+            "name": "Logistics center",
+            "role": "logistics",
+            "specialty": "logistics",
+            "centerEligible": true,
+            "annexEligible": false,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 2,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": true,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "workshop",
+            "name": "Workshop",
+            "role": "workshop",
+            "specialty": "industrial",
+            "centerEligible": false,
+            "annexEligible": true,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 3,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": false,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "barracks",
+            "name": "Barracks",
+            "role": "barracks",
+            "specialty": "military",
+            "centerEligible": false,
+            "annexEligible": true,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 3,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": false,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "relay",
+            "name": "Supply relay",
+            "role": "relay",
+            "specialty": "logistics",
+            "centerEligible": false,
+            "annexEligible": true,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 3,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": false,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          },
+          {
+            "id": "tower",
+            "name": "Watchtower",
+            "role": "tower",
+            "specialty": "military",
+            "centerEligible": false,
+            "annexEligible": true,
+            "minimumGenericCenterTier": 1,
+            "maximumTier": 3,
+            "prerequisites": [],
+            "specialtyExceptions": [],
+            "engineerRequired": false,
+            "costs": {
+              "build": {
+                "1": 3,
+                "2": 6,
+                "3": 9
+              },
+              "upgrade": {
+                "2": 5,
+                "3": 10
+              },
+              "repair": {
+                "1": 2,
+                "2": 4,
+                "3": 6
+              }
+            },
+            "exclusiveUpgrades": [],
+            "slotlessUnlocks": []
+          }
+        ],
+        "placement": {
+          "mode": "advanced",
+          "seed": 4277,
+          "additionalNodes": 3
+        }
+      },
+      "supply": {
+        "terrainCosts": {
+          "land": 1,
+          "marsh": 2
+        },
+        "minimumStepCost": 0.25,
+        "uphillSurcharge": 1,
+        "downhillCredit": 0.75,
+        "maximumClimb": 2,
+        "maximumDrop": 2,
+        "roadMultiplier": 0.75,
+        "legRange": 12,
+        "distanceFloor": 0.3,
+        "distanceDecay": 0.06,
+        "hostileClaimFactor": 0.5
+      },
+      "benefits": [
+        {
+          "id": "income-factor",
+          "units": "factor",
+          "homeConnectedBoost": {
+            "operation": "multiply",
+            "value": 1.25,
+            "cap": null
+          },
+          "maximum": null,
+          "applyRouteEfficiency": true,
+          "isolatedRegionalFactor": 0.5,
+          "rounding": "none"
+        },
+        {
+          "id": "reinforcement",
+          "units": "units",
+          "homeConnectedBoost": {
+            "operation": "multiply",
+            "value": 1.25,
+            "cap": null
+          },
+          "maximum": null,
+          "applyRouteEfficiency": false,
+          "isolatedRegionalFactor": 1,
+          "rounding": "floor"
+        }
+      ],
+      "effects": {
+        "generic": {
+          "1": {
+            "income": 1,
+            "housing": 12,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 10
+          },
+          "2": {
+            "income": 2,
+            "housing": 12,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 14
+          },
+          "3": {
+            "income": 3,
+            "housing": 12,
+            "throughput": 3,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 18
+          }
+        },
+        "industrial": {
+          "1": {
+            "income": 1,
+            "housing": 12,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 10
+          },
+          "2": {
+            "income": 2,
+            "housing": 12,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 14
+          }
+        },
+        "military": {
+          "1": {
+            "income": 1,
+            "housing": 12,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 10
+          },
+          "2": {
+            "income": 2,
+            "housing": 12,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 14
+          }
+        },
+        "medical": {
+          "1": {
+            "income": 1,
+            "housing": 12,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 10
+          },
+          "2": {
+            "income": 2,
+            "housing": 12,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 14
+          }
+        },
+        "logistics": {
+          "1": {
+            "income": 1,
+            "housing": 12,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 10
+          },
+          "2": {
+            "income": 2,
+            "housing": 12,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 14
+          }
+        },
+        "workshop": {
+          "1": {
+            "income": 1,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "2": {
+            "income": 2,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "3": {
+            "income": 3,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          }
+        },
+        "barracks": {
+          "1": {
+            "income": 0,
+            "housing": 4,
+            "throughput": 1,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "2": {
+            "income": 0,
+            "housing": 8,
+            "throughput": 2,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "3": {
+            "income": 0,
+            "housing": 12,
+            "throughput": 3,
+            "recruitment": true,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          }
+        },
+        "relay": {
+          "1": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 4,
+            "reinforcement": 0
+          },
+          "2": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 8,
+            "reinforcement": 0
+          },
+          "3": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 0,
+            "recruitment": false,
+            "relayRangeBonus": 12,
+            "reinforcement": 0
+          }
+        },
+        "tower": {
+          "1": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 1,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "2": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 2,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          },
+          "3": {
+            "income": 0,
+            "housing": 0,
+            "throughput": 3,
+            "recruitment": false,
+            "relayRangeBonus": 0,
+            "reinforcement": 0
+          }
+        }
+      },
+      "throughputHomeMultiplier": 2,
+      "throughputRegionalMultiplier": 1,
+      "roadRepairCp": 2
+    }
+  }
+}

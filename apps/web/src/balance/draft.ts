@@ -36,7 +36,14 @@ export type NumField = (typeof NUM_FIELDS)[number];
 export const FLAG_FIELDS = ['suppresses', 'firstStrike', 'charge', 'braced', 'engineer'] as const;
 export type FlagField = (typeof FLAG_FIELDS)[number];
 
-export const PROFILES: RangeProfile[] = ['rifle_mg', 'at_gun', 'tank_cannon', 'indirect', 'melee'];
+export const PROFILES: RangeProfile[] = [
+  'rifle_mg',
+  'at_gun',
+  'bazooka',
+  'tank_cannon',
+  'indirect',
+  'melee',
+];
 
 export const POOL_FIELDS = ['count', 'sides', 'bonus'] as const;
 export type PoolField = (typeof POOL_FIELDS)[number];

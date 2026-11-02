@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { Army, GameState, Team } from '@iron-ridge/engine';
 import {
-  COMMAND,
   ECONOMY,
   armyStrength,
   attackCost,
   canTransfer,
+  holderCapacity,
   transferTargets,
   unitType,
 } from '@iron-ridge/engine';
@@ -41,9 +41,13 @@ export function ContentsPanel({
   const dispatch = useGameStore((s) => s.dispatch);
   const setUi = useGameStore((s) => s.setUi);
   const [picking, setPicking] = useState(false);
+  const [trainingPrice, setTrainingPrice] = useState('');
+  const enteredTrainingCp = Number(trainingPrice);
+  const validTrainingPrice =
+    trainingPrice.trim() !== '' && Number.isSafeInteger(enteredTrainingCp) && enteredTrainingCp > 0;
 
   const holder = seenHolders(game, view).find((a) => a.id === ui.selectedArmy) ?? null;
-  const cap = holder?.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap;
+  const cap = holder ? holderCapacity(game, holder) : ECONOMY.armyCap;
 
   const title = holder ? holderTitle(holder) : 'CONTENTS';
   const right = holder ? (
@@ -83,13 +87,17 @@ export function ContentsPanel({
   const targets = orders ? transferTargets(game, holder.id) : [];
   const noTargetReason = `No holder in reach — transfers need one ${transferRuleText(game)}.`;
   const formBlocked =
-    checked.length === 0
-      ? 'Tick units first'
-      : holder.kind === 'commander' && checked.length >= holder.units.length
-        ? 'Leave at least one unit with the commander'
-        : checked.length > ECONOMY.armyCap
-          ? `A commander holds at most ${ECONOMY.armyCap} units`
-          : null;
+    game.settings.commanderTrainingCp === undefined
+      ? 'Choose a commander training CP price first'
+      : game.cp[holder.team] < (game.settings.commanderTrainingCp ?? 0)
+        ? `Training a commander costs ${game.settings.commanderTrainingCp} CP`
+        : checked.length === 0
+          ? 'Tick units first'
+          : holder.kind === 'commander' && checked.length >= holder.units.length
+            ? 'Leave at least one unit with the commander'
+            : checked.length > ECONOMY.armyCap
+              ? `A commander holds at most ${ECONOMY.armyCap} units`
+              : null;
 
   const transfer = (to: Army): void => {
     if (dispatch({ type: 'transferUnits', fromId: holder.id, toId: to.id, unitIds: checked })) {
@@ -112,7 +120,10 @@ export function ContentsPanel({
       {holder.kind === 'commander' && (
         <>
           <Stat label="Strength" value={armyStrength(holder).toFixed(1)} />
-          <Stat label="Attack deployment cost" value={`${attackCost(holder)} CP`} />
+          <Stat
+            label="Attack deployment cost"
+            value={`${game.settings.engagement?.attackBaseCp ?? attackCost(holder)} CP${game.settings.engagement ? ' + selected commanders' : ''}`}
+          />
         </>
       )}
       {holder.units.length === 0 ? (
@@ -171,6 +182,41 @@ export function ContentsPanel({
           })}
         </ul>
       )}
+      {orders &&
+        game.settings.commanderTrainingCp === undefined &&
+        holder.building !== 'temporary' && (
+          <div
+            role="region"
+            aria-label="Configure commander training"
+            className="flex flex-col gap-2"
+          >
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              This game has no commander training price. Existing commanders keep their state. Set a
+              positive whole CP price before creating any new commander, including a split.
+            </p>
+            <label className="flex flex-col gap-1 text-[10px]">
+              Commander training price (CP)
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={trainingPrice}
+                onChange={(event) => setTrainingPrice(event.target.value)}
+                className="w-full min-w-0 border border-[hsl(var(--border-bright))] bg-transparent p-1"
+              />
+            </label>
+            <Button
+              size="sm"
+              disabled={!validTrainingPrice}
+              onClick={() => {
+                if (validTrainingPrice)
+                  dispatch({ type: 'configureCommanderTraining', cpCost: enteredTrainingCp });
+              }}
+            >
+              Set training price
+            </Button>
+          </div>
+        )}
       {orders && holder.units.length > 0 && (
         <>
           <div className="flex gap-2">
@@ -182,19 +228,29 @@ export function ContentsPanel({
               title={targets.length === 0 ? noTargetReason : undefined}
               onClick={() => setPicking((p) => !p)}
             >
-              TRANSFER TO ▸
+              {holder.building === 'temporary' ? 'RETRIEVE TO ▸' : 'TRANSFER TO ▸'}
             </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              variant="ghost"
-              disabled={formBlocked !== null}
-              title={formBlocked ?? 'Split the ticked units into a new commander'}
-              onClick={form}
-            >
-              NEW COMMANDER
-            </Button>
+            {holder.building !== 'temporary' && (
+              <Button
+                size="sm"
+                className="flex-1"
+                variant="ghost"
+                disabled={formBlocked !== null}
+                title={formBlocked ?? 'Split the ticked units into a new commander'}
+                onClick={form}
+              >
+                NEW COMMANDER
+                {game.settings.commanderTrainingCp !== undefined
+                  ? ` (−${game.settings.commanderTrainingCp} CP)`
+                  : ''}
+              </Button>
+            )}
           </div>
+          {holder.building === 'temporary' && (
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              A commander must retrieve this stationed unit within normal interaction distance.
+            </p>
+          )}
           {targets.length === 0 ? (
             <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
               {noTargetReason}
@@ -217,8 +273,7 @@ export function ContentsPanel({
                     >
                       <span>▸ {holderName(to)}</span>
                       <span className="text-[hsl(var(--muted-foreground))]">
-                        {to.units.length}/
-                        {to.kind === 'garrison' ? COMMAND.garrisonCap : ECONOMY.armyCap}
+                        {to.units.length}/{holderCapacity(game, to)}
                       </span>
                     </Button>
                   );

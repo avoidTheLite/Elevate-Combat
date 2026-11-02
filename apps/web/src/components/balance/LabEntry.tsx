@@ -1,5 +1,6 @@
 import type { GameSettings } from '@iron-ridge/engine';
 import { rulesChangeCount } from '../../balance/draft.ts';
+import type { SetupSelection } from '../../balance/store.ts';
 import { labEnabled, useBalanceStore } from '../../balance/store.ts';
 import { Button } from '../ui/Button.tsx';
 
@@ -9,8 +10,12 @@ import { Button } from '../ui/Button.tsx';
  */
 export function LabEntry({
   settings,
+  problem,
+  selection,
 }: {
-  settings: () => GameSettings;
+  settings: () => GameSettings | null;
+  problem: string | null;
+  selection: () => SetupSelection;
 }): React.ReactElement | null {
   const active = useBalanceStore((s) => s.active);
   const openLab = useBalanceStore((s) => s.openLab);
@@ -36,7 +41,12 @@ export function LabEntry({
         </span>
       )}
       {enabled && (
-        <Button size="sm" variant="ghost" className="ml-auto" onClick={() => openLab(settings())}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto"
+          onClick={() => openLab(settings(), problem, selection())}
+        >
           ⚙ BALANCE LAB
         </Button>
       )}

@@ -13,6 +13,7 @@ import {
   worldOf,
   COMMAND,
   commanderReach,
+  createFoundationPlaytestConfiguration,
 } from '@iron-ridge/engine';
 import {
   COMMANDER_SCALE,
@@ -76,6 +77,58 @@ function battleState(): GameState {
 }
 
 describe('scene building', () => {
+  it('GAMES-ELEVATE-CAMPAIGN-UC-001: displays owned nodes and neutral site markers without inventing ownership', () => {
+    const game = createGame({
+      ...defaultSettings(),
+      infrastructure: createFoundationPlaytestConfiguration(7, 3),
+    });
+    const home = game.infrastructure!.sites.find((site) => site.homeTeam === 'A')!;
+    const neutral = game.infrastructure!.capture.nodes.find((node) => node.owner === null)!;
+    const spec = buildStrategicScene(game, UI, 'A');
+    expect(spec.tokens.find((token) => token.id === home.nodeId)).toMatchObject({
+      key: home.centerSubHex,
+      kind: 'hq',
+      team: 'A',
+    });
+    expect(spec.tokens.some((token) => token.id === neutral.id)).toBe(false);
+    expect(spec.overlays.some((cell) => cell.key === neutral.centerSubHex)).toBe(true);
+  });
+
+  it('GAMES-ELEVATE-CAMPAIGN-UC-002: renders a visible temporary garrison as its fixed unit model', () => {
+    const game = createGame({
+      ...defaultSettings(),
+      infrastructure: createFoundationPlaytestConfiguration(7, 3),
+    });
+    const commander = game.armies.find(
+      (holder) => holder.team === 'A' && holder.kind === 'commander',
+    )!;
+    const unit = commander.units.pop()!;
+    const { world } = worldOf(game);
+    const cell = world.subs.find(
+      (candidate) =>
+        candidate.main === game.hq.A && !game.armies.some((holder) => holder.pos === candidate.key),
+    )!;
+    game.forts[cell.key] = 1;
+    game.armies.push({
+      id: 'stationed-example',
+      team: 'A',
+      kind: 'garrison',
+      building: 'temporary',
+      pos: cell.key,
+      at: cell.main,
+      units: [unit],
+      movesLeft: 0,
+    });
+    const spec = buildStrategicScene(game, UI, 'A');
+    expect(spec.tokens.find((token) => token.id === 'stationed-example')).toMatchObject({
+      key: cell.key,
+      model: unit.typeId,
+      team: 'A',
+      stationed: true,
+      label: '⚑ TILE GARRISON',
+    });
+  });
+
   it('strategic scene draws every sub-hex of the configured grid', () => {
     const s = createGame({
       ...defaultSettings(),
@@ -272,7 +325,14 @@ describe('scene building', () => {
     expect(tokens).toHaveLength(2);
     for (const t of tokens) {
       const a = s.armies.find((x) => x.id === t.id)!;
-      expect(t.army).toEqual({ era: 'ww2', units: a.units.map((u) => u.typeId) });
+      expect(t.army).toEqual({
+        era: 'ww2',
+        units: a.units.map((unit) => ({
+          id: unit.id,
+          typeId: unit.typeId,
+          facing: unit.facing ?? (a.team === 'A' ? 0 : 3),
+        })),
+      });
     }
     // Alpha (west) and Bravo (east) face roughly opposite ways.
     const [ya, yb] = [
@@ -295,6 +355,13 @@ describe('command layer on the strategic map', () => {
       const t = tokens.find((x) => x.id === c.id)!;
       expect(t.key).toBe(c.pos);
       expect(t.scale).toBe(COMMANDER_SCALE);
+      expect(t.army!.units).toEqual(
+        c.units.map((unit) => ({
+          id: unit.id,
+          typeId: unit.typeId,
+          facing: unit.facing ?? (c.team === 'A' ? 0 : 3),
+        })),
+      );
     }
     // A moved commander's token follows its pos.
     const a = commanderOf(s, 'A');

@@ -24,7 +24,10 @@ if a.report:
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 evidence_trees = {}
 errors = warnings = scenarios = 0
-for path in sorted((ROOT / 'dkr/domains/games/Elevate-Combat/features').glob('*/stages/03-execution/*/SEMANTICS.json')):
+feature_root = ROOT / 'dkr/domains/games/Elevate-Combat/features'
+semantic_paths = set(feature_root.glob('*/stages/03-execution/*/SEMANTICS.json'))
+semantic_paths.update(feature_root.glob('*/stages/03-execution/*/artifacts/SEMANTICS.json'))
+for path in sorted(semantic_paths):
     doc = json.loads(path.read_text())
     diagnostics = component.validate(doc, ROOT / 'dkr')
     for s in doc['scenarios']:
@@ -45,7 +48,8 @@ for path in sorted((ROOT / 'dkr/domains/games/Elevate-Combat/features').glob('*/
     e = sum(d['severity'] == 'error' for d in diagnostics)
     w = sum(d['severity'] == 'warning' for d in diagnostics)
     errors += e; warnings += w
-    print(f'{path.parts[-5]}/{path.parts[-2]}: {len(doc["use_cases"])} use cases, {len(doc["scenarios"])} scenarios, {e} errors, {w} warnings')
+    relative = path.relative_to(feature_root)
+    print(f'{relative.parts[0]}/{relative.parts[3]}: {len(doc["use_cases"])} use cases, {len(doc["scenarios"])} scenarios, {e} errors, {w} warnings')
     for d in diagnostics:
         print(f'  {d["severity"]}: {d["code"]}: {d["message"]}')
 if not scenarios:

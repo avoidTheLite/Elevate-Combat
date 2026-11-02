@@ -677,6 +677,120 @@ export function git(args, options) {
 }
 
 /**
+ * File-name key for a branch (`feature/x` -> `feature--x`); mirrors branchKey() in dkr.mjs, which this
+ * self-contained file cannot import.
+ * @param {string} branch
+ */
+export function branchSlug(branch) {
+  const key = String(branch).trim().replace(/\//g, '--').replace(/[^A-Za-z0-9._-]/g, '_');
+  return key.startsWith('.') ? `_${key}` : key;
+}
+
+/**
+ * Pending changes in a work tree with their porcelain status.
+ * @param {string} cwd
+ * @returns {Array<{ code: string, path: string, orig: string | null }>}
+ */
+export function listPendingDetailed(cwd) {
+  // Not git(): its stdout.trim() would eat the leading space of the first " M path" entry.
+  const result = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: DEFAULT_GIT_TIMEOUT_MS,
+  });
+  if (result.status !== 0) {
+    throw new Error(`git status failed in ${cwd}: ${formatSpawnDetail(result)}`);
+  }
+  const parts = (result.stdout ?? '').split('\0').filter((p) => p.length > 0);
+  const out = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const entry = parts[i];
+    const code = entry.slice(0, 2);
+    const file = entry.slice(3);
+    let orig = null;
+    if (code[0] === 'R' || code[0] === 'C' || code[1] === 'R' || code[1] === 'C') {
+      orig = parts[(i += 1)] ?? null; // the original path follows as its own NUL-separated field
+    }
+    out.push({ code, path: file, orig });
+  }
+  return out;
+}
+
+/**
+ * Pending changes in a work tree: tracked/staged paths versus untracked (not ignored) files.
+ * @param {string} cwd
+ * @returns {{ tracked: string[], untracked: string[] }}
+ */
+export function listPendingChanges(cwd) {
+  const tracked = [];
+  const untracked = [];
+  for (const e of listPendingDetailed(cwd)) {
+    (e.code === '??' ? untracked : tracked).push(e.path);
+  }
+  return { tracked, untracked };
+}
+
+/**
+ * @param {string} file repo-relative path
+ * @param {Array<string | RegExp>} allowed exact path, directory prefix ending in "/", or RegExp
+ */
+function matchesDeclared(file, allowed) {
+  return allowed.some((rule) => {
+    if (rule instanceof RegExp) return rule.test(file);
+    const clean = rule.replace(/^\.\//, '');
+    return clean.endsWith('/') ? file.startsWith(clean) : file === clean || file.startsWith(`${clean}/`);
+  });
+}
+
+/**
+ * Hygiene gate: untracked files outside the declared set (and any `--include` paths) abort the push
+ * instead of being swept up by `git add -A`.
+ * @param {{ cwd: string, label: string, declared: Array<string | RegExp>, include?: string[], ignore?: string[] }} input
+ * @returns {{ stray: string[], declaredNew: string[] }}
+ */
+export function checkUntracked({ cwd, label, declared, include = [], ignore = [] }) {
+  const { untracked } = listPendingChanges(cwd);
+  const rules = [...declared, ...include];
+  const stray = [];
+  const declaredNew = [];
+  for (const file of untracked) {
+    if (ignore.some((p) => file === p || file.startsWith(`${p}/`))) continue;
+    if (matchesDeclared(file, rules)) declaredNew.push(file);
+    else stray.push(file);
+  }
+  return { stray, declaredNew };
+}
+
+/**
+ * @param {string} label
+ * @param {string[]} stray
+ */
+function strayError(label, stray) {
+  const shown = stray.slice(0, 15).map((f) => `  ${f}`).join('\n');
+  const more = stray.length > 15 ? `\n  ... and ${stray.length - 15} more` : '';
+  return new Error(
+    `${label}: ${stray.length} untracked file(s) outside the declared set would be left out or swept in:\n${shown}${more}\n` +
+      'Remedy: `git add <path>` the ones you want published, delete or .gitignore the rest, or pass --include <path> (repeatable) to publish them.',
+  );
+}
+
+/**
+ * Stage tracked changes and the declared new files by explicit pathspec (never `git add -A`).
+ * @param {{ cwd: string, label: string, declared: Array<string | RegExp>, include?: string[], exclude?: string[], ignore?: string[] }} input
+ * @returns {string[]} untracked files that were newly staged
+ */
+export function stageExplicit({ cwd, label, declared, include = [], exclude = [], ignore = [] }) {
+  const { stray, declaredNew } = checkUntracked({ cwd, label, declared, include, ignore });
+  if (stray.length > 0) throw strayError(label, stray);
+  const specs = ['.', ...exclude.map((e) => `:(exclude)${e}`)];
+  git(['add', '-u', '--', ...specs], { cwd });
+  for (const file of declaredNew) {
+    git(['add', '--', file], { cwd });
+  }
+  return declaredNew;
+}
+
+/**
  * Parse a git remote URL (https, ssh, scp-like, or local path) into host/owner/name.
  * @param {string | null | undefined} url
  * @returns {{ host: string | null, owner: string | null, name: string, full: string } | null}
@@ -711,9 +825,63 @@ export function parseRemote(url) {
   return { host, owner, name, full: owner ? `${owner}/${name}` : name };
 }
 
+/** Generate a readable topic label, never a CSR, PR identity, or ownership authority. */
+export function generateBranchName({ productPath, name, kind = 'feature', suffix = '', rules = {} }) {
+  const prefix = branchDomainPrefix(productPath);
+  if (!['feature', 'fix', 'chore', 'docs', 'refactor', 'test'].includes(kind)) {
+    throw new Error('branch kind must be feature, fix, chore, docs, refactor or test');
+  }
+  const slug = String(name ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) throw new Error('branch name needs an ASCII letter or digit after normalization');
+  if (suffix && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(suffix)) throw new Error('branch suffix must be a lowercase kebab token');
+  const branch = `${kind}/${prefix}-${slug}${suffix ? `-${suffix}` : ''}`;
+  if (branch.length > 120) throw new Error('branch name exceeds 120 characters; shorten the label or suffix');
+  const verdict = checkBranch(branch, { ...rules, productPath });
+  if (!verdict.ok) throw new Error(verdict.reason);
+  return branch;
+}
+
+export function branchDomainPrefix(productPath) {
+  const match = /^domains\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/.exec(productPath ?? '');
+  if (!match) throw new Error('branch generation requires a canonical domains/<domain>/<product> product path');
+  return `${match[1]}-${match[2]}`;
+}
+
+/** Resolve physical ownership from the installed mapping and verify repository identity. */
+export function resolveBranchContext(root) {
+  const paired = readPairedConfig(root);
+  branchDomainPrefix(paired.productPath);
+  const dkrDir = path.resolve(root, paired.path);
+  const relative = path.relative(fs.realpathSync(root), fs.realpathSync(dkrDir));
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('branch context DKR checkout must stay inside the product workspace');
+  const source = git(['show', `HEAD:${paired.productPath.replace(/\/$/, '')}/product-config.json`], { cwd: dkrDir });
+  const product = JSON.parse(source.stdout);
+  const origin = parseRemote(git(['remote', 'get-url', 'origin'], { cwd: root }).stdout);
+  const [, domainId, productId] = paired.productPath.replace(/\/$/, '').split('/');
+  if (product.domain_id !== domainId || product.product_id !== productId) throw new Error('branch context product-config identity does not match physical product path');
+  if (product.repo && product.runtime?.implementation_repo && product.repo.toLowerCase() !== product.runtime.implementation_repo.toLowerCase()) throw new Error('branch context product-config repository descriptors conflict');
+  const repository = product.repo ?? product.runtime?.implementation_repo;
+  if (!origin?.full || typeof repository !== 'string' || repository.toLowerCase() !== origin.full.toLowerCase()) {
+    throw new Error('branch context product-config repository does not match product origin');
+  }
+  const dkrOrigin = parseRemote(git(['remote', 'get-url', 'origin'], { cwd: dkrDir }).stdout);
+  if (!dkrOrigin?.full || dkrOrigin.full.toLowerCase() !== paired.repo.toLowerCase()) {
+    throw new Error('branch context DKR origin does not match paired repository');
+  }
+  const policyFile = path.join(root, 'config', 'branch-standards.json');
+  let repositoryPattern = null;
+  if (fs.existsSync(policyFile)) {
+    repositoryPattern = JSON.parse(fs.readFileSync(policyFile, 'utf8')).headBranchPattern;
+    if (typeof repositoryPattern !== 'string' || !repositoryPattern.trim()) throw new Error('branch context repository policy needs a nonempty headBranchPattern');
+    new RegExp(repositoryPattern);
+  }
+  return { paired, dkrDir, repositoryPattern };
+}
+
 /**
  * @param {string | null} branch
- * @param {{ pattern?: string, protected?: string[] }} [rules]
+ * @param {{ pattern?: string, protected?: string[], productPath?: string, repositoryPattern?: string }} [rules]
  * @returns {{ ok: boolean, reason: string }}
  */
 export function checkBranch(branch, rules = {}) {
@@ -725,6 +893,16 @@ export function checkBranch(branch, rules = {}) {
   if (protectedNames.includes(branch)) {
     return { ok: false, reason: `"${branch}" is protected; paired pushes go to topic branches` };
   }
+  if (branch.includes('@{') || spawnSync('git', ['check-ref-format', '--branch', branch], { encoding: 'utf8' }).status !== 0) {
+    return { ok: false, reason: `"${branch}" is not a valid Git branch ref` };
+  }
+  if (rules.productPath) {
+    const prefix = branchDomainPrefix(rules.productPath);
+    if (!branch.match(new RegExp(`^(feature|fix|chore|docs|refactor|test)/${prefix}-[a-z0-9]+(?:-[a-z0-9]+)*$`)) || branch.length > 120) {
+      return { ok: false, reason: `"${branch}" must use category/${prefix}-<label> (at most 120 characters)` };
+    }
+  }
+  if (rules.repositoryPattern && !new RegExp(rules.repositoryPattern).test(branch)) return { ok: false, reason: `"${branch}" does not match repository branch policy` };
   if (!new RegExp(pattern).test(branch)) {
     return { ok: false, reason: `"${branch}" does not match ${pattern}` };
   }
@@ -1093,6 +1271,59 @@ export function syncWithBase({ root, paired, dryRun = false, log, authEnv = {} }
 }
 
 /**
+ * Remove what a finished branch leaves behind in one repo: stale worktree records, remote-tracking
+ * refs for deleted remote branches, and local branches already merged into `origin/<base>`.
+ * Only `git branch -d` is used, and the current branch, protected branches, branches checked out in
+ * another worktree and branches with no commits of their own are always kept.
+ * @param {{ cwd: string, base: string, current: string, protectedBranches?: string[],
+ *   label: string, log: (line: string) => void, authEnv?: Record<string, string> }} input
+ * @returns {string[]} the local branches that were deleted
+ */
+export function pruneMergedBranches({
+  cwd,
+  base,
+  current,
+  protectedBranches = ['main', 'master', 'develop'],
+  label,
+  log,
+  authEnv = {},
+}) {
+  git(['worktree', 'prune'], { cwd, allowFail: true });
+  git(['fetch', '--quiet', '--prune', 'origin'], { cwd, env: authEnv, allowFail: true });
+  const baseRef = `origin/${base}`;
+  const baseTip = git(['rev-parse', '--verify', '--quiet', baseRef], { cwd, allowFail: true });
+  if (!baseTip.ok) {
+    return [];
+  }
+  const busy = new Set(
+    git(['worktree', 'list', '--porcelain'], { cwd, allowFail: true })
+      .stdout.split('\n')
+      .filter((line) => line.startsWith('branch refs/heads/'))
+      .map((line) => line.slice('branch refs/heads/'.length)),
+  );
+  const merged = git(
+    ['for-each-ref', '--merged', baseRef, '--format=%(refname:short) %(objectname)', 'refs/heads'],
+    { cwd, allowFail: true },
+  )
+    .stdout.split('\n')
+    .filter(Boolean)
+    .map((line) => line.split(' '));
+  const removed = [];
+  for (const [name, tip] of merged) {
+    if (name === current || protectedBranches.includes(name) || busy.has(name) || tip === baseTip.stdout) {
+      continue;
+    }
+    if (git(['branch', '-d', name], { cwd, allowFail: true }).ok) {
+      removed.push(name);
+    }
+  }
+  if (removed.length > 0) {
+    log(`cleanup: ${label} removed merged local branches: ${removed.join(', ')}`);
+  }
+  return removed;
+}
+
+/**
  * @param {{
  *   cwd?: string,
  *   message?: string | null,
@@ -1101,6 +1332,7 @@ export function syncWithBase({ root, paired, dryRun = false, log, authEnv = {} }
  *   linksOnly?: boolean,
  *   repoint?: boolean,
  *   sync?: boolean,
+ *   cleanup?: boolean,
  *   log?: (line: string) => void,
  * }} options
  */
@@ -1169,7 +1401,35 @@ export function pairedPush(options = {}) {
     if ((dkrDirty || productDirty) && !options.message) {
       throw new Error('uncommitted changes need a message: paired-push -m "<summary>"');
     }
+    // Hygiene preflight (before any mutation): explicit pathspecs only, no `git add -A`.
+    const slug = branchSlug(branch);
+    // install-dkr output is generator-owned and expected to arrive untracked on the first paired push.
+    const productDeclared = [
+      `.dkr/intents/${slug}.json`,
+      '.dkr/config.json',
+      '.dkr/bin/',
+      '.dkr-binding.json',
+      '.dkr-coverage.json',
+      '.gitmodules',
+      ...(Array.isArray(paired.rulesFiles) ? paired.rulesFiles : []),
+    ];
+    const dkrDeclared = [
+      `${(paired.productPath ?? '').replace(/\/+$/, '')}/`,
+      new RegExp(`^\\.dkr/twins/[^/]+/${slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`),
+    ].filter((r) => r !== '/');
+    const include = options.include ?? [];
+    const productStray = checkUntracked({
+      cwd: root,
+      label: 'product',
+      declared: productDeclared,
+      include,
+      ignore: [paired.path],
+    }).stray;
+    if (productStray.length > 0) throw strayError('product', productStray);
+    const dkrStray = checkUntracked({ cwd: dkrDir, label: 'dkr', declared: dkrDeclared, include }).stray;
+    if (dkrStray.length > 0) throw strayError('dkr', dkrStray);
     if (options.dryRun) {
+      log('hygiene: no untracked files outside the declared set (explicit pathspecs only)');
       log(
         `dry-run: dkr ${dkrDirty ? 'has' : 'has no'} changes; product ${productDirty ? 'has' : 'has no'} changes`,
       );
@@ -1193,7 +1453,14 @@ export function pairedPush(options = {}) {
 
         if (productDirty) {
           // Leave the dkr gitlink for the post-marker metadata commit.
-          git(['add', '-A'], { cwd: root });
+          stageExplicit({
+            cwd: root,
+            label: 'product',
+            declared: productDeclared,
+            include,
+            exclude: [paired.path],
+            ignore: [paired.path],
+          });
           git(['reset', '--', paired.path], { cwd: root, allowFail: true });
           if (hasStaged(root)) {
             commitWithMessage(
@@ -1214,7 +1481,7 @@ export function pairedPush(options = {}) {
         });
 
         if (git(['status', '--porcelain'], { cwd: dkrDir }).stdout.length > 0) {
-          git(['add', '-A'], { cwd: dkrDir });
+          stageExplicit({ cwd: dkrDir, label: 'dkr', declared: dkrDeclared, include });
         }
         if (hasStaged(dkrDir)) {
           const summary = options.dkrMessage ?? `${options.message} (DKR)`;
@@ -1234,15 +1501,10 @@ export function pairedPush(options = {}) {
 
       // 2b. Product metadata: pin intent to the DKR tip that holds the marker + stage gitlink.
       const dkrSha = git(['rev-parse', 'HEAD'], { cwd: dkrDir }).stdout;
-      const intentDir = path.join(root, '.dkr', 'intents');
-      const intentCandidates = [
-        path.join(intentDir, `${branch.replace(/\//g, '--')}.json`),
-        path.join(root, '.dkr', 'intent.json'),
-      ];
-      for (const intentFile of intentCandidates) {
-        if (!fs.existsSync(intentFile)) {
-          continue;
-        }
+      // Only THIS branch's own intent file may be pinned. The branchless legacy .dkr/intent.json can
+      // belong to any branch, so it is never rewritten here.
+      const intentFile = path.join(root, '.dkr', 'intents', `${slug}.json`);
+      if (fs.existsSync(intentFile)) {
         try {
           const intent = JSON.parse(fs.readFileSync(intentFile, 'utf8'));
           if (
@@ -1258,9 +1520,17 @@ export function pairedPush(options = {}) {
         } catch {
           /* ignore unreadable intent */
         }
-        break;
+      } else if (fs.existsSync(path.join(root, '.dkr', 'intent.json'))) {
+        log('intent: ignoring legacy .dkr/intent.json (no branch identity); run dotfiles dkr migrate-branch-files');
       }
-      git(['add', '-A'], { cwd: root });
+      stageExplicit({
+        cwd: root,
+        label: 'product',
+        declared: productDeclared,
+        include,
+        exclude: [paired.path],
+        ignore: [paired.path],
+      });
       git(['add', paired.path], { cwd: root });
       if (hasStaged(root)) {
         // After a normal push with prior product work, the second commit is just pointer/intent.
@@ -1284,6 +1554,29 @@ export function pairedPush(options = {}) {
         log('product: nothing to push');
       }
     }
+  }
+
+  // 3b. Tidy up merged branches in both repos (never the branch just pushed).
+  if (!options.linksOnly && !options.dryRun && options.cleanup !== false) {
+    const protectedBranches = paired.branch?.protected ?? ['main', 'master', 'develop'];
+    pruneMergedBranches({
+      cwd: root,
+      base: defaultBranch(root, 'main'),
+      current: branch,
+      protectedBranches,
+      label: 'product',
+      log,
+      authEnv,
+    });
+    pruneMergedBranches({
+      cwd: dkrDir,
+      base: paired.ref ?? defaultBranch(dkrDir, 'main'),
+      current: branch,
+      protectedBranches,
+      label: 'dkr',
+      log,
+      authEnv,
+    });
   }
 
   // 4. Cross-linking
@@ -1319,13 +1612,33 @@ function printHelp() {
   console.log(`paired-push — commit and push a product repo and its DKR checkout together
 
 Usage:
-  node .dkr/bin/paired-push.mjs -m "<summary>" [--dkr-message "<summary>"] [--dry-run]
+  node .dkr/bin/paired-push.mjs -m "<summary>" [--dkr-message "<summary>"] [--dry-run] [--no-cleanup] [--include <path>]...
   node .dkr/bin/paired-push.mjs --links
   node .dkr/bin/paired-push.mjs --repoint   # only if the dkr pointer left the DKR remote
   node .dkr/bin/paired-push.mjs --sync [--dry-run]   # merge DKR main, then product main, so the dkr pointer merges cleanly
   node .dkr/bin/paired-push.mjs --mint-token --repos owner/a,owner/b   # print a read credential
 
+After a push, local branches already merged into the base branch (and stale remote-tracking refs and
+worktree records) are removed in both repos; --no-cleanup skips that.
+
+Staging is by explicit pathspec (tracked changes plus this branch's intent file, the dkr pointer and the twin
+marker). Untracked files outside that set abort the push: \`git add\` them, delete them, or pass --include <path>.
+
 Raw git push is blocked by the pre-push hook that dotfiles install-dkr installs.`);
+}
+
+/**
+ * All values of a repeatable flag (`--include a --include=b`).
+ * @param {string[]} argv
+ * @param {string} name
+ */
+export function repeated(argv, name) {
+  const out = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === name && argv[i + 1]) out.push(argv[(i += 1)]);
+    else if (argv[i].startsWith(`${name}=`)) out.push(argv[i].slice(name.length + 1));
+  }
+  return out;
 }
 
 function main(argv) {
@@ -1369,6 +1682,8 @@ function main(argv) {
       linksOnly: argv.includes('--links'),
       repoint: argv.includes('--repoint'),
       sync: argv.includes('--sync'),
+      cleanup: !argv.includes('--no-cleanup'),
+      include: repeated(argv, '--include'),
     });
     return 0;
   } catch (error) {
@@ -1377,7 +1692,12 @@ function main(argv) {
   }
 }
 
-const invoked = process.argv[1] ? pathToFileURL(fs.realpathSync(process.argv[1])).href : null;
+// stdin/eval imports have no executable file to resolve. Importing helpers must
+// not execute the CLI or fail merely because argv[1] is '-' or an absent path.
+let invoked = null;
+if (process.argv[1] && fs.existsSync(process.argv[1])) {
+  invoked = pathToFileURL(fs.realpathSync(process.argv[1])).href;
+}
 if (invoked && invoked === pathToFileURL(fs.realpathSync(fileURLToPath(import.meta.url))).href) {
   process.exit(main(process.argv.slice(2)));
 }

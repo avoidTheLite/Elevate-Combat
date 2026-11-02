@@ -137,7 +137,8 @@ function enterGame(game: GameState, notes: string[] = []): Partial<GameStore> {
 
 function hotseatHandoff(game: GameState): Team | null {
   const { A, B } = game.settings.controllers;
-  if (A !== 'human' || B !== 'human' || !game.settings.fog) return null;
+  if (A !== 'human' || B !== 'human' || (!game.settings.fog && !game.pending?.participation))
+    return null;
   return actingTeam(game);
 }
 
@@ -153,7 +154,8 @@ export function viewTeam(game: GameState): Team | null {
 
 function needsHandoff(prev: GameState, next: GameState): Team | null {
   const { A, B } = next.settings.controllers;
-  if (A !== 'human' || B !== 'human' || !next.settings.fog) return null;
+  if (A !== 'human' || B !== 'human' || (!next.settings.fog && !next.pending?.participation))
+    return null;
   const before = actingTeam(prev);
   const after = actingTeam(next);
   return after && before !== after ? after : null;

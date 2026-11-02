@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { baseUnitType, defaultSettings } from '@iron-ridge/engine';
+import {
+  baseUnitType,
+  createFoundationPlaytestConfiguration,
+  defaultSettings,
+} from '@iron-ridge/engine';
 import App from '../../App.tsx';
 import { BALANCE_KEY, useBalanceStore } from '../../balance/store.ts';
 import { unitThumbnail } from '../../balance/thumbnails.ts';
@@ -15,9 +19,11 @@ beforeEach(() => {
       active: undefined,
       draft: {},
       dirtyCards: {},
-      setup: defaultSettings(),
+      setup: { ...defaultSettings(), commanderTrainingCp: 11 },
+      setupError: null,
+      setupSelection: null,
     });
-    useBalanceStore.getState().openLab(defaultSettings());
+    useBalanceStore.getState().openLab({ ...defaultSettings(), commanderTrainingCp: 11 });
   });
 });
 
@@ -77,6 +83,24 @@ describe('BalanceLab', () => {
     await screen.findByRole('button', { name: /end turn/i });
     expect(useGameStore.getState().game!.settings.rules).toEqual(want);
     expect(useBalanceStore.getState().view).toBe('setup');
+  });
+
+  it('revalidates the effective campaign before a launch even if a stale disabled flag is cleared', () => {
+    render(<App />);
+    const profile = createFoundationPlaytestConfiguration(7, 3);
+    const bad = {
+      ...defaultSettings(),
+      commanderTrainingCp: 11,
+      infrastructure: {
+        ...profile,
+        nodes: { ...profile.nodes, captureCosts: { capture: 3, raze: 7 } },
+      },
+    };
+    act(() => useBalanceStore.setState({ setup: bad, setupError: null }));
+    fireEvent.click(screen.getByRole('button', { name: /apply & new game/i }));
+    expect(useGameStore.getState().game).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Raze/);
+    expect(useBalanceStore.getState().view).toBe('lab');
   });
 
   it('mechanics card saves scalar knobs into the draft', () => {

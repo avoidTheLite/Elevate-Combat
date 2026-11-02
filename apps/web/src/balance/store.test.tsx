@@ -20,7 +20,9 @@ beforeEach(() => {
       active: undefined,
       draft: {},
       dirtyCards: {},
-      setup: defaultSettings(),
+      setup: { ...defaultSettings(), commanderTrainingCp: 11 },
+      setupError: null,
+      setupSelection: null,
     });
   });
 });
@@ -86,6 +88,9 @@ describe('SetupScreen integration', () => {
     });
     render(<App />);
     expect(screen.getByTestId('custom-rules-badge')).toHaveTextContent(/custom rules active/i);
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
     expect(useGameStore.getState().game!.settings.rules).toEqual({ units: { ww2_tank: { hp } } });
@@ -99,9 +104,74 @@ describe('SetupScreen integration', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /reset custom rules/i }));
     expect(screen.queryByTestId('custom-rules-badge')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
     expect(useGameStore.getState().game!.settings.rules).toBeUndefined();
+  });
+
+  it('does not launch fallback Classic through the lab when selected Advanced prices are missing', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
+    fireEvent.change(screen.getByLabelText('MAP SEED'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('NON-HQ NODES'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
+    expect(screen.getByRole('button', { name: /apply & new game/i })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Advanced seeded nodes cannot start yet/);
+    fireEvent.click(screen.getByRole('button', { name: /apply & new game/i }));
+    expect(useGameStore.getState().game).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /back to setup/i }));
+    expect(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByLabelText('Commander training price (CP)')).toHaveValue(null);
+    expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(null);
+    expect(screen.getByLabelText('MAP SEED')).toHaveValue(42);
+    expect(screen.getByLabelText('NON-HQ NODES')).toHaveValue('5');
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
+    expect(screen.getByRole('button', { name: /apply & new game/i })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Capture\/Raze CP prices/);
+    expect(useGameStore.getState().game).toBeNull();
+  });
+
+  it('keeps the same configured Advanced map, players, costs and draft rules through the lab launch', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
+    fireEvent.click(screen.getByRole('button', { name: 'HOTSEAT 2P' }));
+    fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
+      target: { value: '11' },
+    });
+    fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('MAP SEED'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('NON-HQ NODES'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
+    const source = structuredClone(useBalanceStore.getState().setup);
+    act(() => {
+      useBalanceStore.getState().saveUnit('ww2_tank', { hp: 29 });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /apply & new game/i }));
+    const game = useGameStore.getState().game!;
+    expect(game.settings).toEqual({ ...source, rules: { units: { ww2_tank: { hp: 29 } } } });
+    expect(game.settings.infrastructure?.nodes.placement).toEqual({
+      mode: 'advanced',
+      seed: 42,
+      additionalNodes: 5,
+    });
+    expect(game.infrastructure?.sites).toHaveLength(7);
+    expect(game.settings.controllers).toEqual({ A: 'human', B: 'human' });
+    expect(game.settings.commanderTrainingCp).toBe(11);
   });
 
   it('BALANCE LAB button opens the lab with the current setup', () => {
@@ -109,7 +179,8 @@ describe('SetupScreen integration', () => {
     fireEvent.click(screen.getByRole('button', { name: /medieval/i }));
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     expect(useBalanceStore.getState().view).toBe('lab');
-    expect(useBalanceStore.getState().setup.era).toBe('medieval');
+    expect(useBalanceStore.getState().setupSelection?.settings.era).toBe('medieval');
+    expect(useBalanceStore.getState().setupError).toBeNull();
     expect(screen.getByText(/▲ BALANCE LAB/)).toBeInTheDocument();
   });
 });

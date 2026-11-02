@@ -89,7 +89,7 @@ describe('GAMES-ELEVATE-SESSION-UC-001: serializeSave / deserializeSave', () => 
     env.engineVersion = '9.9.9';
     const r = deserializeSave(JSON.stringify(env));
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/newer version.*schema 3/);
+    if (!r.ok) expect(r.error).toMatch(new RegExp(`newer version.*schema ${SAVE_SCHEMA + 1}`));
   });
 
   it('never throws on non-string input', () => {

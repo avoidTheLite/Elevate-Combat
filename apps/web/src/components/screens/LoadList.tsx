@@ -29,8 +29,12 @@ export function LoadList(): React.ReactElement {
   return (
     <div className="w-full max-w-[560px] border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-4 flex flex-col gap-2">
       <div className="text-[11px] text-[hsl(var(--primary))] tracking-widest">
-        [ LOAD CAMPAIGN ]
+        [ RESUME SAVED GAME ]
       </div>
+      <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+        Resume exact turn, armies, CP, pending choices and rules. Current new-campaign settings do
+        not change a saved game.
+      </p>
       {loadError && (
         <div
           role="alert"
@@ -44,7 +48,7 @@ export function LoadList(): React.ReactElement {
       )}
       <ul className="flex flex-col gap-1" aria-label="Save slots">
         {slots.map((info) => (
-          <li key={info.slot} className="flex items-center gap-2 text-[10px]">
+          <li key={info.slot} className="flex flex-wrap items-center gap-2 text-[10px]">
             <span className="w-[72px] shrink-0 text-[hsl(var(--muted-foreground))] tracking-widest">
               {slotName(info.slot)}
             </span>
@@ -77,7 +81,7 @@ export function LoadList(): React.ReactElement {
           </li>
         ))}
       </ul>
-      <label className="flex items-center gap-2 text-[10px] text-[hsl(var(--muted-foreground))] tracking-widest cursor-pointer">
+      <label className="flex flex-wrap items-center gap-2 text-[10px] text-[hsl(var(--muted-foreground))] tracking-widest cursor-pointer">
         IMPORT SAVE (.json)
         <input
           ref={fileRef}
@@ -85,7 +89,7 @@ export function LoadList(): React.ReactElement {
           accept=".json,application/json"
           aria-label="Import save file"
           onChange={(e) => void onFile(e.target.files?.[0])}
-          className="text-[10px]"
+          className="w-full min-w-0 text-[10px]"
         />
       </label>
     </div>

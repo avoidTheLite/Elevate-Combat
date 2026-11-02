@@ -16,7 +16,7 @@ export type AttackType = 'melee' | 'ranged_direct' | 'indirect';
 export type UnitClass = 'infantry' | 'cavalry' | 'artillery' | 'vehicle';
 export type PlacementCategory = 'automatic' | 'warned' | 'combat_fixed' | 'combat_mobile';
 export type Effectiveness = 'high' | 'medium' | 'low' | 'none';
-export type RangeProfile = 'rifle_mg' | 'at_gun' | 'tank_cannon' | 'indirect' | 'melee';
+export type RangeProfile = 'rifle_mg' | 'at_gun' | 'bazooka' | 'tank_cannon' | 'indirect' | 'melee';
 
 export interface UnitDef {
   id: string;

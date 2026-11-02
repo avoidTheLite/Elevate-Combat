@@ -1,6 +1,6 @@
 // ── Fortification models: gold wireframe walls ───────────────────────────────
 // A fortified cell gets a low open hex ring; an HQ gets a larger curtain wall
-// tracing the centres of the six cells around it (two wall segments per face).
+// enclosing the seven complete tiles around it (two wall segments per face).
 
 import * as THREE from 'three';
 import { DIRECTIONS, hexToWorld } from '@iron-ridge/engine';
@@ -10,6 +10,8 @@ export const FORT_COLOR = 0xffc34d;
 export const HQ_WALL_COLOR = FORT_COLOR;
 /** Height of the HQ wall above the highest ring cell (world units). */
 export const HQ_WALL_HEIGHT = 0.36;
+/** Apothem 2.58 exceeds the seven-tile footprint (2.5), with a small clearance. */
+export const HQ_WALL_RADIUS_SCALE = 1.72;
 /** Height of a fort ring per fortification level (world units). */
 export const FORT_LEVEL_HEIGHT = 0.12;
 
@@ -25,13 +27,16 @@ export function fortRingGeometry(): THREE.BufferGeometry {
 }
 
 /**
- * HQ curtain wall around a centre cell at the origin. Its corners are the centres of
+ * HQ curtain wall around a centre cell at the origin. Its corners extend beyond
  * the six ring cells (`DIRECTIONS` order); each face is split at its midpoint into two
  * segments, one per ring cell it passes over. `bottoms[i]` is the ground height of ring
  * cell i; every segment rises from its own cell's ground to the shared flat `top`.
  */
 export function hqWallGeometry(bottoms: readonly number[], top: number): THREE.BufferGeometry {
-  const corners = DIRECTIONS.map((d) => hexToWorld(d));
+  const corners = DIRECTIONS.map((d) => {
+    const p = hexToWorld(d);
+    return { x: p.x * HQ_WALL_RADIUS_SCALE, z: p.z * HQ_WALL_RADIUS_SCALE };
+  });
   const pos: number[] = [];
   const quad = (a: { x: number; z: number }, b: { x: number; z: number }, y0: number): void => {
     pos.push(a.x, y0, a.z, b.x, y0, b.z, b.x, top, b.z);

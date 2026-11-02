@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { apply } from './actions.ts';
 import type { GameAction } from './actions.ts';
 import { aiStep } from './runner.ts';
-import { deserializeSave, serializeSave, validateGameState } from './save.ts';
+import { SAVE_SCHEMA, deserializeSave, serializeSave, validateGameState } from './save.ts';
 import { isPresent, worldOf } from './strategic.ts';
 import type { GameState } from './types.ts';
 import { baseUnitType, unitType } from './units.ts';
@@ -149,12 +149,12 @@ describe('GAMES-ELEVATE-SESSION-UC-002: save fixtures', () => {
     60_000,
   );
 
-  it('legacy-0.9.0 migrates to a valid schema-2 state with notes', () => {
+  it('legacy-0.9.0 migrates to the current valid save schema with notes', () => {
     const r = deserializeSave(read('legacy-0.9.0.json'));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const s = r.save.state;
-    expect(r.save.schema).toBe(2);
+    expect(r.save.schema).toBe(SAVE_SCHEMA);
     expect(s.version).toBe('1.0.0');
     expect(r.migrated.length).toBeGreaterThanOrEqual(4);
     expect(r.migrated.join('\n')).toMatch(/objective/);
@@ -165,7 +165,7 @@ describe('GAMES-ELEVATE-SESSION-UC-002: save fixtures', () => {
     expect(s.battle!.units.every((u) => typeof u.exposed === 'boolean' && !('revealed' in u))).toBe(
       true,
     );
-    // Once re-saved it is a plain schema-2 save: no further migration.
+    // Once re-saved it uses the current schema: no further migration.
     const again = deserializeSave(serializeSave(s));
     expect(again.ok && again.migrated).toEqual([]);
   });
