@@ -13,6 +13,7 @@ import {
   worldOf,
   COMMAND,
   commanderReach,
+  hexDistance,
   createFoundationPlaytestConfiguration,
 } from '@iron-ridge/engine';
 import {
@@ -32,6 +33,8 @@ import {
   strategicGame,
   withRecruits,
 } from '../lib/testGames.ts';
+import { regularPlaytestSettings } from '../lib/campaignScenarios.ts';
+import { holderForClick } from '../lib/holders.ts';
 import { topY } from './spec.ts';
 import type { UiState } from '../stores/useGameStore.ts';
 import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
@@ -392,7 +395,9 @@ describe('command layer on the strategic map', () => {
     reach.delete(a.pos);
     const spec = buildStrategicScene(s, ui({ selectedArmy: a.id }), 'A');
     const green = spec.overlays.filter((o) => o.color === REACH_COLOR).map((o) => o.key);
-    expect(new Set(green)).toEqual(new Set(reach.keys()));
+    expect(new Set(green)).toEqual(
+      new Set([...reach.keys()].filter((key) => !holderForClick(s, 'A', key))),
+    );
     expect(green).not.toContain(a.pos);
     const far = [...reach.entries()].find(([, n]) => n === 3)![0];
     const hovered = buildStrategicScene(s, ui({ selectedArmy: a.id, hoverCell: far }), 'A');
@@ -400,6 +405,28 @@ describe('command layer on the strategic map', () => {
     expect(hovered.path[0]).toBe(a.pos);
     expect(hovered.path[3]).toBe(far);
   });
+
+  it.each(['classic', 'ready'] as const)(
+    '%s: selecting HQ cells never previews a commander move or mutates game state',
+    (preset) => {
+      const s = preset === 'ready' ? createGame(regularPlaytestSettings()) : strategicGame(true);
+      const a = commanderOf(s, 'A');
+      const hq = alphaGarrison(s);
+      const { world } = worldOf(s);
+      const before = structuredClone(s);
+      const hqCells = world.subs.filter(
+        (cell) => cell.key !== a.pos && hexDistance(cell.hex, world.subByKey.get(hq.pos)!.hex) <= 1,
+      );
+      for (const cell of hqCells) {
+        const spec = buildStrategicScene(s, ui({ selectedArmy: a.id, hoverCell: cell.key }), 'A');
+        expect(spec.path).toEqual([]);
+        expect(
+          spec.overlays.filter((o) => o.color === REACH_COLOR).map((o) => o.key),
+        ).not.toContain(cell.key);
+        expect(s).toEqual(before);
+      }
+    },
+  );
 
   it('enemies in engage range are marked red; nothing shows for a side the viewer is not', () => {
     const s = bravoInRange(strategicGame(false));

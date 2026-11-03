@@ -34,7 +34,13 @@ import {
   campaignNodeViews,
 } from '@iron-ridge/engine';
 import type { UiState } from '../stores/useGameStore.ts';
-import { commandHighlights, reachPath, seenHolders } from '../lib/holders.ts';
+import {
+  commandHighlights,
+  holderForClick,
+  isFriendlyNodeCenter,
+  reachPath,
+  seenHolders,
+} from '../lib/holders.ts';
 import type {
   BorderLayer,
   Segment3,
@@ -171,10 +177,20 @@ export function buildStrategicScene(
   let path: string[] = [...inspectedSupplyRoute];
   const selected = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
   const hl = commandHighlights(game, ui.selectedArmy, ui.checkedUnits, view);
-  for (const [k] of hl.reach) overlays.push({ key: k, color: REACH_COLOR, opacity: 0.22 });
+  // Holder/building clicks select or engage, even when the underlying cell can
+  // be traversed. Keep the full reach map for routes through those cells.
+  for (const [k] of hl.reach)
+    if (!holderForClick(game, view, k) && !isFriendlyNodeCenter(game, view, k))
+      overlays.push({ key: k, color: REACH_COLOR, opacity: 0.22 });
   for (const t of hl.engage) overlays.push({ key: t.pos, color: ENGAGE_COLOR, opacity: 0.55 });
   for (const t of hl.transfer) overlays.push({ key: t.pos, color: TRANSFER_COLOR, opacity: 0.5 });
-  if (selected && ui.hoverCell && hl.reach.has(ui.hoverCell))
+  if (
+    selected &&
+    ui.hoverCell &&
+    hl.reach.has(ui.hoverCell) &&
+    !holderForClick(game, view, ui.hoverCell) &&
+    !isFriendlyNodeCenter(game, view, ui.hoverCell)
+  )
     path = reachPath(game, hl.reach, selected.pos, ui.hoverCell);
   if (ui.selectedMain) {
     borders.push({

@@ -59,9 +59,16 @@ export function canOrder(
   );
 }
 
+/** Owned node buildings are inspection targets, including before their first recruit. */
+export function isFriendlyNodeCenter(game: GameState, view: Team | null, subKey: HexKey): boolean {
+  return !!game.infrastructure?.capture.nodes.some(
+    (node) => node.owner === (view ?? game.active) && node.centerSubHex === subKey,
+  );
+}
+
 /**
- * The holder a click on `subKey` refers to: the visible holder standing there,
- * or — for a click on the HQ building's ring — that HQ's visible garrison.
+ * The visible holder standing on `subKey`, an empty friendly node garrison at
+ * its center, or the visible HQ garrison for a click on that building's ring.
  */
 export function holderForClick(
   game: GameState,
@@ -71,6 +78,19 @@ export function holderForClick(
   const seen = seenHolders(game, view);
   const direct = holderAt(game, subKey);
   if (direct) return seen.find((a) => a.id === direct.id);
+  // Empty infrastructure garrisons are traversable in the engine. A friendly
+  // node building click still selects its roster; enemy/neutral centers remain
+  // movement destinations so commanders can enter them to claim/capture them.
+  if (isFriendlyNodeCenter(game, view, subKey)) {
+    const nodeGarrison = seen.find(
+      (a) =>
+        a.kind === 'garrison' &&
+        a.building === 'node' &&
+        a.team === (view ?? game.active) &&
+        a.pos === subKey,
+    );
+    if (nodeGarrison) return nodeGarrison;
+  }
   const { world } = worldOf(game);
   const cell = world.subByKey.get(subKey);
   if (!cell) return undefined;

@@ -116,7 +116,8 @@ export function GameScreen(): React.ReactElement {
 
   const onClick = useCallback((key: string, button: number) => {
     const s = useGameStore.getState();
-    const g = s.game!;
+    const g = s.game;
+    if (!g) return;
     const u = s.ui;
     if (button === 2 || !key) {
       s.setUi({

@@ -3,13 +3,12 @@
 
 import { actingTeam, isAiTurn, worldOf } from '@iron-ridge/engine';
 import { useGameStore, viewTeam } from '../stores/useGameStore.ts';
-import { canOrder, commandHighlights, holderForClick } from './holders.ts';
+import { canOrder, commandHighlights, holderForClick, isFriendlyNodeCenter } from './holders.ts';
 
 /**
- * Left-click on sub-hex `key` of the strategic map. With one of your commanders
- * selected: an engageable enemy → engage; a reachable cell → move there.
- * Otherwise the click selects the holder there (or the HQ garrison, for a click
- * on the HQ building) and the main hex.
+ * Left-click on sub-hex `key` of the strategic map. Friendly holders (including
+ * the HQ building) are selected first. With an orderable commander selected,
+ * an enemy → engage; an empty reachable cell → move there.
  */
 export function strategicClick(key: string): void {
   const s = useGameStore.getState();
@@ -24,7 +23,10 @@ export function strategicClick(key: string): void {
   if (!main) return;
   const sel = u.selectedArmy ? g.armies.find((a) => a.id === u.selectedArmy) : null;
   const clicked = holderForClick(g, v, key);
-  if (human && sel && canOrder(g, sel, v)) {
+  const inspectNode = !clicked && isFriendlyNodeCenter(g, v, key);
+  // A reachable HQ ring/empty infrastructure garrison is still a selection
+  // target. Resolve that intent before interpreting a click as a movement order.
+  if (human && sel && !inspectNode && clicked?.team !== sel.team && canOrder(g, sel, v)) {
     const hl = commandHighlights(g, sel.id, u.checkedUnits, v);
     // Engage: an enemy holder in range (click its cell or its HQ building).
     const target = clicked && hl.engage.find((t) => t.id === clicked.id);
@@ -41,7 +43,7 @@ export function strategicClick(key: string): void {
     // Move: any reachable sub-hex.
     if (hl.reach.has(key)) {
       if (s.dispatch({ type: 'moveCommander', armyId: sel.id, dest: key })) {
-        const moved = s.game!.armies.find((a) => a.id === sel.id);
+        const moved = useGameStore.getState().game?.armies.find((a) => a.id === sel.id);
         s.setUi({ selectedMain: moved?.at ?? main, selectedArmy: moved?.id ?? null });
       }
       return;
