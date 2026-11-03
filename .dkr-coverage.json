@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "ccdd7ce94e3463c6c3eee682197119ac6f349515",
+  "implementation_sha": "a7153796d20f6af00a3e65c2a94f3a741c36d524",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -392,6 +392,296 @@
         {
           "path": "apps/web/src/render/buildScene.test.ts",
           "name": "command layer on the strategic map ready: selecting HQ cells never previews a commander move or mutates game state",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts persists a real movement path and connector across pointer leave, then removes them on selection change",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts removes attack trajectory, firing target and preview on deselect, then ignores stale hover",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts exposes proposed browser preferences as keyboard-focusable controls",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts explicit ATTACK on an empty destination and MOVE on an enemy never fall through to another command",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts an indirect MOVE preview shows the real path without an attack trajectory or firing view",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts QuickMove body-click inspects an owned empty node, while a neutral center remains a real move",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/calloutLayout.test.ts",
+          "name": "proposed collision-aware callout placement keeps tiny overview tile cards locally detached instead of jumping to viewport corners",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/calloutLayout.test.ts",
+          "name": "proposed collision-aware callout placement aligns a detached hover corridor with a tile-to-card-center pointer journey",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/calloutLayout.test.ts",
+          "name": "proposed collision-aware callout placement cuts detached hover bridges around every real unit body instead of stealing canvas input",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/calloutLayout.test.ts",
+          "name": "proposed collision-aware callout placement keeps portrait mobile source/target centers and both cards clear when tile-side placement cannot fit",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/calloutLayout.test.ts",
+          "name": "proposed collision-aware callout placement chooses a different desktop side when the preferred card would cover an actual enemy body",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/commands.test.ts",
+          "name": "movement command previews use actual engine legality prepares a valid, ongoing engine-initialized battle with real move, attack, Dig In, Set Up and Pack Up",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/commands.test.ts",
+          "name": "movement command previews use actual engine legality friendly tile bodies select actual occupants and never allow a forbidden MOVE",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/commands.test.ts",
+          "name": "movement command previews use actual engine legality offers both real strategic holders on an empty friendly node tile without inventing a unit stack",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/commands.test.ts",
+          "name": "movement command previews use actual engine legality rejects a pending record after selection, source, game revision, phase or session changes",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/commands.test.ts",
+          "name": "proposed browser preferences defaults to explicit move/attack preview and tolerates malformed storage",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing a press inside the expanded drag area remains an ordinary click before dragging",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing a selected-unit drag previews start, updates and release without camera panning",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing dragging button 0 from another origin pans and never clicks on release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing dragging button 1 from another origin pans and never clicks on release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing dragging button 2 from another origin pans and never clicks on release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing right and middle drags stay camera gestures even when they start over the selected unit",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing unrelated pointer IDs cannot alter or complete an active gesture",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing touch cancellation produces only a cancel event for active command dragging",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing pen cancellation produces only a cancel event for active command dragging",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing mouse cancellation produces only a cancel event for active command dragging",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing drag release outside the map carries no stale destination",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/gestures.test.ts",
+          "name": "map pointer gesture routing camera shortcuts yield to buttons, fields, links and inherited editable content",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "selected-unit-only drag origin calibration requires the selected tile at close zoom and expands to all six neighbors at far zoom",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "selected-unit-only drag origin calibration interpolates and clamps the proposed zoom calibration without a global pick radius",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "selected-unit-only drag origin calibration protects another unit body at every zoom, while accepting the selected model",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "selected-unit-only drag origin calibration includes polygon edges without admitting outside points",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "projected callout layout provides local tile dimensions for overlap and rejects invalid projection coordinates",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/projection.test.ts",
+          "name": "projected callout layout updates for camera motion or tracked-key changes but ignores subpixel jitter",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle keeps a full preview on pointer leave and native context, then explicitly confirms once",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle uses independent click preferences; even QuickMove drag release only stages confirmation",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle QuickAttack stages attacks by default and executes when enabled",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle selection and deselection clear every pending and hover artifact until new intent",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle cancel, phase changes, handover and stale callbacks never dispatch a stored command",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle uses delayed hover enter and exit, with callout focus/pointer bridging",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle runs real engineer and fixed-weapon actions immediately without confirmation",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle native context on the selected unit preserves selection; changing preferences never executes a pending order",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle a retained confirm reads a newly opened quit modal before the next render",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle cancelled and replaced records cannot execute through retained confirm callbacks",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings window blur cancels command dragging and clears all pointer ownership",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings scope change cancels an active gesture without a later command release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings disable change cancels an active gesture without a later command release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings selected-origin movement previews and releases; another origin pans",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings pointercancel terminates a command without a release or click",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings lostpointercapture terminates a command without a release or click",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings a second touch cancels command dragging; two-finger motion pans and cannot end as a command",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings right-click cancels without reopening context actions regardless of native contextmenu ordering",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings right dragging still pans if contextmenu fires at pointerdown",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings native touch context consumes its press without a later tap or cancel erasing the preview",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings keyboard context targets the selected actor; an unhandled context target keeps browser behavior",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings trusted Chromium Shift+F10 event shape uses keyboard fallback despite its mouse pointer type",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
