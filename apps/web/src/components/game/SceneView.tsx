@@ -3,6 +3,8 @@ import { HexScene } from '../../render/HexScene.ts';
 import type { AttackFx } from '../../render/effects.ts';
 import type { SceneSpec } from '../../render/spec.ts';
 import { Button } from '../ui/Button.tsx';
+import type { SceneCommandControls } from '../../controls/types.ts';
+import { isInteractiveKeyTarget } from '../../controls/gestures.ts';
 
 interface Props {
   spec: SceneSpec;
@@ -12,6 +14,8 @@ interface Props {
   focusKey?: string | null;
   onHover: (key: string | null) => void;
   onClick: (key: string, button: number) => void;
+  commandControls?: SceneCommandControls;
+  children?: React.ReactNode;
 }
 
 export function SceneView({
@@ -21,6 +25,8 @@ export function SceneView({
   focusKey,
   onHover,
   onClick,
+  commandControls,
+  children,
 }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HexScene | null>(null);
@@ -50,6 +56,10 @@ export function SceneView({
   }, [onHover, onClick]);
 
   useEffect(() => {
+    sceneRef.current?.setCommandControls(commandControls);
+  }, [commandControls]);
+
+  useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
     s.update(spec, selectedKey);
@@ -71,6 +81,7 @@ export function SceneView({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (isInteractiveKeyTarget(e.target)) return;
       if (e.key.toLowerCase() === 'f')
         setTimeout(() => setFireView(sceneRef.current?.isFireView() ?? false), 0);
     };
@@ -81,6 +92,7 @@ export function SceneView({
   return (
     <div className="relative w-full h-full overflow-hidden scanlines">
       <div ref={hostRef} className="absolute inset-0" data-testid="scene-host" />
+      {children}
       {failed && (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-[hsl(var(--warning))] p-6 text-center">
           3D view unavailable ({failed}). The game still runs — try a WebGL-capable browser.
@@ -142,7 +154,9 @@ export function SceneView({
         )}
       </div>
       <div className="hidden sm:block absolute right-2 bottom-2 text-[9px] text-[hsl(var(--muted-foreground))] text-right leading-4 pointer-events-none">
-        WASD/drag pan · Q/E rotate · wheel zoom · R reset · right-click cancel
+        {commandControls && commandControls.enabled !== false
+          ? 'Selected-unit drag previews · other drags pan · right-click cancel'
+          : 'WASD/drag pan · Q/E rotate · wheel zoom · R reset · right-click cancel'}
       </div>
     </div>
   );

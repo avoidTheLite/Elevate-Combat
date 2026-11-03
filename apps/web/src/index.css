@@ -118,3 +118,197 @@ body {
   color: #9fb8c4;
   font-size: 10px;
 }
+
+/* Proposed movement demo: scoped to map controls; existing theme tokens remain authoritative. */
+.map-callouts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  overflow: hidden;
+}
+.map-callout,
+.map-preferences {
+  color: hsl(var(--foreground));
+  background: hsl(var(--panel) / 0.97);
+  border: 1px solid hsl(var(--border-bright));
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 4px 20px hsl(var(--background) / 0.6);
+}
+.map-callout {
+  position: absolute;
+  z-index: 1;
+  width: min(260px, calc(100% - 16px));
+  max-height: calc(100% - 94px);
+  overflow-y: auto;
+  pointer-events: auto;
+  animation: map-callout-enter var(--map-callout-duration, 120ms)
+    var(--map-callout-easing, ease-out);
+}
+.map-callout-bridge {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.map-callout-bridge line {
+  stroke: transparent;
+  stroke-width: 16px;
+  pointer-events: stroke;
+}
+.map-callout-title {
+  color: hsl(var(--primary));
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.map-callout-exit {
+  opacity: 0;
+  transition: opacity var(--map-callout-duration, 120ms) var(--map-callout-easing, ease-out);
+}
+.map-callout p,
+.map-preferences p {
+  margin: 6px 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+.map-callout ul {
+  margin: 6px 0;
+  padding-left: 16px;
+}
+.map-preview-details {
+  max-height: 190px;
+  min-height: 32px;
+  flex: 0 1 auto;
+  overflow-y: auto;
+}
+.map-callout[data-callout-kind='target'] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.map-callout [data-testid='map-command-preview'] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.map-callout [data-testid='map-command-preview'] > :not(.map-preview-details) {
+  flex-shrink: 0;
+}
+.map-callout-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.map-callout button,
+.map-preferences button {
+  border: 1px solid hsl(var(--border-bright));
+  color: hsl(var(--primary));
+  background: hsl(var(--background));
+  padding: 6px 9px;
+  min-height: 36px;
+  cursor: pointer;
+}
+.map-callout button:hover,
+.map-preferences button:hover {
+  background: hsl(var(--primary) / 0.12);
+}
+.map-callout button[aria-pressed='true'] {
+  background: hsl(var(--primary) / 0.2);
+  border-color: hsl(var(--primary));
+}
+.map-callout button:focus-visible,
+.map-preferences button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.map-callout button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.map-command-connector {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: hsl(var(--warning));
+}
+.map-command-connector line {
+  stroke: currentColor;
+  stroke-width: 3px;
+  stroke-dasharray: 7 4;
+}
+.map-command-connector circle {
+  stroke: currentColor;
+  stroke-width: 2px;
+  fill: hsl(var(--warning) / 0.12);
+}
+.map-preferences {
+  position: fixed;
+  z-index: 25;
+  top: 60px;
+  right: 12px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+}
+.map-preferences label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.map-preferences input[type='range'] {
+  width: 100%;
+  accent-color: hsl(var(--primary));
+}
+@keyframes map-callout-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (pointer: coarse) {
+  .map-callout button,
+  .map-preferences button {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+}
+@media (max-width: 767px) {
+  .map-callout {
+    width: min(228px, calc(100% - 16px));
+    padding: 8px;
+  }
+  .map-callout p {
+    font-size: 9px;
+  }
+  .map-callout[data-callout-kind='target'] {
+    max-height: 40%;
+  }
+  .map-preview-details {
+    max-height: min(140px, 22dvh);
+  }
+  .map-callout-buttons {
+    gap: 4px;
+  }
+  .map-callout button {
+    font-size: 10px;
+    padding: 6px 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-callout {
+    animation: none;
+    transition: none;
+  }
+}

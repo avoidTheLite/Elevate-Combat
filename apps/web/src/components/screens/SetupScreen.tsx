@@ -27,6 +27,7 @@ import {
   foundationDemoFocus,
 } from '../../foundation/demoScenarios.ts';
 import type { FoundationDemoSelection } from '../../foundation/demoScenarios.ts';
+import { createMovementDemo, movementDemoFocus } from '../../controls/demoScenario.ts';
 
 function NumberField(props: {
   label: string;
@@ -273,6 +274,40 @@ export function SetupScreen(): React.ReactElement {
       <div className="w-full max-w-[560px] border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-4 flex flex-col gap-4">
         <div className="text-[11px] text-[hsl(var(--primary))] tracking-widest">
           [ NEW CAMPAIGN ]
+        </div>
+
+        <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-2">
+          <div className="text-xs font-bold">MOVEMENT &amp; ATTACK CONTROLS DEMO</div>
+          <p className="text-[11px] leading-4">
+            Review proposed on-map controls in a normal ready campaign, or open a prepared initial
+            tactical sandbox with a legal rifle move and attack, engineer Dig In and machine-gun Set
+            Up / Pack Up. No battle result is awarded.
+          </p>
+          <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+            QuickMove and QuickAttack are off by proposed default. Change browser-only preferences
+            with DEMO CONTROLS in game. The normal ready campaign keeps Capture 5 CP, Raze 2 CP and
+            commander training 15 CP.
+          </p>
+          <Button onClick={() => newGame(regularPlaytestSettings())}>
+            START READY MOVEMENT CAMPAIGN
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              try {
+                const demo = createMovementDemo();
+                if (importSave(serializeSave(demo, 'Prepared initial movement controls sandbox')))
+                  useGameStore.getState().setUi(movementDemoFocus(demo));
+                setDemoError(null);
+              } catch (error) {
+                setDemoError(
+                  error instanceof Error ? error.message : 'Controls sandbox could not start',
+                );
+              }
+            }}
+          >
+            OPEN PREPARED TACTICAL CONTROLS
+          </Button>
         </div>
 
         <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-2">
