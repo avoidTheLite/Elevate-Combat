@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "4988fea9fba8f9f90272f672d9f7bacc32369529",
+  "implementation_sha": "ccdd7ce94e3463c6c3eee682197119ac6f349515",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -272,6 +272,126 @@
         {
           "path": "apps/web/src/engagement.ui.test.tsx",
           "name": "private participant selection uses the picked unit\u2019s commander zone in the scene and accessible roster",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/commanderMovement.ui.test.tsx",
+          "name": "commander movement through screen input hover and right-click cancel clear a selection without moving or spending steps",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/commanderMovement.ui.test.tsx",
+          "name": "commander movement through screen input the retained screen callback reads the current turn and cannot move the previous selection",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/commanderMovement.ui.test.tsx",
+          "name": "commander movement through screen input the retained callback follows a loaded session without reusing a saved selection or preview",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/commanderMovement.ui.test.tsx",
+          "name": "commander movement through screen input a delayed scene click after quit has no game to mutate",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/commanderSelection.test.ts",
+          "name": "commander selection and route regressions classic: a nearby commander takes selection precedence over the HQ footprint",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/commanderSelection.test.ts",
+          "name": "commander selection and route regressions ready: a nearby commander takes selection precedence over the HQ footprint",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/commanderSelection.test.ts",
+          "name": "commander selection and route regressions classic: move previews retain paths through passable HQ selection cells",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/commanderSelection.test.ts",
+          "name": "commander selection and route regressions ready: move previews retain paths through passable HQ selection cells",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks an owned node center without a garrison inspects the node without moving or spending steps",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks an empty friendly node center selects its garrison and previews no move",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks a commander on an empty friendly node center takes selection priority over the garrison",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks an empty enemy node center remains a movement destination and permits Capture Node",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks an unowned node center remains a movement destination",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks classic: commander \u2192 HQ \u2192 original cell selects holders without moving or spending steps",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks ready: commander \u2192 HQ \u2192 original cell selects holders without moving or spending steps",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks a reachable HQ building ring selects its garrison without moving the selected commander",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks after a confirmed move across main hexes, the selected main follows the authoritative position",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks rapid switching between commanders and HQs never moves either holder",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks rejected moves and invalid clicks preserve authoritative position and the movement budget",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks confirmed out-and-back movement pays both route costs from the current position",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks turn changes clear selection; delayed clicks do not move the previous side",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/lib/strategicClick.test.ts",
+          "name": "strategic map clicks save/load and quit clear the selection without committing a hovered destination",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/buildScene.test.ts",
+          "name": "command layer on the strategic map classic: selecting HQ cells never previews a commander move or mutates game state",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/buildScene.test.ts",
+          "name": "command layer on the strategic map ready: selecting HQ cells never previews a commander move or mutates game state",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
