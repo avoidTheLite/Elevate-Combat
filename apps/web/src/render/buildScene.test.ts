@@ -83,6 +83,7 @@ describe('scene building', () => {
   it('GAMES-ELEVATE-CAMPAIGN-UC-001: displays owned nodes and neutral site markers without inventing ownership', () => {
     const game = createGame({
       ...defaultSettings(),
+      fog: false,
       infrastructure: createFoundationPlaytestConfiguration(7, 3),
     });
     const home = game.infrastructure!.sites.find((site) => site.homeTeam === 'A')!;
@@ -380,7 +381,7 @@ describe('command layer on the strategic map', () => {
       spec.tokens.find((t) => t.id === `hq-${team}`)!;
     const asA = buildStrategicScene(s, UI, 'A');
     expect(hq(asA, 'A').badge).toBe(`⚑2/${COMMAND.garrisonCap}`);
-    expect(hq(asA, 'B').badge).toBeUndefined(); // Bravo's garrison is far out of sight
+    expect(asA.tokens.some((token) => token.id === 'hq-B')).toBe(false); // The occluded HQ itself is hidden.
     const open = buildStrategicScene(s, UI, null);
     expect(hq(open, 'B').badge).toBe(`⚑0/${COMMAND.garrisonCap}`);
     // Selecting the garrison marks its HQ label.

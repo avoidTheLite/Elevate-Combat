@@ -10,6 +10,7 @@
 //       resumes unchanged; loading never starts or replays a campaign event.
 //   4 — Optional commander participation, anchored deployment and facing provenance.
 //       Earlier states remain exact; loading never opts a legacy game into this profile.
+//   5 — Per-player last observed MainHex ownership. Older saves learn only what is currently observable.
 
 import type { World } from './grid.ts';
 import { GRID_LIMITS, buildWorld } from './grid.ts';
@@ -29,6 +30,7 @@ import {
   isPresent,
   newId,
   setHolderPos,
+  refreshOwnershipKnowledge,
 } from './strategic.ts';
 import { resolveBattleObjective } from './tactical.ts';
 import type { Army, Battle, GameSettings, GameState, Team } from './types.ts';
@@ -39,8 +41,8 @@ import {
 } from './foundation/campaign.ts';
 
 export const SAVE_FORMAT = 'iron-ridge-save';
-/** Additive schema 4 prevents older builds from silently ignoring participant provenance. */
-export const SAVE_SCHEMA = 4;
+/** Older readers must not silently discard retained ownership knowledge. */
+export const SAVE_SCHEMA = 5;
 
 export interface SaveFile {
   format: typeof SAVE_FORMAT;
@@ -205,6 +207,12 @@ export function migrateSave(raw: unknown, fromSchema = 1): MigrateResult {
     // Schemas 3/4 extend validation and the envelope only. In particular, absent
     // infrastructure/engagement stays absent: do not initialize turns, budgets,
     // forts, participation, or resource receipts here.
+    if (state.ownershipKnowledge === undefined && validateGameState(state).length === 0) {
+      refreshOwnershipKnowledge(state);
+      notes.push(
+        'Initialized ownership knowledge from currently observable MainHexes; unseen ownership remains unknown',
+      );
+    }
     return { ok: true, state, notes };
   } catch (e) {
     return {
@@ -419,6 +427,25 @@ export function validateGameState(raw: unknown): string[] {
         else {
           if (h.owner !== null && !isTeam(h.owner)) err(`hexes.${m.key}.owner: invalid`);
           if (!isInt(h.warning) || h.warning < 0) err(`hexes.${m.key}.warning: invalid`);
+        }
+      }
+    }
+
+    if (g.ownershipKnowledge !== undefined) {
+      const knowledge = g.ownershipKnowledge;
+      if (!isObj(knowledge) || Object.keys(knowledge).some((team) => !isTeam(team)))
+        err('ownershipKnowledge: must contain only player maps A and B');
+      if (isObj(knowledge)) {
+        for (const team of TEAMS) {
+          const observed = knowledge[team];
+          if (!isObj(observed)) err(`ownershipKnowledge.${team}: must be a MainHex ownership map`);
+          else
+            for (const [key, owner] of Object.entries(observed)) {
+              if (world && !isMain(key))
+                err(`ownershipKnowledge.${team}.${key}: not a MainHex on this map`);
+              if (owner !== null && !isTeam(owner))
+                err(`ownershipKnowledge.${team}.${key}: owner must be null, A or B`);
+            }
         }
       }
     }

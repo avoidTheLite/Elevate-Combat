@@ -30,6 +30,9 @@ import { Panel } from '../ui/Panel.tsx';
 import { SaveMenu } from '../game/SaveMenu.tsx';
 import { FoundationResolution } from '../game/FoundationResolution.tsx';
 import { FoundationDemoGuide } from '../game/FoundationDemoGuide.tsx';
+import { useMapControls } from '../../controls/useMapControls.ts';
+import { MapCallouts, MapControlPreferences } from '../../controls/MapCallouts.tsx';
+import { isMovementDemo } from '../../controls/demoScenario.ts';
 
 function teamClass(t: Team): string {
   return t === 'A' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--secondary))]';
@@ -43,9 +46,10 @@ export function GameScreen(): React.ReactElement {
   const aiSpeed = useGameStore((s) => s.aiSpeed);
   const fx = useGameStore((s) => s.fx);
   const quitPrompt = useGameStore((s) => s.quitPrompt);
-  const { setUi, aiTick, clearError, dismissHandoff, requestQuit, setAiSpeed } =
-    useGameStore.getState();
+  const { aiTick, clearError, dismissHandoff, requestQuit, setAiSpeed } = useGameStore.getState();
   const [help, setHelp] = useState(false);
+  const [controlSettings, setControlSettings] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const view = viewTeam(game);
   const acting = actingTeam(game);
@@ -53,6 +57,11 @@ export function GameScreen(): React.ReactElement {
   const humanActing = !aiTurn && acting !== null && game.settings.controllers[acting] === 'human';
   const inBattle = game.phase === 'battle' && game.battle !== null;
   const foundationPending = foundationHasPending(game);
+  const controls = useMapControls(game, ui, !!handoff || foundationPending || quitPrompt);
+  const sceneUi = useMemo(
+    () => ({ ...ui, hoverCell: controls.previewKey }),
+    [ui, controls.previewKey],
+  );
 
   // AI pacing loop.
   useEffect(() => {
@@ -87,14 +96,25 @@ export function GameScreen(): React.ReactElement {
     return campaignSupplyView(game, game.active)?.nodes[site.nodeId]?.activeRoute?.path ?? [];
   }, [game, inBattle, ui.selectedMain, ui.selectedArmy]);
   const tactical = useMemo(
-    () => (inBattle ? buildTacticalScene(game, ui, view, overlay) : null),
-    [game, ui, view, inBattle, overlay],
+    () => (inBattle ? buildTacticalScene(game, sceneUi, view, overlay) : null),
+    [game, sceneUi, view, inBattle, overlay],
   );
   const strategic = useMemo(
-    () => (!inBattle ? buildStrategicScene(game, ui, view, overlay, inspectedSupplyRoute) : null),
-    [game, ui, view, inBattle, overlay, inspectedSupplyRoute],
+    () =>
+      !inBattle ? buildStrategicScene(game, sceneUi, view, overlay, inspectedSupplyRoute) : null,
+    [game, sceneUi, view, inBattle, overlay, inspectedSupplyRoute],
   );
-  const spec = tactical?.spec ?? strategic!;
+  const rawSpec = tactical?.spec ?? strategic!;
+  const spec = useMemo(
+    () => ({
+      ...rawSpec,
+      path:
+        controls.previewKind === 'attack' ? [] : (controls.pending?.command.path ?? rawSpec.path),
+      trajectory: controls.previewKind === 'move' ? null : rawSpec.trajectory,
+      fireView: controls.previewKind === 'move' ? null : rawSpec.fireView,
+    }),
+    [rawSpec, controls.previewKind, controls.pending],
+  );
 
   const seenIds = useMemo(() => {
     if (!tactical || !view || !game.battle) return null;
@@ -112,7 +132,7 @@ export function GameScreen(): React.ReactElement {
     return seenHolders(game, view).find((a) => a.id === ui.selectedArmy)?.pos ?? null;
   }, [inBattle, game, view, ui.selectedUnit, ui.deployPick, ui.selectedArmy]);
 
-  const onHover = useCallback((key: string | null) => setUi({ hoverCell: key }), [setUi]);
+  const onHover = controls.onHover;
 
   const onClick = useCallback((key: string, button: number) => {
     const s = useGameStore.getState();
@@ -127,13 +147,14 @@ export function GameScreen(): React.ReactElement {
         selectedMain: null,
         deployPick: null,
         placingFort: false,
+        hoverCell: null,
       });
       return;
     }
     const v = viewTeam(g);
     const act = actingTeam(g);
     const human = act !== null && !isAiTurn(g) && g.settings.controllers[act] === 'human';
-    if (foundationHasPending(g)) return;
+    if (foundationHasPending(g) || s.handoff || s.quitPrompt) return;
 
     if (g.phase === 'strategic' || g.phase === 'battle-pending' || g.phase === 'over') {
       strategicClick(key);
@@ -229,6 +250,19 @@ export function GameScreen(): React.ReactElement {
               <option value={60}>fast</option>
             </select>
           </label>
+          <Button size="sm" variant="ghost" onClick={() => setControlSettings((open) => !open)}>
+            DEMO CONTROLS
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="md:hidden"
+            aria-expanded={detailsOpen}
+            aria-controls="game-details"
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            {detailsOpen ? 'HIDE DETAILS' : 'DETAILS'}
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setHelp(true)}>
             ? HELP
           </Button>
@@ -238,17 +272,68 @@ export function GameScreen(): React.ReactElement {
         </div>
       </header>
       <FoundationDemoGuide game={game} />
+      {isMovementDemo(game) && (
+        <div className="px-3 py-2 text-[10px] border-b border-[hsl(var(--border-bright))] flex items-center gap-2 flex-wrap">
+          <span>
+            PREPARED INITIAL TACTICAL SANDBOX · Initial fixture awarded no combat outcome. Proposed
+            controls.
+          </span>
+          {(['ww2_rifle_infantry', 'ww2_engineer', 'ww2_machine_gun'] as const).map((typeId) => {
+            const unit = game.battle?.units.find(
+              (u) => u.team === game.battle?.active && u.typeId === typeId && u.hp > 0,
+            );
+            return unit ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                key={typeId}
+                onClick={() =>
+                  useGameStore.getState().setUi({ selectedUnit: unit.id, hoverCell: null })
+                }
+              >
+                SELECT {unitType(typeId).short}
+              </Button>
+            ) : null;
+          })}
+        </div>
+      )}
 
       {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-        <main className="relative shrink-0 h-[48dvh] md:h-auto md:flex-1 md:shrink">
+        <main className="relative flex-1 min-h-0">
           <SceneView
             spec={spec}
             fx={fx}
             selectedKey={selectedKey}
+            focusKey={isMovementDemo(game) ? selectedKey : null}
             onHover={onHover}
             onClick={onClick}
-          />
+            commandControls={{
+              enabled: controls.enabled,
+              selectionScope: controls.selectionScope,
+              selectedOriginKey: controls.enabled ? selectedKey : null,
+              protectedKeys: spec.tokens
+                .filter((token) => token.key !== selectedKey)
+                .map((token) => token.key),
+              trackedKeys: [
+                ...new Set(
+                  [
+                    selectedKey,
+                    controls.targetKey,
+                    controls.pending?.command.target,
+                    ...spec.tokens.map((token) => token.key),
+                  ].filter((key): key is string => !!key),
+                ),
+              ],
+              onInteraction: (intent) => {
+                if (!controls.interact(intent) && (intent.targetKey || intent.button === 2))
+                  onClick(intent.targetKey ?? '', intent.button);
+              },
+              onLayout: controls.setAnchors,
+            }}
+          >
+            <MapCallouts controls={controls} />
+          </SceneView>
           <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && game.phase !== 'battle-pending' && (
             <div
@@ -259,7 +344,10 @@ export function GameScreen(): React.ReactElement {
             </div>
           )}
         </main>
-        <aside className="flex-1 min-h-0 md:flex-none md:w-[320px] overflow-hidden border-t md:border-t-0 md:border-l border-[hsl(var(--border-bright))]">
+        <aside
+          id="game-details"
+          className={`${detailsOpen ? 'block' : 'hidden'} md:block flex-none h-[42dvh] md:h-auto md:w-[320px] min-h-0 overflow-hidden border-t md:border-t-0 md:border-l border-[hsl(var(--border-bright))]`}
+        >
           {tactical ? (
             <TacticalSidebar
               game={game}
@@ -300,6 +388,9 @@ export function GameScreen(): React.ReactElement {
             I AM {TEAM_NAME[handoff]} — CONTINUE
           </Button>
         </Overlay>
+      )}
+      {controlSettings && (
+        <MapControlPreferences controls={controls} onClose={() => setControlSettings(false)} />
       )}
       {help && <Help onClose={() => setHelp(false)} />}
       {quitPrompt && <QuitDialog />}

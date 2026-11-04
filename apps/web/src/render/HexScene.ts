@@ -35,6 +35,21 @@ import {
 import { FORT_LEVEL_HEIGHT, buildHqWall, fortMaterial, fortRingGeometry } from './fortModels.ts';
 import type { CellSpec, SceneSpec, TokenSpec } from './spec.ts';
 import { TEAM_COLOR, topY } from './spec.ts';
+import type { SceneCommandControls, SceneInteraction, SceneTileAnchor } from '../controls/types.ts';
+import type { PointerGesture, PointerSample } from '../controls/gestures.ts';
+import {
+  advancePointerGesture,
+  beginPointerGesture,
+  cancelPointerGesture,
+  finishPointerGesture,
+  isInteractiveKeyTarget,
+} from '../controls/gestures.ts';
+import {
+  projectedTileAnchor,
+  sameTileLayout,
+  selectedDragOriginContains,
+} from '../controls/projection.ts';
+import type { ScreenPoint } from '../controls/projection.ts';
 
 const ISO_ELEVATION = Math.atan(1 / Math.SQRT2); // 35.264°
 const STATUS_COLOR = { clear: 0x33ff88, marginal: 0xffb020, blocked: 0xff3344 } as const;
@@ -65,6 +80,8 @@ interface TokenObj {
   labelEl: HTMLDivElement;
   target: THREE.Vector3;
   kindSig: string;
+  /** Actual token cell, used only to protect unit bodies from expanded drag origins. */
+  cellKey: string;
   /** Cell a click on this token's model selects (commander clusters, HQ buildings). */
   pickKey?: string;
   /** Part of the body that stays planted while the rest bobs (the HQ wall). */
@@ -102,6 +119,8 @@ export class HexScene {
   private persp: THREE.PerspectiveCamera;
   private container: HTMLElement;
   private handlers: SceneHandlers = {};
+  private commandControls: SceneCommandControls | null = null;
+  private lastLayout: SceneTileAnchor[] = [];
 
   private terrainId = '';
   private cells: CellSpec[] = [];
@@ -136,7 +155,11 @@ export class HexScene {
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private pointerDirty = false;
-  private dragging: { x: number; y: number; button: number; moved: boolean } | null = null;
+  private dragging: PointerGesture | null = null;
+  private activePointers = new Map<number, ScreenPoint>();
+  private multiPointer = false;
+  private multiPanCenter: ScreenPoint | null = null;
+  private lastPointerType = 'mouse';
   private hoverKey: string | null = null;
   private lastTime = performance.now();
   private elapsed = 0;
@@ -208,6 +231,21 @@ export class HexScene {
     this.handlers = h;
   }
 
+  setCommandControls(controls?: SceneCommandControls): void {
+    const next = controls && controls.enabled !== false ? controls : null;
+    if (
+      next?.selectedOriginKey !== this.commandControls?.selectedOriginKey ||
+      next?.selectionScope !== this.commandControls?.selectionScope ||
+      !!next !== !!this.commandControls
+    )
+      this.cancelGesture();
+    if (!next && this.lastLayout.length) {
+      this.commandControls?.onLayout([]);
+      this.lastLayout = [];
+    }
+    this.commandControls = next;
+  }
+
   // ── Public API ──
 
   update(spec: SceneSpec, selectedKey: string | null): void {
@@ -215,6 +253,7 @@ export class HexScene {
     const fresh = spec.terrainId !== this.terrainId;
     this.cells = spec.cells;
     if (fresh) {
+      this.cancelAllPointers();
       this.clearEffects();
       // A new map: tokens that don't carry over are removed now rather than lingering.
       const carried = new Set(spec.tokens.map((x) => x.id));
@@ -266,9 +305,74 @@ export class HexScene {
   projectKey(key: string): { x: number; y: number } | null {
     if (!this.cellIndex.has(key)) return null;
     this.world.updateMatrixWorld(true);
+    this.activeCamera().updateMatrixWorld();
     const p = this.cellPos(key).applyMatrix4(this.world.matrixWorld).project(this.activeCamera());
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+  }
+
+  /** Project a tile's actual top-face polygon into canvas-local CSS pixels. */
+  private projectTile(key: string): { center: ScreenPoint; corners: ScreenPoint[] } | null {
+    if (!this.cellIndex.has(key)) return null;
+    this.world.updateMatrixWorld(true);
+    this.activeCamera().updateMatrixWorld();
+    const origin = this.cellPos(key);
+    const project = (p: THREE.Vector3): ScreenPoint | null => {
+      const screen = p.applyMatrix4(this.world.matrixWorld).project(this.activeCamera());
+      if (screen.z < -1 || screen.z > 1) return null;
+      return {
+        x: ((screen.x + 1) / 2) * this.container.clientWidth,
+        y: ((1 - screen.y) / 2) * this.container.clientHeight,
+      };
+    };
+    const center = project(origin.clone());
+    const corners = Array.from({ length: 6 }, (_, direction) => {
+      const [corner] = edgeCorners(direction, 0.985);
+      return project(origin.clone().add(new THREE.Vector3(corner.x, 0, corner.z)));
+    });
+    if (!center || corners.some((corner) => !corner)) return null;
+    return { center, corners: corners as ScreenPoint[] };
+  }
+
+  private updateCommandLayout(): void {
+    const controls = this.commandControls;
+    if (!controls) return;
+    const layout: SceneTileAnchor[] = [];
+    for (const key of new Set(controls.trackedKeys)) {
+      const tile = this.projectTile(key);
+      const anchor = tile && projectedTileAnchor(key, tile.center, tile.corners);
+      if (anchor) layout.push(anchor);
+    }
+    if (!sameTileLayout(this.lastLayout, layout)) {
+      this.lastLayout = layout;
+      controls.onLayout(layout);
+    }
+  }
+
+  private selectedDragOrigin(e: PointerEvent, hitKey: string | null): string | null {
+    const controls = this.commandControls;
+    const key = controls?.selectedOriginKey;
+    if (!controls || !key || e.button !== 0) return null;
+    const tile = this.projectTile(key);
+    if (!tile) return null;
+    const anchor = projectedTileAnchor(key, tile.center, tile.corners);
+    if (!anchor || anchor.width <= 0) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const neighborPolygons = DIRECTIONS.flatMap((_, direction) => {
+      const adjacent = this.projectTile(hexKey(neighbor(parseKey(key), direction)));
+      return adjacent ? [adjacent.corners] : [];
+    });
+    return selectedDragOriginContains({
+      selectedKey: key,
+      hitKey: this.pickToken(true) ?? hitKey,
+      protectedKeys: controls.protectedKeys,
+      pointer: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      selectedPolygon: tile.corners,
+      neighborPolygons,
+      visibleTilesAcross: rect.width / anchor.width,
+    })
+      ? key
+      : null;
   }
 
   rotate(steps: number): void {
@@ -337,6 +441,7 @@ export class HexScene {
   }
 
   dispose(): void {
+    this.cancelAllPointers();
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     this.resizeObs.disconnect();
@@ -678,7 +783,15 @@ export class HexScene {
         const label = new CSS2DObject(labelEl);
         group.add(label);
         group.position.copy(pos);
-        obj = { group, body: new THREE.Group(), label, labelEl, target: pos.clone(), kindSig: '' };
+        obj = {
+          group,
+          body: new THREE.Group(),
+          label,
+          labelEl,
+          target: pos.clone(),
+          kindSig: '',
+          cellKey: t.key,
+        };
         this.tokenGroup.add(group);
         this.tokens.set(t.id, obj);
       }
@@ -692,6 +805,7 @@ export class HexScene {
       }
       obj.target.copy(pos);
       obj.pickKey = t.kind === 'army' || t.kind === 'hq' || t.stationed ? t.key : undefined;
+      obj.cellKey = t.key;
       const s = t.scale ?? 1;
       const labelY =
         t.army || t.model ? modelTop(obj.body) + 0.18 : (t.kind === 'hq' ? 1.6 : 1.25) * s;
@@ -846,6 +960,7 @@ export class HexScene {
     this.lastTime = now;
     this.elapsed += dt;
     this.updateCamera(dt);
+    this.updateCommandLayout();
     const t = this.elapsed;
     for (const [id, obj] of this.tokens) {
       obj.group.position.lerp(obj.target, Math.min(1, dt * 10));
@@ -892,15 +1007,21 @@ export class HexScene {
    * even when the ray would reach the ground on a cell behind the model. Only
    * solid meshes of models flagged `pickable` count (not glows, labels or walls).
    */
-  private pickToken(): string | null {
+  private pickToken(dragOriginOnly = false): string | null {
     const roots: THREE.Object3D[] = [];
     const keyOf = new Map<THREE.Object3D, string>();
     for (const obj of this.tokens.values()) {
-      if (!obj.pickKey || obj.leftAt !== undefined) continue;
+      const key = dragOriginOnly ? obj.cellKey : obj.pickKey;
+      if (!key || obj.leftAt !== undefined) continue;
+      if (dragOriginOnly) {
+        roots.push(obj.body);
+        keyOf.set(obj.body, key);
+        continue;
+      }
       obj.body.traverse((o) => {
         if (o.userData.pickable) {
           roots.push(o);
-          keyOf.set(o, obj.pickKey!);
+          keyOf.set(o, key);
         }
       });
     }
@@ -938,8 +1059,11 @@ export class HexScene {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    const tag = (e.target as HTMLElement | null)?.tagName;
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    if (e.key === 'Escape') {
+      this.cancelAllPointers();
+      return;
+    }
+    if (isInteractiveKeyTarget(e.target)) return;
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
       this.keys.add(k);
@@ -959,14 +1083,120 @@ export class HexScene {
 
   private onBlur = (): void => {
     this.keys.clear();
+    this.cancelAllPointers();
   };
+
+  private cancelAllPointers(): void {
+    const pointerIds = [...this.activePointers.keys()];
+    this.cancelGesture();
+    this.activePointers.clear();
+    this.multiPointer = false;
+    this.multiPanCenter = null;
+    const el = this.renderer.domElement;
+    for (const id of pointerIds) {
+      if (el.hasPointerCapture(id)) el.releasePointerCapture(id);
+    }
+  }
+
+  private emitInteraction(interaction: SceneInteraction): void {
+    if (this.commandControls) this.commandControls.onInteraction(interaction);
+    else if (interaction.source === 'click' && (interaction.targetKey || interaction.button === 2))
+      this.handlers.onClick?.(interaction.targetKey ?? '', interaction.button);
+  }
+
+  private cancelGesture(): void {
+    const cancelled = cancelPointerGesture(this.dragging);
+    this.dragging = null;
+    if (cancelled) this.emitInteraction(cancelled);
+  }
+
+  private pointerSample(e: PointerEvent): PointerSample {
+    this.setPointer(e);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const inside =
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom;
+    return {
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      button: e.button,
+      pointerType: e.pointerType || 'mouse',
+      key: inside ? this.pickKey() : null,
+    };
+  }
+
+  private panPixels(dx: number, dy: number): void {
+    const upp = this.viewSize / Math.max(1, this.container.clientHeight);
+    const right = new THREE.Vector3(Math.cos(this.azimuth), 0, -Math.sin(this.azimuth));
+    const fwd = new THREE.Vector3(-Math.sin(this.azimuth), 0, -Math.cos(this.azimuth));
+    this.targetGoal.addScaledVector(right, -dx * upp);
+    this.targetGoal.addScaledVector(fwd, (dy * upp) / Math.sin(ISO_ELEVATION));
+    this.target.copy(this.targetGoal);
+  }
+
+  private pointerCenter(): ScreenPoint | null {
+    const points = [...this.activePointers.values()];
+    if (points.length < 2) return null;
+    return {
+      x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+      y: points.reduce((sum, p) => sum + p.y, 0) / points.length,
+    };
+  }
+
+  private advanceGesture(sample: PointerSample): void {
+    if (!this.dragging) return;
+    const next = advancePointerGesture(this.dragging, sample);
+    this.dragging = next.gesture;
+    if (next.pan) this.panPixels(next.pan.dx, next.pan.dy);
+    if (next.interaction) this.emitInteraction(next.interaction);
+  }
 
   private bindInput(): void {
     const el = this.renderer.domElement;
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.addEventListener('contextmenu', (e) => {
+      if (!this.commandControls) {
+        e.preventDefault(); // Existing right-click cancel in the classic controls.
+        return;
+      }
+      // Use the browser's own context gesture/timing. No synthetic long-press
+      // threshold claims to mirror the user's OS accessibility preferences.
+      const pointerType = 'pointerType' in e ? String(e.pointerType) : '';
+      const keyboard =
+        e.button === -1 ||
+        (!pointerType &&
+          (('pointerId' in e && e.pointerId === -1) || (e.clientX === 0 && e.clientY === 0)));
+      if (!keyboard) this.setPointer(e);
+      const key = keyboard
+        ? (this.commandControls.selectedOriginKey ?? this.hoverKey)
+        : this.pickKey();
+      if (!key) return;
+      // Desktop right press/release remains cancel; dragging it remains pan.
+      // Its native contextmenu must not reopen a callout after cancellation.
+      if (
+        !keyboard &&
+        (pointerType === 'mouse' || (!pointerType && this.lastPointerType === 'mouse'))
+      ) {
+        e.preventDefault();
+        return;
+      }
+      // Native contextmenu can precede pointerup or pointercancel. Consume that
+      // press without a second click or a drag-cancel erasing the preview.
+      this.dragging = null;
+      this.commandControls.onInteraction({
+        source: 'context',
+        originKey: null,
+        targetKey: key,
+        button: 2,
+        pointerType: keyboard ? 'keyboard' : pointerType || 'mouse',
+      });
+      e.preventDefault();
+    });
     el.addEventListener(
       'wheel',
       (e) => {
@@ -976,39 +1206,64 @@ export class HexScene {
       { passive: false },
     );
     el.addEventListener('pointerdown', (e) => {
-      this.dragging = { x: e.clientX, y: e.clientY, button: e.button, moved: false };
-      el.setPointerCapture(e.pointerId);
+      if (![0, 1, 2].includes(e.button)) return;
+      this.lastPointerType = e.pointerType || 'mouse';
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* Detached synthetic pointer. */
+      }
+      if (this.activePointers.size > 1 || this.multiPointer) {
+        this.cancelGesture();
+        this.multiPointer = true;
+        this.multiPanCenter = this.pointerCenter();
+        return;
+      }
+      const sample = this.pointerSample(e);
+      this.dragging = beginPointerGesture(sample, this.selectedDragOrigin(e, sample.key));
     });
     el.addEventListener('pointermove', (e) => {
       this.setPointer(e);
-      const d = this.dragging;
-      if (!d) return;
-      const dx = e.clientX - d.x;
-      const dy = e.clientY - d.y;
-      if (!d.moved && Math.hypot(dx, dy) > 5) d.moved = true;
-      if (d.moved && (d.button === 1 || d.button === 2 || d.button === 0)) {
-        // Drag to pan (world units per pixel from the ortho frustum).
-        const upp = this.viewSize / Math.max(1, this.container.clientHeight);
-        const right = new THREE.Vector3(Math.cos(this.azimuth), 0, -Math.sin(this.azimuth));
-        const fwd = new THREE.Vector3(-Math.sin(this.azimuth), 0, -Math.cos(this.azimuth));
-        this.targetGoal.addScaledVector(right, -dx * upp);
-        this.targetGoal.addScaledVector(fwd, (dy * upp) / Math.sin(ISO_ELEVATION));
-        this.target.copy(this.targetGoal);
-        d.x = e.clientX;
-        d.y = e.clientY;
+      if (this.activePointers.has(e.pointerId)) {
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       }
+      if (this.multiPointer) {
+        const center = this.pointerCenter();
+        if (center && this.multiPanCenter)
+          this.panPixels(center.x - this.multiPanCenter.x, center.y - this.multiPanCenter.y);
+        this.multiPanCenter = center;
+        return;
+      }
+      this.advanceGesture(this.pointerSample(e));
     });
     el.addEventListener('pointerup', (e) => {
+      if (!this.activePointers.has(e.pointerId) && this.dragging?.pointerId !== e.pointerId) return;
+      const sample = this.pointerSample(e);
+      this.advanceGesture(sample);
       const d = this.dragging;
       this.dragging = null;
-      el.releasePointerCapture(e.pointerId);
-      if (d && !d.moved) {
-        this.setPointer(e);
-        const key = this.pickKey();
-        if (key) this.handlers.onClick?.(key, e.button);
-        else if (e.button === 2) this.handlers.onClick?.('', 2);
+      this.activePointers.delete(e.pointerId);
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      if (!this.activePointers.size) {
+        this.multiPointer = false;
+        this.multiPanCenter = null;
+      }
+      if (d) {
+        const interaction = finishPointerGesture(d, sample);
+        if (interaction) this.emitInteraction(interaction);
       }
     });
+    const cancel = (e: PointerEvent): void => {
+      this.activePointers.delete(e.pointerId);
+      if (this.dragging?.pointerId === e.pointerId) this.cancelGesture();
+      if (!this.activePointers.size) {
+        this.multiPointer = false;
+        this.multiPanCenter = null;
+      }
+    };
+    el.addEventListener('pointercancel', cancel);
+    el.addEventListener('lostpointercapture', cancel);
     el.addEventListener('pointerleave', () => {
       this.hoverKey = null;
       this.hoverRing.visible = false;

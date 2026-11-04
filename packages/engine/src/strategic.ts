@@ -296,6 +296,7 @@ function createGameUnderRules(input: GameSettings): GameState {
   initializeCampaignFoundation(state);
   // Income / warning clocks tick at the start of each player's turn — including turn 1.
   beginTurn(state, 'A');
+  refreshOwnershipKnowledge(state);
   return state;
 }
 
@@ -326,12 +327,90 @@ export function hexFortLevel(state: GameState, world: World, key: HexKey): numbe
  * the tactical LOS ray (eye `sightEye`) not blocked by the height map.
  */
 export function holderSees(world: World, terrain: Terrain, eye: Army, target: Army): boolean {
+  return holderSeesCell(world, terrain, eye, target.pos);
+}
+
+function holderSeesCell(world: World, terrain: Terrain, eye: Army, target: HexKey): boolean {
   const a = world.subByKey.get(eye.pos);
-  const b = world.subByKey.get(target.pos);
+  const b = world.subByKey.get(target);
   if (!a || !b) return false;
   if (hexDistance(a.hex, b.hex) > COMMAND.sightRange(world.config.subRadius)) return false;
   const heightOf = (k: string): number => heightAt(world, terrain, k);
   return lineOfSight(a.hex, b.hex, heightOf, COMMAND.sightEye).status !== 'blocked';
+}
+
+/** The same point-visibility predicate serves holder spotting and map knowledge. */
+function strategicSight(state: GameState, team: Team): (key: HexKey) => boolean {
+  const { world, terrain } = worldOf(state);
+  if (!state.settings.fog) return (key) => world.subByKey.has(key);
+  const territoryVision = new Set<HexKey>();
+  for (const [key, hex] of Object.entries(state.hexes)) {
+    if (hex.owner !== team) continue;
+    territoryVision.add(key);
+    for (const neighbor of mainNeighbors(world, key)) territoryVision.add(neighbor.key);
+  }
+  const eyes = state.armies.filter((holder) => holder.team === team && isPresent(holder));
+  return (key) => {
+    const cell = world.subByKey.get(key);
+    return (
+      !!cell &&
+      (territoryVision.has(cell.main) ||
+        eyes.some((eye) => holderSeesCell(world, terrain, eye, key)))
+    );
+  };
+}
+
+/** Currently observable strategic tiles. This is pure and does not remember units or terrain. */
+export function strategicVisibleCells(state: GameState, team: Team): Set<HexKey> {
+  const { world } = worldOf(state);
+  const sees = strategicSight(state, team);
+  return new Set(world.subs.filter((cell) => sees(cell.key)).map((cell) => cell.key));
+}
+
+/** One observable SubHex is enough to learn its MainHex's territorial owner. */
+export function strategicVisibleMains(state: GameState, team: Team): Set<HexKey> {
+  const { world } = worldOf(state);
+  const sees = strategicSight(state, team);
+  return new Set(world.mains.filter((main) => main.subKeys.some(sees)).map((main) => main.key));
+}
+
+/** Commit observations only; unobserved ownership remains exactly as last seen. */
+export function refreshOwnershipKnowledge(state: GameState, previous?: GameState): void {
+  // Most tactical orders and bookkeeping change no sight inputs. Avoid a map
+  // scan and LOS rays for every tactical action when observations cannot change.
+  if (previous?.ownershipKnowledge && sameOwnershipSightInputs(previous, state)) return;
+  state.ownershipKnowledge ??= { A: {}, B: {} };
+  for (const team of ['A', 'B'] as const) {
+    for (const main of strategicVisibleMains(state, team))
+      state.ownershipKnowledge[team][main] = state.hexes[main]!.owner;
+  }
+}
+
+function sameOwnershipSightInputs(before: GameState, after: GameState): boolean {
+  const a = before.settings;
+  const b = after.settings;
+  if (
+    a.fog !== b.fog ||
+    a.seed !== b.seed ||
+    a.grid.mainCols !== b.grid.mainCols ||
+    a.grid.mainRows !== b.grid.mainRows ||
+    a.grid.subRadius !== b.grid.subRadius
+  )
+    return false;
+  const owners = Object.entries(after.hexes);
+  if (
+    owners.length !== Object.keys(before.hexes).length ||
+    owners.some(([key, hex]) => before.hexes[key]?.owner !== hex.owner)
+  )
+    return false;
+  const oldEyes = before.armies.filter(isPresent);
+  const newEyes = after.armies.filter(isPresent);
+  return (
+    oldEyes.length === newEyes.length &&
+    oldEyes.every(
+      (eye, index) => eye.team === newEyes[index]!.team && eye.pos === newEyes[index]!.pos,
+    )
+  );
 }
 
 /**
@@ -342,17 +421,8 @@ export function holderSees(world: World, terrain: Terrain, eye: Army, target: Ar
 export function visibleArmies(state: GameState, team: Team): Army[] {
   const present = state.armies.filter(isPresent);
   if (!state.settings.fog) return present;
-  const { world, terrain } = worldOf(state);
-  const owned = Object.entries(state.hexes)
-    .filter(([, v]) => v.owner === team)
-    .map(([k]) => k);
-  const eyes = present.filter((a) => a.team === team);
-  return present.filter(
-    (a) =>
-      a.team === team ||
-      owned.some((e) => mainDistance(world, e, a.at) <= 1) ||
-      eyes.some((e) => holderSees(world, terrain, e, a)),
-  );
+  const sees = strategicSight(state, team);
+  return present.filter((a) => a.team === team || sees(a.pos));
 }
 
 // ── Automatic-category fortification (strategic spend) ──
