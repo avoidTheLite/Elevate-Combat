@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "323011affd0dff4ab0040f64c6b186fc1c650bd6",
+  "implementation_sha": "15e622217de7d8fa77b86b0ba1924e689d8d1778",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -27,6 +27,111 @@
         {
           "path": "packages/engine/src/rules.test.ts",
           "name": "GAMES-ELEVATE-WORLD-UC-002: line of sight",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations uses the existing holder LOS/range and territory adjacency for actual tile visibility",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations learns a MainHex from one visible edge tile without requiring its center or an enemy unit",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations retains the prior owner during hidden changes and updates both players only after resighting",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations keeps unknown distinct from observed neutral, and initializes old saves from current visibility only",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations does not mutate knowledge for pure queries, rejected orders, or pending battle cancellation",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations casts no LOS rays when a commit changes no strategic sight or ownership inputs",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations rejects malformed ownership knowledge without repairing it: {\"A\":{},\"B\":{},\"C\":{}}",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations rejects malformed ownership knowledge without repairing it: {\"A\":{}}",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations rejects malformed ownership knowledge without repairing it: {\"A\":{\"999,999\":\"A\"},\"B\":{}}",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations rejects malformed ownership knowledge without repairing it: {\"A\":{\"0,0\":\"UNKNOWN\"},\"B\":{}}",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "packages/engine/src/strategicVisibility.test.ts",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: strategic ownership observations rejects malformed ownership knowledge without repairing it: {\"A\":[],\"B\":{}}",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog does not enumerate hidden hostile buildings when only a MainHex edge is visible",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog retains legal activation of an observed neutral site without exposing other teams\u2019 work choices",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog hides wholly occluded damaged roads while keeping fog-off and omniscient inspection",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog hides a damaged road when even one cell of its path remains occluded",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog reuses tile visibility across hover rebuilds and invalidates it when an observer moves",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog renders unknown neutral and enemy ownership identically, including HQs and fortifications",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog retains observed territory color and frontiers without consulting unseen neighboring ownership",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog shows last observed owner in the sidebar and hides current node owner, claims and buildings",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog does not expose the other human\u2019s current building allowances or supply network",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/strategicFog.test.tsx",
+          "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog leaves omniscient and fog-disabled inspection fully available",
           "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
         }
       ]
@@ -702,6 +807,56 @@
         {
           "path": "apps/web/src/controls/useMapControls.test.tsx",
           "name": "map command interaction lifecycle deliberate context survives native touch leave/scroll delay but Escape cancels without spending",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions blind attack details cannot distinguish an unobserved defender from empty ground",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions blind sidebar hides target-dependent statistics but fog-off remains omniscient",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions blind Help, hover titles and accessibility descriptions expose the same safe details",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions a hovered action survives pointer leave while keyboard focus remains inside",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions a hovered action survives focus leaving until the pointer leaves as well",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/review.controls.test.tsx",
+          "name": "PR18 review information and interaction regressions camera anchors do not rebuild command contexts, reachability or cloned actions",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings Escape cancels mouse drag ownership before later motion and release can restore a preview",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings Escape cancels touch drag ownership before later motion and release can restore a preview",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings Escape from a focused control cancels an unreleased press without selecting on release",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "real scene pointer bindings Escape releases both touch captures and stops an active two-finger pan",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
