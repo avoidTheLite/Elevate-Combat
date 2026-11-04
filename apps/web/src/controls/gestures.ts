@@ -104,7 +104,7 @@ export function isInteractiveKeyTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
     !!target.closest(
-      'input, select, textarea, button, a, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"]',
+      'input, select, textarea, button, a, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"]',
     )
   );
 }

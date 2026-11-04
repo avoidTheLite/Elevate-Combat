@@ -123,6 +123,10 @@ async function expected(p, action) {
     return r.state;
   }, action);
 }
+async function unitContext(p) {
+  await p.getByRole('button', { name: 'Selected tile actions', exact: true }).click();
+  await p.locator('[aria-label="Contextual unit actions"]').waitFor();
+}
 async function preferences(p, patch) {
   await p.getByRole('button', { name: 'DEMO CONTROLS', exact: true }).click();
   for (const [key, value] of Object.entries(patch))
@@ -140,22 +144,10 @@ try {
   );
   let id = await p.evaluate(() => window.__ironRidge.store.getState().ui.selectedUnit),
     unit = opening.battle.units.find((u) => u.id === id);
-  assert.equal(
-    await p
-      .locator('[aria-label="Selected unit actions"]')
-      .getByRole('button', { name: 'MOVE', exact: true })
-      .count(),
-    1,
-  );
-  assert.equal(
-    await p
-      .locator('[aria-label="Selected unit actions"]')
-      .getByRole('button', { name: 'ATTACK', exact: true })
-      .count(),
-    1,
-  );
-  await shot(p, '01-selected-actions');
-  check('Immediate selected actions and valid prepared initial scene');
+  assert.equal(await p.locator('.map-callout').count(), 0);
+  assert.equal(await p.locator('[data-callout-kind="selected"]').count(), 0);
+  await shot(p, '01-selection-without-popup');
+  check('Selection has no persistent popup; valid prepared initial scene');
   await click(p, unit.pos);
   assert.equal(await p.evaluate(() => window.__ironRidge.store.getState().ui.selectedUnit), null);
   assert.equal(await p.locator('.map-callout').count(), 0);
@@ -230,26 +222,29 @@ try {
   await p.close();
   const ops = await fresh();
   await ops.getByRole('button', { name: 'SELECT ENG', exact: true }).click();
+  await unitContext(ops);
   let eng = await ops.evaluate(() => window.__ironRidge.store.getState().ui.selectedUnit);
   const digExpected = await expected(ops, { type: 'dig', unitId: eng });
   await ops
-    .locator('[aria-label="Selected unit actions"]')
+    .locator('[aria-label="Contextual unit actions"]')
     .getByRole('button', { name: 'DIG IN', exact: true })
     .click();
   assert.deepEqual(await read(ops), digExpected);
   await shot(ops, '04-engineer-dig-in');
   check('Engineer contextual Dig In performs existing fortification action');
   await ops.getByRole('button', { name: 'SELECT MG', exact: true }).click();
+  await unitContext(ops);
   const mg = await ops.evaluate(() => window.__ironRidge.store.getState().ui.selectedUnit);
   let opExpected = await expected(ops, { type: 'setUp', unitId: mg });
   await ops
-    .locator('[aria-label="Selected unit actions"]')
+    .locator('[aria-label="Contextual unit actions"]')
     .getByRole('button', { name: 'SET UP', exact: true })
     .click();
   assert.deepEqual(await read(ops), opExpected);
+  await unitContext(ops);
   opExpected = await expected(ops, { type: 'packUp', unitId: mg });
   await ops
-    .locator('[aria-label="Selected unit actions"]')
+    .locator('[aria-label="Contextual unit actions"]')
     .getByRole('button', { name: 'PACK UP', exact: true })
     .click();
   assert.deepEqual(await read(ops), opExpected);
@@ -287,10 +282,11 @@ try {
   await r.getByRole('button', { name: 'CONFIRM MOVE', exact: true }).click();
   const shared = await read(r);
   assert.equal(shared.armies.find((a) => a.id === cmd.id).pos, hq.pos);
-  const choices = r.locator('[aria-label="Choose occupant on selected tile"]');
+  await unitContext(r);
+  const choices = r.locator('[aria-label="Choose occupant on contextual tile"]');
   assert.equal(await choices.getByRole('button').count(), 2);
   await shot(r, '06-real-shared-tile-disambiguation');
-  await choices.getByRole('button', { name: 'HQ GARRISON', exact: true }).click();
+  await choices.getByRole('button', { name: 'SELECT HQ GARRISON', exact: true }).click();
   assert.equal(await r.evaluate(() => window.__ironRidge.store.getState().ui.selectedArmy), hq.id);
   assert.deepEqual(await read(r), shared);
   check('Legal floating MOVE plus actual commander/garrison shared-cell disambiguation');

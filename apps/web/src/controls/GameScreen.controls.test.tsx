@@ -46,6 +46,20 @@ beforeEach(() => {
 });
 const click = (targetKey: string): void =>
   scene.commandControls.onInteraction({ source: 'click', originKey: null, targetKey, button: 0 });
+function openUnitContext(): void {
+  const game = store().game!;
+  const unit = game.battle?.units.find((u) => u.id === store().ui.selectedUnit);
+  const key = unit?.pos ?? game.armies.find((a) => a.id === store().ui.selectedArmy)!.pos;
+  act(() =>
+    scene.commandControls.onInteraction({
+      source: 'context',
+      originKey: key,
+      targetKey: key,
+      button: 0,
+      pointerType: 'touch',
+    }),
+  );
+}
 function anchors(from: string, to: string): void {
   act(() =>
     scene.commandControls.onLayout([
@@ -56,6 +70,44 @@ function anchors(from: string, to: string): void {
 }
 
 describe('screen command artifacts', () => {
+  it('selection shows no persistent popup; a requested tile context retains unit actions', () => {
+    const mounted = render(<GameScreen />);
+    const before = store().game;
+    expect(store().ui.selectedUnit).not.toBeNull();
+    expect(mounted.container.querySelector('.map-callout')).toBeNull();
+    openUnitContext();
+    expect(screen.getByLabelText('Contextual unit actions')).toBeInTheDocument();
+    expect(mounted.container.querySelectorAll('.map-callout')).toHaveLength(1);
+    expect(mounted.container.querySelector('[data-callout-kind="selected"]')).toBeNull();
+    expect(store().game).toBe(before);
+    fireEvent.click(screen.getByRole('button', { name: 'DESELECT' }));
+    expect(mounted.container.querySelector('.map-callout')).toBeNull();
+    expect(store().game).toBe(before);
+  });
+
+  it('keeps preview explanations out of the default layout with accessible descriptions and optional help', () => {
+    render(<GameScreen />);
+    const before = store().game!;
+    const rifle = before.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
+    const target = [...reachable(contextFor(before), rifle).keys()].find(
+      (key) => key !== rifle.pos,
+    )!;
+    act(() => click(target));
+    const preview = screen.getByRole('dialog', { name: 'MOVE command preview' });
+    const confirm = within(preview).getByRole('button', { name: 'CONFIRM MOVE' });
+    expect(confirm).toHaveAccessibleDescription(/MP/);
+    expect(confirm).toHaveAttribute('title', expect.stringContaining('MP'));
+    const help = within(preview).getByText('? HELP');
+    expect(help.closest('details')).not.toHaveAttribute('open');
+    expect(
+      within(preview)
+        .getByText(/Movement preserves/, { selector: 'li' })
+        .closest('details'),
+    ).not.toHaveAttribute('open');
+    fireEvent.click(help);
+    expect(store().game).toBe(before);
+  });
+
   it.each([false, true])(
     'a successful strategic move follows the selected holder into its destination MainHex (QuickMove=%s)',
     (quickMove) => {
@@ -149,16 +201,20 @@ describe('screen command artifacts', () => {
     const target = before.battle!.units.find(
       (u) => u.team === 'B' && u.typeId === 'ww2_rifle_infantry',
     )!;
+    openUnitContext();
     fireEvent.click(
-      within(screen.getByLabelText('Selected unit actions')).getByRole('button', {
+      within(screen.getByLabelText('Contextual unit actions')).getByRole('button', {
         name: 'ATTACK',
       }),
     );
     act(() => click(moveKey));
     expect(store().game).toBe(before);
     expect(screen.queryByTestId('map-command-preview')).not.toBeInTheDocument();
+    openUnitContext();
     fireEvent.click(
-      within(screen.getByLabelText('Selected unit actions')).getByRole('button', { name: 'MOVE' }),
+      within(screen.getByLabelText('Contextual unit actions')).getByRole('button', {
+        name: 'MOVE',
+      }),
     );
     act(() => click(target.pos!));
     expect(store().game).toBe(before);
@@ -178,8 +234,11 @@ describe('screen command artifacts', () => {
     store().setUi({ selectedUnit: unit.id });
     render(<GameScreen />);
     const key = [...reachable(contextFor(game), unit).keys()].find((k) => k !== unit.pos)!;
+    openUnitContext();
     fireEvent.click(
-      within(screen.getByLabelText('Selected unit actions')).getByRole('button', { name: 'MOVE' }),
+      within(screen.getByLabelText('Contextual unit actions')).getByRole('button', {
+        name: 'MOVE',
+      }),
     );
     act(() => click(key));
     expect(scene.spec.path.at(-1)).toBe(key);

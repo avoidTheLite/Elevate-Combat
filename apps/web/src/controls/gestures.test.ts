@@ -123,7 +123,7 @@ describe('map pointer gesture routing', () => {
   });
 
   it('camera shortcuts yield to buttons, fields, links and inherited editable content', () => {
-    for (const tag of ['button', 'input', 'textarea', 'select', 'a']) {
+    for (const tag of ['button', 'input', 'textarea', 'select', 'a', 'summary']) {
       const node = document.createElement(tag);
       expect(isInteractiveKeyTarget(node)).toBe(true);
     }

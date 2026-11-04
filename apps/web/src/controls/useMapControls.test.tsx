@@ -38,6 +38,24 @@ function click(key: string): SceneInteraction {
 }
 
 describe('map command interaction lifecycle', () => {
+  it('native context selects and exposes a previously unselected unit without an automatic persistent card', () => {
+    const { result } = mount();
+    const before = store().game;
+    const unit = before!.battle!.units.find(
+      (u) => u.team === 'A' && u.id !== store().ui.selectedUnit,
+    )!;
+    expect(result.current.targetKey).toBeNull();
+    act(() =>
+      result.current.interact({ ...click(unit.pos!), source: 'context', pointerType: 'touch' }),
+    );
+    expect(store().ui.selectedUnit).toBe(unit.id);
+    expect(result.current.targetKey).toBe(unit.pos);
+    expect(store().game).toBe(before);
+    act(() => result.current.cancel());
+    expect(result.current.actor!.id).toBe(unit.id);
+    expect(result.current.targetKey).toBeNull();
+  });
+
   it('keeps a full preview on pointer leave and native context, then explicitly confirms once', () => {
     const { result } = mount();
     const key = moveKey();

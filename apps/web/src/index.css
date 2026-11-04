@@ -195,7 +195,7 @@ body {
   flex-direction: column;
   min-height: 0;
 }
-.map-callout [data-testid='map-command-preview'] > :not(.map-preview-details) {
+.map-callout [data-testid='map-command-preview'] > :not(.map-command-help) {
   flex-shrink: 0;
 }
 .map-callout-buttons {
@@ -310,5 +310,33 @@ body {
   .map-callout {
     animation: none;
     transition: none;
+  }
+}
+
+.map-command-help summary {
+  cursor: pointer;
+  color: hsl(var(--primary));
+  min-height: 36px;
+  padding: 6px 0;
+}
+.map-command-help summary:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .map-command-help summary,
+  .map-context-trigger {
+    min-height: 44px;
+  }
+}
+
+.map-callout .map-command-help {
+  min-height: 36px;
+  flex: 0 1 auto;
+  overflow-y: auto;
+}
+@media (pointer: coarse) {
+  .map-callout .map-command-help {
+    min-height: 44px;
   }
 }

@@ -139,6 +139,26 @@ export function SceneView({
         >
           ⌂ R
         </Button>
+        {commandControls?.enabled !== false && commandControls?.selectedOriginKey && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="map-context-trigger"
+            title="Show contextual actions for the selected tile"
+            aria-label="Selected tile actions"
+            onClick={() =>
+              commandControls.onInteraction({
+                source: 'context',
+                originKey: commandControls.selectedOriginKey,
+                targetKey: commandControls.selectedOriginKey,
+                button: 0,
+                pointerType: 'keyboard',
+              })
+            }
+          >
+            ⋯ ACTIONS
+          </Button>
+        )}
         {spec.fireView && (
           <Button
             size="sm"

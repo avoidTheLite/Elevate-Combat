@@ -1,10 +1,8 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { SceneTileAnchor } from './types.ts';
 import type { useMapControls } from './useMapControls.ts';
-import { selectableAt } from './commands.ts';
 import { bridgeSegments, calloutBridge, placeCallouts } from './calloutLayout.ts';
-import { useGameStore } from '../stores/useGameStore.ts';
 
 type Controls = ReturnType<typeof useMapControls>;
 
@@ -12,12 +10,10 @@ function AnchoredCallout({
   anchor,
   controls,
   children,
-  selected = false,
 }: {
   anchor?: SceneTileAnchor;
   controls: Controls;
   children: ReactNode;
-  selected?: boolean;
 }): React.ReactElement {
   const box = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(
@@ -51,7 +47,7 @@ function AnchoredCallout({
           node.style.top = `${rect.top}px`;
         }
       });
-      const rect = positions[selected ? 'selected' : 'target'];
+      const rect = positions.target;
       if (!rect) return;
       // Keep the tile body available, while aligning the corridor with the
       // pointer's natural route to the card center after edge detachment.
@@ -64,7 +60,7 @@ function AnchoredCallout({
     observer.observe(parent);
     parent.querySelectorAll('.map-callout').forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [anchor, controls.anchors, controls.preferences.overlap, selected, children]);
+  }, [anchor, controls.anchors, controls.preferences.overlap, children]);
   return (
     <>
       {bridge && (
@@ -81,8 +77,8 @@ function AnchoredCallout({
       )}
       <div
         ref={box}
-        className={`map-callout${!selected && controls.exiting ? ' map-callout-exit' : ''}`}
-        data-callout-kind={selected ? 'selected' : 'target'}
+        className={`map-callout${controls.exiting ? ' map-callout-exit' : ''}`}
+        data-callout-kind="target"
         data-anchor-key={anchor?.key}
         onPointerEnter={controls.calloutEnter}
         onPointerLeave={controls.calloutLeave}
@@ -96,6 +92,7 @@ function AnchoredCallout({
 }
 
 export function MapCallouts({ controls }: { controls: Controls }): React.ReactElement | null {
+  const helpId = useId();
   if (!controls.enabled) return null;
   const anchor = (key: string | null | undefined): SceneTileAnchor | undefined =>
     controls.anchors.find((a) => a.key === key);
@@ -103,16 +100,15 @@ export function MapCallouts({ controls }: { controls: Controls }): React.ReactEl
   const pending = controls.pending;
   const from = anchor(selected?.pos);
   const to = anchor(pending?.command.target);
-  const game = useGameStore.getState().game;
-  const occupants = game && selected ? selectableAt(game, selected.pos) : [];
+  const atSelected = controls.targetKey === selected?.pos;
   const showTarget =
     !!controls.targetKey &&
-    controls.targetKey !== selected?.pos &&
     (!!pending ||
       !!controls.hoverCommand ||
       !!controls.moveCommand ||
       !!controls.attackCommand ||
-      controls.targetOccupants.length > 0);
+      controls.targetOccupants.length > 0 ||
+      atSelected);
   const style = {
     '--map-callout-duration': `${controls.preferences.animationMs}ms`,
     '--map-callout-easing': controls.preferences.easing,
@@ -137,70 +133,6 @@ export function MapCallouts({ controls }: { controls: Controls }): React.ReactEl
           <circle cx={to.x} cy={to.y} r={Math.max(8, to.radius * 0.4)} />
         </svg>
       )}
-      {selected && (
-        <AnchoredCallout anchor={from} controls={controls} selected>
-          <div className="map-callout-title">{selected.label}</div>
-          {occupants.length > 1 && (
-            <div className="map-callout-buttons" aria-label="Choose occupant on selected tile">
-              {occupants.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  aria-pressed={selected.id === o.id}
-                  onClick={() => controls.select(o.id, selected.pos)}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="map-callout-buttons" aria-label="Selected unit actions">
-            <button
-              type="button"
-              disabled={!controls.targetingOptions.move}
-              aria-pressed={controls.targetingMode === 'move'}
-              title="Choose a destination with a tap or click"
-              onClick={() => {
-                controls.cancel();
-                controls.setTargetingMode('move');
-              }}
-            >
-              MOVE
-            </button>
-            <button
-              type="button"
-              disabled={!controls.targetingOptions.attack}
-              aria-pressed={controls.targetingMode === 'attack'}
-              title="Choose a target; indirect weapons can target empty tiles"
-              onClick={() => {
-                controls.cancel();
-                controls.setTargetingMode('attack');
-              }}
-            >
-              ATTACK
-            </button>
-            {controls.actions.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                title={action.details.join(' ')}
-                onClick={() => controls.issue(action)}
-              >
-                {action.label}
-              </button>
-            ))}
-            <button type="button" onClick={() => controls.select(selected.id, selected.pos)}>
-              DESELECT
-            </button>
-          </div>
-          <p>
-            {controls.targetingMode === 'auto'
-              ? 'Tap a destination or target.'
-              : `Choose a ${controls.targetingMode === 'move' ? 'destination' : 'target'} for ${controls.targetingMode.toUpperCase()}.`}{' '}
-            Drag from this selection to preview; drag elsewhere to pan.
-          </p>
-        </AnchoredCallout>
-      )}
       {showTarget && (
         <AnchoredCallout anchor={anchor(controls.targetKey)} controls={controls}>
           {pending ? (
@@ -208,38 +140,107 @@ export function MapCallouts({ controls }: { controls: Controls }): React.ReactEl
               role="dialog"
               aria-label={`${pending.command.label} command preview`}
               data-testid="map-command-preview"
+              aria-describedby={helpId}
             >
               <div className="map-callout-title">{pending.command.label} PREVIEW</div>
               <p>
                 {pending.command.origin} → {pending.command.target}
               </p>
-              <ul className="map-preview-details">
-                {pending.command.details.map((detail, i) => (
-                  <li key={i}>{detail}</li>
-                ))}
-              </ul>
+              <span id={helpId} className="sr-only">
+                {pending.command.details.join(' ')}{' '}
+                {pending.dragging
+                  ? 'Release to keep the preview; then confirm.'
+                  : 'Preview stays open when the pointer leaves. Escape cancels.'}
+              </span>
+              <details className="map-command-help">
+                <summary
+                  title="Command details and controls"
+                  aria-label={`${pending.command.label} command details`}
+                >
+                  ? HELP
+                </summary>
+                <ul className="map-preview-details">
+                  {pending.command.details.map((detail, i) => (
+                    <li key={i}>{detail}</li>
+                  ))}
+                </ul>
+                <p>
+                  {pending.dragging
+                    ? 'Release to keep this preview. Release does not execute.'
+                    : 'Preview stays open when the pointer leaves. Escape cancels.'}
+                </p>
+              </details>
               <div className="map-callout-buttons">
-                <button type="button" disabled={pending.dragging} onClick={controls.confirm}>
+                <button
+                  type="button"
+                  disabled={pending.dragging}
+                  onClick={controls.confirm}
+                  title={pending.command.details.join(' ')}
+                  aria-describedby={helpId}
+                >
                   CONFIRM {pending.command.label}
                 </button>
-                <button type="button" onClick={controls.cancel}>
+                <button
+                  type="button"
+                  title="Cancel this preview without spending movement, AP or CP"
+                  aria-label="CANCEL"
+                  onClick={controls.cancel}
+                >
                   CANCEL
                 </button>
               </div>
-              <p>
-                {pending.dragging
-                  ? 'Release to keep this preview. Release does not execute.'
-                  : 'Preview stays open when the pointer leaves. Escape cancels.'}
-              </p>
             </div>
           ) : (
             <>
               <div className="map-callout-title">TILE {controls.targetKey}</div>
-              <div className="map-callout-buttons">
+              {atSelected && selected && (
+                <div className="map-callout-buttons" aria-label="Contextual unit actions">
+                  {(['move', 'attack'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={!controls.targetingOptions[mode]}
+                      aria-pressed={controls.targetingMode === mode}
+                      title={
+                        mode === 'move'
+                          ? 'Choose a destination with a tap or click'
+                          : 'Choose a target; indirect weapons can target empty tiles'
+                      }
+                      onClick={() => {
+                        controls.cancel();
+                        controls.setTargetingMode(mode);
+                      }}
+                    >
+                      {mode.toUpperCase()}
+                    </button>
+                  ))}
+                  {controls.actions.map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      title={action.details.join(' ')}
+                      aria-label={action.label}
+                      onClick={() => controls.issue(action)}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    title="Clear unit selection and pending preview"
+                    onClick={() => controls.select(selected.id, selected.pos)}
+                  >
+                    DESELECT
+                  </button>
+                </div>
+              )}
+              <div className="map-callout-buttons" aria-label="Choose occupant on contextual tile">
                 {controls.targetOccupants.map((o) => (
                   <button
                     key={o.id}
                     type="button"
+                    aria-pressed={selected?.id === o.id}
+                    title={`Select ${o.label} on this tile`}
                     onClick={() => controls.select(o.id, controls.targetKey!)}
                   >
                     SELECT {o.label}
@@ -277,28 +278,40 @@ export function MapControlPreferences({
   onClose: () => void;
 }): React.ReactElement {
   const p = controls.preferences;
+  const helpId = useId();
   return (
     <div className="map-preferences" role="dialog" aria-label="Proposed map control preferences">
       <div className="map-callout-title">PROPOSED DEMO CONTROLS</div>
-      <p>
-        Browser preferences, separate from game saves. Proposed defaults: preview Move and Attack;
-        drag always previews and requires confirmation.
-      </p>
+      <details className="map-command-help">
+        <summary title="Preference help" aria-label="Control preference help">
+          ? HELP
+        </summary>
+        <p id={helpId}>
+          Browser preferences, separate from game saves. Proposed defaults: preview Move and Attack;
+          drag always previews and requires confirmation. Placement tries each tile side, then
+          detaches when needed. Reduced motion follows your device. Touch: tap select, tap target,
+          then confirm; native context exposes tile actions.
+        </p>
+      </details>
       <label>
         <input
           type="checkbox"
+          title="Execute legal move clicks immediately; otherwise preview and confirm"
+          aria-describedby={helpId}
           checked={p.quickMove}
           onChange={(e) => controls.setPreference({ quickMove: e.target.checked })}
         />{' '}
-        QuickMove — execute legal move clicks immediately
+        QuickMove
       </label>
       <label>
         <input
           type="checkbox"
+          title="Execute legal attack clicks immediately; otherwise preview and confirm"
+          aria-describedby={helpId}
           checked={p.quickAttack}
           onChange={(e) => controls.setPreference({ quickAttack: e.target.checked })}
         />{' '}
-        QuickAttack — execute legal attack clicks immediately
+        QuickAttack
       </label>
       <label>
         Hover enter / exit delay: {p.dwellMs} ms
@@ -344,11 +357,7 @@ export function MapControlPreferences({
           onChange={(e) => controls.setPreference({ overlap: Number(e.target.value) })}
         />
       </label>
-      <p>
-        Placement tries each tile side, then detaches when needed to keep unit bodies and both cards
-        usable. Reduced motion follows your device. Touch: tap select, tap target, then confirm;
-        native hold/context exposes actions.
-      </p>
+
       <button type="button" onClick={onClose}>
         CLOSE CONTROLS
       </button>

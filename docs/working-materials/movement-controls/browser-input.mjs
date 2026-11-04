@@ -603,6 +603,7 @@ try {
 
   await run('keyboard focus, native button Space, canvas context and reduced motion', async () => {
     const before = await checkpoint('before focused keyboard input');
+    await page.getByRole('button', { name: 'Selected tile actions', exact: true }).click();
     const move = page.getByRole('button', { name: 'MOVE', exact: true }).first();
     await move.focus();
     await page.keyboard.press('ArrowRight');

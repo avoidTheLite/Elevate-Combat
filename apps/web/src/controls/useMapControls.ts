@@ -44,7 +44,7 @@ export interface MapControls {
   onHover: (key: string | null) => void;
   interact: (intent: SceneInteraction) => boolean;
   issue: (command: MapCommand, forcePreview?: boolean, dragging?: boolean) => void;
-  select: (id: string, key: string) => void;
+  select: (id: string, key: string, requestContext?: boolean) => void;
   confirm: () => void;
   cancel: () => void;
   calloutEnter: () => void;
@@ -71,6 +71,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     pendingRef.current = next;
     setPending(next);
   }, []);
+  const contextRequest = useRef<{ game: GameState; actorId: string; key: string } | null>(null);
   const [targetingMode, setTargetingMode] = useState<TargetingMode>('auto');
   const [hover, setHover] = useState<{ key: string | null; selection: string | null }>({
     key: null,
@@ -94,6 +95,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
 
   const cancel = useCallback(() => {
     clearTimeout(timer.current);
+    contextRequest.current = null;
     replacePending(null);
     setTargetingMode('auto');
     setHover({ key: null, selection: null });
@@ -104,8 +106,13 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   }, [replacePending]);
 
   useEffect(() => {
+    const request = contextRequest.current;
     cancel();
-  }, [selection, game, blocked, cancel]);
+    if (request && enabled && request.game === game && request.actorId === selection) {
+      setHover({ key: request.key, selection });
+      setDwelled(request.key);
+    }
+  }, [selection, game, blocked, enabled, cancel]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -160,8 +167,9 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   );
 
   const select = useCallback(
-    (id: string, key: string) => {
+    (id: string, key: string, requestContext = false) => {
       cancel();
+      if (requestContext) contextRequest.current = { game, actorId: id, key };
       const s = useGameStore.getState();
       if (game.phase === 'battle')
         s.setUi({ selectedUnit: id === ui.selectedUnit ? null : id, hoverCell: null });
@@ -229,8 +237,13 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
           else {
             const occupants = selectableAt(game, intent.targetKey);
             if (occupants[0] && actor?.pos !== intent.targetKey)
-              select(occupants[0].id, intent.targetKey);
-            setDwelled(intent.targetKey);
+              select(occupants[0].id, intent.targetKey, true);
+            else {
+              clearTimeout(timer.current);
+              setHover({ key: intent.targetKey, selection });
+              setDwelled(intent.targetKey);
+              setExiting(false);
+            }
           }
         }
         return true;
@@ -303,6 +316,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       ui,
       actor?.id,
       actor?.pos,
+      selection,
       targetingMode,
       enabled,
       blocked,
