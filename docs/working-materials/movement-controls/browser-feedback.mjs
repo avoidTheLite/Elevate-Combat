@@ -225,7 +225,37 @@ try {
     const card = small.locator('.map-callout[data-callout-mode="context"]');
     assert.equal(await card.evaluate((e) => getComputedStyle(e).overflowY), 'auto');
     const deselect = card.getByRole('button', { name: 'DESELECT', exact: true });
-    await deselect.scrollIntoViewIfNeeded();
+    const cdp = await small.context().newCDPSession(small);
+    for (let swipe = 0; swipe < 4; swipe++) {
+      const rect = await card.boundingBox();
+      const x = rect.x + rect.width - 10,
+        bottom = rect.y + rect.height - 10,
+        top = rect.y + 10;
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x, y: bottom, id: 1 }],
+      });
+      for (let step = 1; step <= 20; step++) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ x, y: bottom + ((top - bottom) * step) / 20, id: 1 }],
+        });
+        await small.waitForTimeout(40);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      assert.equal(
+        await card.count(),
+        1,
+        'native pointercancel during scroll must not dismiss requested context',
+      );
+      const fits = await deselect.evaluate((e) => {
+        const r = e.getBoundingClientRect(),
+          c = e.closest('.map-callout').getBoundingClientRect();
+        return r.top >= c.top && r.bottom <= c.bottom + 1;
+      });
+      if (fits) break;
+    }
+    await cdp.detach();
     assert.ok(
       await deselect.evaluate((e) => {
         const r = e.getBoundingClientRect(),

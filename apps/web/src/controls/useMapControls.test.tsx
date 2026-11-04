@@ -56,6 +56,24 @@ describe('map command interaction lifecycle', () => {
     expect(result.current.targetKey).toBeNull();
   });
 
+  it('deliberate context survives native touch leave/scroll delay but Escape cancels without spending', () => {
+    vi.useFakeTimers();
+    const { result } = mount();
+    const before = store().game;
+    const key = result.current.actor!.pos;
+    act(() => result.current.interact({ ...click(key), source: 'context', pointerType: 'touch' }));
+    act(() => result.current.calloutLeave());
+    act(() => {
+      result.current.onHover(null);
+      vi.advanceTimersByTime(2000);
+    });
+    expect(result.current.targetKey).toBe(key);
+    expect(store().game).toBe(before);
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(result.current.targetKey).toBeNull();
+    expect(store().game).toBe(before);
+  });
+
   it('keeps a full preview on pointer leave and native context, then explicitly confirms once', () => {
     const { result } = mount();
     const key = moveKey();

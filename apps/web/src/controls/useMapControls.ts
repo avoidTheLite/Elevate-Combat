@@ -78,6 +78,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     selection: null,
   });
   const [dwelled, setDwelled] = useState<string | null>(null);
+  const [contextPinned, setContextPinned] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [anchors, setAnchors] = useState<readonly SceneTileAnchor[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -96,6 +97,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   const cancel = useCallback(() => {
     clearTimeout(timer.current);
     contextRequest.current = null;
+    setContextPinned(false);
     replacePending(null);
     setTargetingMode('auto');
     setHover({ key: null, selection: null });
@@ -111,6 +113,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     if (request && enabled && request.game === game && request.actorId === selection) {
       setHover({ key: request.key, selection });
       setDwelled(request.key);
+      setContextPinned(true);
     }
   }, [selection, game, blocked, enabled, cancel]);
 
@@ -135,7 +138,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
 
   const onHover = useCallback(
     (key: string | null) => {
-      if (!enabled || validPending) return;
+      if (!enabled || validPending || contextPinned) return;
       const current = useGameStore.getState();
       if (current.game !== game || (selectedActor(game, current.ui)?.id ?? null) !== selection)
         return;
@@ -163,7 +166,16 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
         }
       }, preferences.dwellMs);
     },
-    [enabled, validPending, selection, game, dwelled, preferences.dwellMs, preferences.animationMs],
+    [
+      enabled,
+      validPending,
+      contextPinned,
+      selection,
+      game,
+      dwelled,
+      preferences.dwellMs,
+      preferences.animationMs,
+    ],
   );
 
   const select = useCallback(
@@ -242,6 +254,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
               clearTimeout(timer.current);
               setHover({ key: intent.targetKey, selection });
               setDwelled(intent.targetKey);
+              setContextPinned(occupants.length > 0 || actor?.pos === intent.targetKey);
               setExiting(false);
             }
           }
@@ -268,7 +281,11 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
         }
         return true;
       }
-      if (!intent.targetKey) return false;
+      if (!intent.targetKey) {
+        cancel();
+        return false;
+      }
+      if (intent.source === 'click') setContextPinned(false);
       if (
         actor &&
         (actor.pos === intent.targetKey ||
@@ -304,8 +321,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       // Invalid explicit targeting must never fall through to the legacy click
       // heuristic, which could execute a DIFFERENT legal command immediately.
       if (targetingMode !== 'auto' || game.phase === 'battle') {
-        replacePending(null);
-        useGameStore.getState().setUi({ hoverCell: null });
+        cancel();
         return true;
       }
       cancel();
@@ -355,7 +371,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   }, []);
   const calloutLeave = useCallback(() => {
     overCallout.current = false;
-    if (!validPending)
+    if (!validPending && !contextPinned)
       timer.current = setTimeout(() => {
         setExiting(true);
         timer.current = setTimeout(() => {
@@ -365,7 +381,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
           setExiting(false);
         }, preferences.animationMs);
       }, preferences.dwellMs);
-  }, [validPending, preferences.dwellMs, preferences.animationMs]);
+  }, [validPending, contextPinned, preferences.dwellMs, preferences.animationMs]);
   const targetKey =
     validPending?.command.target ?? (hover.selection === selection ? dwelled : null);
   const hoverCommand = enabled && targetKey ? commandAt(game, ui, targetKey, targetingMode) : null;
