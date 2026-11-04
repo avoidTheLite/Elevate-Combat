@@ -1,6 +1,7 @@
-import type { GameAction, GameState } from '@iron-ridge/engine';
+import type { BattleContext, BattleUnit, GameAction, GameState, Team } from '@iron-ridge/engine';
 import {
   actingTeam,
+  buildContext,
   apply,
   foundationHasPending,
   isAiTurn,
@@ -11,7 +12,7 @@ import {
 } from '@iron-ridge/engine';
 import type { UiState } from '../stores/useGameStore.ts';
 import { viewTeam } from '../stores/useGameStore.ts';
-import { buildTacticalScene } from '../render/buildScene.ts';
+import { attackDetails } from './attackPresentation.ts';
 import {
   canOrder,
   commandHighlights,
@@ -20,6 +21,8 @@ import {
   reachPath,
   seenHolders,
 } from '../lib/holders.ts';
+
+export type CommandSelection = Pick<UiState, 'selectedArmy' | 'selectedUnit' | 'checkedUnits'>;
 
 export interface MapCommand {
   kind: 'move' | 'attack' | 'action';
@@ -57,7 +60,7 @@ export function commandLegal(game: GameState, action: GameAction): boolean {
 
 export function selectedActor(
   game: GameState,
-  ui: UiState,
+  ui: CommandSelection,
 ): { id: string; pos: string; label: string } | null {
   if (game.phase === 'battle') {
     const unit = game.battle?.units.find((u) => u.id === ui.selectedUnit && u.hp > 0 && u.pos);
@@ -81,26 +84,79 @@ export function selectableAt(game: GameState, key: string): { id: string; label:
     .map((h) => ({ id: h.id, label: holderName(h) }));
 }
 
+interface CommandDerivation {
+  actor: ReturnType<typeof selectedActor>;
+  view: Team | null;
+  tactical: () => { ctx: BattleContext; unit: BattleUnit; reach: ReturnType<typeof reachable> };
+  strategic: () => ReturnType<typeof commandHighlights>;
+  legal: (action: GameAction) => boolean;
+}
+
+/** A resolver belongs to one immutable game/selection snapshot, never to camera anchors. */
+export function createCommandResolver(
+  game: GameState,
+  ui: CommandSelection,
+): (key: string, mode?: TargetingMode) => MapCommand | null {
+  const actor = selectedActor(game, ui);
+  const view = viewTeam(game);
+  let tactical: ReturnType<CommandDerivation['tactical']> | undefined;
+  let strategic: ReturnType<typeof commandHighlights> | undefined;
+  const legal = new Map<string, boolean>();
+  const commands = new Map<string, MapCommand | null>();
+  const derivation: CommandDerivation = {
+    actor,
+    view,
+    tactical: () => {
+      if (!tactical) {
+        const ctx = buildContext(game.settings, game.battle!);
+        const unit = game.battle!.units.find((u) => u.id === actor!.id)!;
+        tactical = { ctx, unit, reach: reachable(ctx, unit) };
+      }
+      return tactical;
+    },
+    strategic: () => (strategic ??= commandHighlights(game, actor!.id, ui.checkedUnits, view)),
+    legal: (action) => {
+      const key = JSON.stringify(action);
+      if (!legal.has(key)) legal.set(key, commandLegal(game, action));
+      return legal.get(key)!;
+    },
+  };
+  return (key, mode = 'auto') => {
+    const cacheKey = `${mode}:${key}`;
+    if (!commands.has(cacheKey)) commands.set(cacheKey, deriveCommand(game, key, mode, derivation));
+    return commands.get(cacheKey) ?? null;
+  };
+}
+
 /** Destination intent does not override friendly occupancy or engine legality. */
 export function commandAt(
   game: GameState,
-  ui: UiState,
+  ui: CommandSelection,
   key: string,
   mode: TargetingMode = 'auto',
 ): MapCommand | null {
+  return createCommandResolver(game, ui)(key, mode);
+}
+
+function deriveCommand(
+  game: GameState,
+  key: string,
+  mode: TargetingMode,
+  derivation: CommandDerivation,
+): MapCommand | null {
   if (!controlsEnabled(game)) return null;
-  const actor = selectedActor(game, ui);
+  const actor = derivation.actor;
   if (!actor || key === actor.pos) return null;
   const forceMove = mode === 'move';
   if (game.phase === 'strategic') {
     const holder = game.armies.find((h) => h.id === actor.id)!;
-    if (!canOrder(game, holder, viewTeam(game))) return null;
-    const highlights = commandHighlights(game, holder.id, ui.checkedUnits, viewTeam(game));
-    const clicked = holderForClick(game, viewTeam(game), key);
+    if (!canOrder(game, holder, derivation.view)) return null;
+    const highlights = derivation.strategic();
+    const clicked = holderForClick(game, derivation.view, key);
     const enemy = !forceMove && clicked && highlights.engage.find((h) => h.id === clicked.id);
     if (enemy) {
       const action: GameAction = { type: 'engage', armyId: holder.id, targetId: enemy.id };
-      return commandLegal(game, action)
+      return derivation.legal(action)
         ? {
             kind: 'attack',
             label: 'ENGAGE',
@@ -118,7 +174,7 @@ export function commandAt(
     }
     if (mode === 'attack' || !highlights.reach.has(key)) return null;
     const action: GameAction = { type: 'moveCommander', armyId: holder.id, dest: key };
-    return commandLegal(game, action)
+    return derivation.legal(action)
       ? {
           kind: 'move',
           label: 'MOVE',
@@ -136,9 +192,7 @@ export function commandAt(
       : null;
   }
   const battle = game.battle!;
-  const unit = battle.units.find((u) => u.id === actor.id)!;
-  const ctx = buildTacticalScene(game, ui, viewTeam(game)).ctx;
-  const reach = reachable(ctx, unit);
+  const { ctx, unit, reach } = derivation.tactical();
   const target = ctx.unitAt.get(key);
   const wantsAttack =
     mode === 'attack' ||
@@ -149,7 +203,7 @@ export function commandAt(
   if (wantsAttack) {
     const preview = previewAttack(ctx, battle, unit, key);
     const action: GameAction = { type: 'attack', unitId: unit.id, cell: key };
-    if (preview.legal && commandLegal(game, action))
+    if (preview.legal && derivation.legal(action))
       return {
         kind: 'attack',
         label: 'ATTACK',
@@ -158,14 +212,7 @@ export function commandAt(
         target: key,
         action,
         path: [actor.pos, key],
-        details: [
-          `${preview.kind} · ${preview.band} · effective range ${preview.effectiveRange}`,
-          `TN ${preview.tn} · direct hit ${Math.round(preview.pDirect * 100)}% · splash ${Math.round(preview.pSplash * 100)}%`,
-          `Expected damage ${preview.expectedDamage.toFixed(1)} · ${preview.los?.status ?? 'melee'}`,
-          ...preview.modifiers.map((m) => `${m.label}: ${m.value > 0 ? '+' : ''}${m.value}`),
-          ...(preview.blind ? ['Blind fire: no spotter.'] : []),
-          'Probabilities are estimates; no outcome is promised.',
-        ],
+        details: attackDetails(preview, derivation.view),
       };
   }
   const action: GameAction = { type: 'move', unitId: unit.id, cell: key };
@@ -175,7 +222,7 @@ export function commandAt(
     !unit.acted &&
     !unit.deployed &&
     reach.has(key) &&
-    commandLegal(game, action)
+    derivation.legal(action)
   )
     return {
       kind: 'move',
@@ -194,7 +241,10 @@ export function commandAt(
   return null;
 }
 
-export function targetingOptions(game: GameState, ui: UiState): { move: boolean; attack: boolean } {
+export function targetingOptions(
+  game: GameState,
+  ui: CommandSelection,
+): { move: boolean; attack: boolean } {
   const actor = selectedActor(game, ui);
   if (!actor || !controlsEnabled(game)) return { move: false, attack: false };
   if (game.phase === 'strategic') {
@@ -210,7 +260,7 @@ export function targetingOptions(game: GameState, ui: UiState): { move: boolean;
   };
 }
 
-export function actorActions(game: GameState, ui: UiState): MapCommand[] {
+export function actorActions(game: GameState, ui: CommandSelection): MapCommand[] {
   if (!controlsEnabled(game) || game.phase !== 'battle') return [];
   const actor = selectedActor(game, ui);
   const unit = game.battle?.units.find((u) => u.id === actor?.id);
@@ -249,7 +299,11 @@ export function actorActions(game: GameState, ui: UiState): MapCommand[] {
     }));
 }
 
-export function pendingValid(pending: PendingCommand, game: GameState, ui: UiState): boolean {
+export function pendingValid(
+  pending: PendingCommand,
+  game: GameState,
+  ui: CommandSelection,
+): boolean {
   const actor = selectedActor(game, ui);
   return (
     pending.game === game &&

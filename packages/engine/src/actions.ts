@@ -16,6 +16,7 @@ import {
   continueFoundationResolution,
   afterFoundationMovement,
   checkCampaignVictory,
+  refreshOwnershipKnowledge,
 } from './strategic.ts';
 import {
   attack,
@@ -342,5 +343,18 @@ function applyAction(prev: GameState, action: GameAction): ApplyResult {
     syncCampaignClaims(state);
     if (!state.infrastructure.capture.pending) refreshCampaignNetworks(state);
   }
+  // Selection/abort is preparation, not a new observation or world commit.
+  if (
+    ![
+      'engage',
+      'engagementSelect',
+      'engagementLock',
+      'cancelBattle',
+      'captureChoice',
+      'stationingToggle',
+      'freeShotTarget',
+    ].includes(action.type)
+  )
+    refreshOwnershipKnowledge(state, prev);
   return { state, error: null, outcome: res.outcome ?? null };
 }

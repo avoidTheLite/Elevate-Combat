@@ -15,6 +15,7 @@ import { useGameStore } from '../../stores/useGameStore.ts';
 import { holderName } from '../../lib/holders.ts';
 import { RoadRepairPanel } from './RoadRepairPanel.tsx';
 import { RazeTileControl } from './RazeTileControl.tsx';
+import { concealBlindDefender } from '../../controls/attackPresentation.ts';
 
 const DIR_NAMES = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
 
@@ -51,6 +52,7 @@ export function TacticalSidebar({
     unit && ui.hoverCell && battle.phase === 'combat' && unit.team === battle.active && unit.pos
       ? previewAttack(ctx, battle, unit, ui.hoverCell)
       : null;
+  const hideBlindStats = !!preview && concealBlindDefender(preview, view);
   const showPreview =
     preview &&
     (preview.legal || (showHover && hoverUnit.team !== unit?.team) || t?.attackType === 'indirect');
@@ -270,56 +272,69 @@ export function TacticalSidebar({
           </div>
           {showPreview && preview ? (
             preview.legal ? (
-              <>
-                <Stat
-                  label={`${preview.band} · eff ${preview.effectiveRange}`}
-                  value={`TN ${preview.tn}`}
-                  tone="font-bold"
-                />
-                <div className="grid grid-cols-2 gap-x-3 text-[10px] leading-4">
-                  <span className="text-[hsl(var(--muted-foreground))] col-span-2 flex justify-between">
-                    <span>
-                      Base (
-                      {preview.target
-                        ? unitType(preview.target.typeId).armorClass.replace('_armor', '')
-                        : 'ground'}
-                      )
-                    </span>
-                    <span>{preview.baseTn}</span>
-                  </span>
-                  {preview.modifiers.map((m) => (
-                    <span key={m.label} className="col-span-2 flex justify-between">
-                      <span className="text-[hsl(var(--muted-foreground))] truncate">
-                        {m.label}
+              hideBlindStats ? (
+                <div
+                  data-testid="blind-fire-preview"
+                  className="text-[11px] text-[hsl(var(--muted-foreground))]"
+                >
+                  <Stat
+                    label={`${preview.band} · eff ${preview.effectiveRange}`}
+                    value="BLIND FIRE"
+                  />
+                  No spotter. Defender statistics are unknown.
+                </div>
+              ) : (
+                <>
+                  <Stat
+                    label={`${preview.band} · eff ${preview.effectiveRange}`}
+                    value={`TN ${preview.tn}`}
+                    tone="font-bold"
+                  />
+                  <div className="grid grid-cols-2 gap-x-3 text-[10px] leading-4">
+                    <span className="text-[hsl(var(--muted-foreground))] col-span-2 flex justify-between">
+                      <span>
+                        Base (
+                        {preview.target
+                          ? unitType(preview.target.typeId).armorClass.replace('_armor', '')
+                          : 'ground'}
+                        )
                       </span>
-                      <span>{m.value >= 0 ? `+${m.value}` : m.value}</span>
+                      <span>{preview.baseTn}</span>
                     </span>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-x-3">
-                  <Stat
-                    label="Hit"
-                    value={pct(preview.pDirect)}
-                    tone="text-[hsl(var(--success))] font-bold"
-                  />
-                  <Stat
-                    label="Splash"
-                    value={preview.splashTn !== null ? pct(preview.pSplash) : '—'}
-                    tone="text-[hsl(var(--warning))]"
-                  />
-                  <Stat
-                    label="Exp dmg"
-                    value={preview.target && showHover ? preview.expectedDamage.toFixed(1) : '—'}
-                  />
-                  <Stat
-                    label={preview.kind === 'indirect' ? 'Arc' : 'LOS'}
-                    value={preview.los ? preview.los.status.toUpperCase() : '—'}
-                  />
-                </div>
-                <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                  {preview.blind ? 'No spotter — BLIND FIRE. ' : ''}Click to fire · F firing view
-                </div>
-              </>
+                    {preview.modifiers.map((m) => (
+                      <span key={m.label} className="col-span-2 flex justify-between">
+                        <span className="text-[hsl(var(--muted-foreground))] truncate">
+                          {m.label}
+                        </span>
+                        <span>{m.value >= 0 ? `+${m.value}` : m.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3">
+                    <Stat
+                      label="Hit"
+                      value={pct(preview.pDirect)}
+                      tone="text-[hsl(var(--success))] font-bold"
+                    />
+                    <Stat
+                      label="Splash"
+                      value={preview.splashTn !== null ? pct(preview.pSplash) : '—'}
+                      tone="text-[hsl(var(--warning))]"
+                    />
+                    <Stat
+                      label="Exp dmg"
+                      value={preview.target && showHover ? preview.expectedDamage.toFixed(1) : '—'}
+                    />
+                    <Stat
+                      label={preview.kind === 'indirect' ? 'Arc' : 'LOS'}
+                      value={preview.los ? preview.los.status.toUpperCase() : '—'}
+                    />
+                  </div>
+                  <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                    {preview.blind ? 'No spotter — BLIND FIRE. ' : ''}Click to fire · F firing view
+                  </div>
+                </>
+              )
             ) : (
               <div className="text-[11px] text-[hsl(var(--destructive))]">✖ {preview.reason}</div>
             )

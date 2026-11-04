@@ -107,8 +107,8 @@ function roundTrip(state: GameState): GameState {
 }
 
 describe('GAMES-ELEVATE-SESSION-UC-001: commander participation continuity', () => {
-  it('uses schema 4 to prevent older builds ignoring deployment provenance, without rewriting schemas 2/3', () => {
-    expect(SAVE_SCHEMA).toBe(4);
+  it('uses schema 5 to preserve ownership knowledge and deployment provenance, without rewriting schemas 2/3', () => {
+    expect(SAVE_SCHEMA).toBe(5);
     const legacy = createGame(defaultSettings());
     delete legacy.settings.commanderTrainingCp;
     for (const schema of [2, 3]) {

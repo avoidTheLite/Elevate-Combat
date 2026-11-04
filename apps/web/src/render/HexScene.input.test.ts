@@ -1,7 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as THREE from 'three';
 import { HexScene } from './HexScene.ts';
 import type { SceneCommandControls } from '../controls/types.ts';
 import type { PointerGesture, PointerSample } from '../controls/gestures.ts';
+
+vi.mock('three', async (importOriginal) => {
+  const actual = await importOriginal<typeof THREE>();
+  return {
+    ...actual,
+    WebGLRenderer: class {
+      domElement = document.createElement('canvas');
+      setPixelRatio(): void {}
+      setClearColor(): void {}
+      setSize(): void {}
+      setAnimationLoop(): void {}
+      dispose(): void {}
+    },
+  };
+});
 
 interface InputHarness {
   renderer: { domElement: HTMLCanvasElement };
@@ -26,17 +42,30 @@ interface InputHarness {
   bindInput: () => void;
   setCommandControls: (controls?: SceneCommandControls) => void;
   cancelAllPointers: () => void;
+  dispose: () => void;
 }
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const dispose of cleanup.splice(0)) dispose();
+  vi.unstubAllGlobals();
 });
 
 /** Exercise the real DOM bindings without constructing a WebGL renderer. */
-function harness(): InputHarness {
-  const scene = Object.create(HexScene.prototype) as InputHarness;
-  const canvas = document.createElement('canvas');
+function harness(realKeyboard = false): InputHarness {
+  const host = document.createElement('div');
+  if (realKeyboard)
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+  const scene = (
+    realKeyboard ? new HexScene(host) : Object.create(HexScene.prototype)
+  ) as InputHarness;
+  const canvas = realKeyboard ? scene.renderer.domElement : document.createElement('canvas');
   const captures = new Set<number>();
   canvas.setPointerCapture = (id) => {
     captures.add(id);
@@ -47,7 +76,7 @@ function harness(): InputHarness {
   };
   document.body.append(canvas);
   Object.assign(scene, {
-    renderer: { domElement: canvas },
+    renderer: realKeyboard ? scene.renderer : { domElement: canvas },
     handlers: { onClick: vi.fn(), onHover: vi.fn() },
     commandControls: {
       enabled: true,
@@ -69,9 +98,7 @@ function harness(): InputHarness {
     panPixels: vi.fn(),
     setPointer: vi.fn(),
     pickKey: vi.fn(() => '1,0'),
-    onKeyDown: vi.fn(),
-    onKeyUp: vi.fn(),
-    onBlur: vi.fn(),
+    ...(!realKeyboard && { onKeyDown: vi.fn(), onKeyUp: vi.fn(), onBlur: vi.fn() }),
   });
   scene.pointerSample = (event) => ({
     pointerId: event.pointerId,
@@ -81,9 +108,12 @@ function harness(): InputHarness {
     pointerType: event.pointerType,
     key: event.clientX > 110 ? '1,0' : '0,0',
   });
-  scene.onBlur = () => scene.cancelAllPointers();
-  scene.bindInput();
+  if (!realKeyboard) {
+    scene.onBlur = () => scene.cancelAllPointers();
+    scene.bindInput();
+  }
   cleanup.push(() => {
+    if (realKeyboard) scene.dispose();
     window.removeEventListener('keydown', scene.onKeyDown);
     window.removeEventListener('keyup', scene.onKeyUp);
     window.removeEventListener('blur', scene.onBlur);
@@ -119,6 +149,53 @@ function pointer(
 }
 
 describe('real scene pointer bindings', () => {
+  it.each(['mouse', 'touch'])(
+    'Escape cancels %s drag ownership before later motion and release can restore a preview',
+    (pointerType) => {
+      const scene = harness(true);
+      pointer(scene, 'pointerdown', { pointerType });
+      pointer(scene, 'pointermove', { x: 130, pointerType });
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      pointer(scene, 'pointermove', { x: 140, pointerType });
+      pointer(scene, 'pointerup', { x: 140, pointerType });
+      expect(
+        vi.mocked(scene.commandControls.onInteraction).mock.calls.map(([intent]) => intent.stage),
+      ).toEqual(['start', 'cancel']);
+      expect(scene.activePointers.size).toBe(0);
+      expect(scene.dragging).toBeNull();
+      expect(scene.renderer.domElement.hasPointerCapture(1)).toBe(false);
+    },
+  );
+
+  it('Escape from a focused control cancels an unreleased press without selecting on release', () => {
+    const scene = harness(true);
+    const button = document.createElement('button');
+    document.body.append(button);
+    cleanup.push(() => button.remove());
+    pointer(scene, 'pointerdown');
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(scene.renderer.domElement.hasPointerCapture(1)).toBe(false);
+    pointer(scene, 'pointerup');
+    expect(scene.commandControls.onInteraction).not.toHaveBeenCalled();
+    expect(scene.activePointers.size).toBe(0);
+  });
+
+  it('Escape releases both touch captures and stops an active two-finger pan', () => {
+    const scene = harness(true);
+    pointer(scene, 'pointerdown', { pointerType: 'touch' });
+    pointer(scene, 'pointerdown', { id: 2, x: 180, pointerType: 'touch' });
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    pointer(scene, 'pointermove', { id: 2, x: 200, pointerType: 'touch' });
+    pointer(scene, 'pointerup', { id: 2, x: 200, pointerType: 'touch' });
+    pointer(scene, 'pointerup', { pointerType: 'touch' });
+    expect(scene.panPixels).not.toHaveBeenCalled();
+    expect(scene.commandControls.onInteraction).not.toHaveBeenCalled();
+    expect(scene.activePointers.size).toBe(0);
+    expect(scene.multiPointer).toBe(false);
+    expect(scene.renderer.domElement.hasPointerCapture(1)).toBe(false);
+    expect(scene.renderer.domElement.hasPointerCapture(2)).toBe(false);
+  });
+
   it('window blur cancels command dragging and clears all pointer ownership', () => {
     const scene = harness();
     pointer(scene, 'pointerdown');

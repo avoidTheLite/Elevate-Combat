@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { GameState } from '@iron-ridge/engine';
 import { worldOf } from '@iron-ridge/engine';
@@ -6,7 +6,7 @@ import { useGameStore } from '../stores/useGameStore.ts';
 import type { UiState } from '../stores/useGameStore.ts';
 import {
   actorActions,
-  commandAt,
+  createCommandResolver,
   controlsEnabled,
   pendingValid,
   selectableAt,
@@ -49,6 +49,8 @@ export interface MapControls {
   cancel: () => void;
   calloutEnter: () => void;
   calloutLeave: () => void;
+  calloutFocus: () => void;
+  calloutBlur: () => void;
 }
 
 /** Keep selection/territory inspection in step with the successful engine order. */
@@ -83,16 +85,33 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   const [anchors, setAnchors] = useState<readonly SceneTileAnchor[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const overCallout = useRef(false);
+  const focusWithinCallout = useRef(false);
   const revision = useRef({ game, id: 0 });
   if (revision.current.game !== game) revision.current = { game, id: revision.current.id + 1 };
-  const enabled = !blocked && controlsEnabled(game);
-  const actor = selectedActor(game, ui);
+  const commandUi = useMemo(
+    () => ({
+      selectedArmy: ui.selectedArmy,
+      selectedUnit: ui.selectedUnit,
+      checkedUnits: ui.checkedUnits,
+    }),
+    [ui.selectedArmy, ui.selectedUnit, ui.checkedUnits],
+  );
+  const resolveCommand = useMemo(() => createCommandResolver(game, commandUi), [game, commandUi]);
+  const enabled = useMemo(() => !blocked && controlsEnabled(game), [blocked, game]);
+  const actor = useMemo(() => selectedActor(game, commandUi), [game, commandUi]);
   const selection = actor?.id ?? null;
   const selectionScope = `${revision.current.id}:${selection ?? ''}:${blocked}`;
-  const validPending = pending && enabled && pendingValid(pending, game, ui) ? pending : null;
+  const validPending = useMemo(
+    () => (pending && enabled && pendingValid(pending, game, commandUi) ? pending : null),
+    [pending, enabled, game, commandUi],
+  );
   const hoverKey = enabled && hover.selection === selection ? hover.key : null;
   const previewKey = validPending?.command.target ?? hoverKey;
-  const actions = enabled ? actorActions(game, ui) : [];
+  const actions = useMemo(
+    () => (enabled ? actorActions(game, commandUi) : []),
+    [enabled, game, commandUi],
+  );
+  const options = useMemo(() => targetingOptions(game, commandUi), [game, commandUi]);
 
   const cancel = useCallback(() => {
     clearTimeout(timer.current);
@@ -104,6 +123,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     setDwelled(null);
     setExiting(false);
     overCallout.current = false;
+    focusWithinCallout.current = false;
     useGameStore.getState().setUi({ hoverCell: null });
   }, [replacePending]);
 
@@ -142,7 +162,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       const current = useGameStore.getState();
       if (current.game !== game || (selectedActor(game, current.ui)?.id ?? null) !== selection)
         return;
-      if (!key && overCallout.current) return;
+      if (overCallout.current || focusWithinCallout.current) return;
       clearTimeout(timer.current);
       setExiting(false);
       // Retain the tile intent during the exit delay so crossing into its
@@ -152,7 +172,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
         useGameStore.getState().setUi({ hoverCell: key });
       }
       timer.current = setTimeout(() => {
-        if (!overCallout.current) {
+        if (!overCallout.current && !focusWithinCallout.current) {
           if (key) setDwelled(key);
           else {
             setExiting(true);
@@ -244,7 +264,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
             cancel();
             return false;
           }
-          const command = commandAt(game, ui, intent.targetKey, targetingMode);
+          const command = resolveCommand(intent.targetKey, targetingMode);
           if (command) issue(command, true);
           else {
             const occupants = selectableAt(game, intent.targetKey);
@@ -271,9 +291,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
           cancel();
           return true;
         }
-        const command = intent.targetKey
-          ? commandAt(game, ui, intent.targetKey, targetingMode)
-          : null;
+        const command = intent.targetKey ? resolveCommand(intent.targetKey, targetingMode) : null;
         if (command) issue(command, true, intent.stage !== 'end');
         else {
           replacePending(null);
@@ -313,7 +331,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
           return false;
         }
       }
-      const command = commandAt(game, ui, intent.targetKey, targetingMode);
+      const command = resolveCommand(intent.targetKey, targetingMode);
       if (command) {
         issue(command);
         return true;
@@ -341,6 +359,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       select,
       cancel,
       replacePending,
+      resolveCommand,
     ],
   );
 
@@ -364,37 +383,59 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     dispatchMapCommand(command);
   }, [pending, blocked, cancel]);
 
-  const calloutEnter = useCallback(() => {
-    overCallout.current = true;
+  const scheduleCalloutExit = useCallback(() => {
+    clearTimeout(timer.current);
+    if (validPending || contextPinned || overCallout.current || focusWithinCallout.current) return;
+    timer.current = setTimeout(() => {
+      if (overCallout.current || focusWithinCallout.current) return;
+      setExiting(true);
+      timer.current = setTimeout(() => {
+        if (overCallout.current || focusWithinCallout.current) return;
+        setDwelled(null);
+        setHover({ key: null, selection: null });
+        useGameStore.getState().setUi({ hoverCell: null });
+        setExiting(false);
+      }, preferences.animationMs);
+    }, preferences.dwellMs);
+  }, [validPending, contextPinned, preferences.dwellMs, preferences.animationMs]);
+  const retainCallout = useCallback(() => {
     clearTimeout(timer.current);
     setExiting(false);
   }, []);
+  const calloutEnter = useCallback(() => {
+    overCallout.current = true;
+    retainCallout();
+  }, [retainCallout]);
   const calloutLeave = useCallback(() => {
     overCallout.current = false;
-    if (!validPending && !contextPinned)
-      timer.current = setTimeout(() => {
-        setExiting(true);
-        timer.current = setTimeout(() => {
-          setDwelled(null);
-          setHover({ key: null, selection: null });
-          useGameStore.getState().setUi({ hoverCell: null });
-          setExiting(false);
-        }, preferences.animationMs);
-      }, preferences.dwellMs);
-  }, [validPending, contextPinned, preferences.dwellMs, preferences.animationMs]);
+    scheduleCalloutExit();
+  }, [scheduleCalloutExit]);
+  const calloutFocus = useCallback(() => {
+    focusWithinCallout.current = true;
+    retainCallout();
+  }, [retainCallout]);
+  const calloutBlur = useCallback(() => {
+    focusWithinCallout.current = false;
+    scheduleCalloutExit();
+  }, [scheduleCalloutExit]);
   const targetKey =
     validPending?.command.target ?? (hover.selection === selection ? dwelled : null);
-  const hoverCommand = enabled && targetKey ? commandAt(game, ui, targetKey, targetingMode) : null;
-  const moveCommand = enabled && targetKey ? commandAt(game, ui, targetKey, 'move') : null;
-  const attackCommand = enabled && targetKey ? commandAt(game, ui, targetKey, 'attack') : null;
-  const targetOccupants = enabled && targetKey ? selectableAt(game, targetKey) : [];
-  const previewKind =
-    validPending?.command.kind ??
-    (targetingMode !== 'auto'
-      ? targetingMode
-      : previewKey
-        ? (commandAt(game, ui, previewKey)?.kind ?? null)
-        : null);
+  const { hoverCommand, moveCommand, attackCommand, targetOccupants, previewKind } = useMemo(
+    () => ({
+      hoverCommand: enabled && targetKey ? resolveCommand(targetKey, targetingMode) : null,
+      moveCommand: enabled && targetKey ? resolveCommand(targetKey, 'move') : null,
+      attackCommand: enabled && targetKey ? resolveCommand(targetKey, 'attack') : null,
+      targetOccupants: enabled && targetKey ? selectableAt(game, targetKey) : [],
+      previewKind:
+        validPending?.command.kind ??
+        (targetingMode !== 'auto'
+          ? targetingMode
+          : previewKey
+            ? (resolveCommand(previewKey)?.kind ?? null)
+            : null),
+    }),
+    [enabled, targetKey, resolveCommand, targetingMode, game, validPending, previewKey],
+  );
   return {
     preferences,
     setPreference,
@@ -415,7 +456,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     exiting,
     targetingMode,
     setTargetingMode,
-    targetingOptions: targetingOptions(game, ui),
+    targetingOptions: options,
     onHover,
     interact,
     issue,
@@ -424,5 +465,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     cancel,
     calloutEnter,
     calloutLeave,
+    calloutFocus,
+    calloutBlur,
   };
 }

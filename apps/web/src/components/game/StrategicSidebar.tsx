@@ -21,6 +21,7 @@ import { NodePanel } from './NodePanel.tsx';
 import { SupplyPanel } from './SupplyPanel.tsx';
 import { CampaignRecruitmentPanel } from './CampaignRecruitmentPanel.tsx';
 import { RoadRepairPanel } from './RoadRepairPanel.tsx';
+import { strategicKnowledge } from '../../lib/strategicVisibility.ts';
 
 export function StrategicSidebar({
   game,
@@ -35,9 +36,14 @@ export function StrategicSidebar({
   const dispatch = useGameStore((s) => s.dispatch);
   const setUi = useGameStore((s) => s.setUi);
   const { world, terrain } = worldOf(game);
-  const team = game.active;
+  const team = view ?? game.active;
+  const knowledge = useMemo(() => strategicKnowledge(game, view), [game, view]);
   const main = ui.selectedMain ? world.mainByKey.get(ui.selectedMain) : null;
   const hexState = main ? game.hexes[main.key] : null;
+  const observedOwner = main ? knowledge.owners.get(main.key) : undefined;
+  const currentlyObserved = !!main && knowledge.mains.has(main.key);
+  const fullyObserved = !!main && main.subKeys.every((key) => knowledge.cells.has(key));
+  const mayInspectActive = view === null || view === game.active;
   const holdersHere = main ? seenHolders(game, view).filter((a) => a.at === main.key) : [];
   const garrison = garrisonOf(game, team);
   const garrisonFull = (garrison?.units.length ?? 0) >= COMMAND.garrisonCap;
@@ -134,30 +140,47 @@ export function StrategicSidebar({
           <>
             <Stat
               label="Owner"
-              value={hexState.owner ? TEAM_NAME[hexState.owner] : 'NEUTRAL'}
+              value={
+                observedOwner === undefined
+                  ? 'UNKNOWN'
+                  : observedOwner
+                    ? TEAM_NAME[observedOwner]
+                    : 'NEUTRAL'
+              }
               tone={
-                hexState.owner === 'A'
+                observedOwner === 'A'
                   ? 'text-[hsl(var(--primary))]'
-                  : hexState.owner === 'B'
+                  : observedOwner === 'B'
                     ? 'text-[hsl(var(--secondary))]'
                     : undefined
               }
             />
+            {!currentlyObserved && (
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                {observedOwner === undefined
+                  ? 'Ownership has not been observed.'
+                  : 'Last observed owner.'}{' '}
+                Reveal at least one tile in this MainHex to update ownership.
+              </p>
+            )}
             <Stat
               label="Mean elevation"
               value={(terrain.mainHeight.get(main.key) ?? 0).toFixed(1)}
             />
-            <Stat label="Fortification" value={`${hexFortLevel(game, world, main.key)} levels`} />
-            {hexState.owner === team && (
+            <Stat
+              label="Fortification"
+              value={fullyObserved ? `${hexFortLevel(game, world, main.key)} levels` : 'UNKNOWN'}
+            />
+            {currentlyObserved && hexState.owner === team && (
               <Stat label="Warning clock" value={`${hexState.warning} turn(s)`} />
             )}
-            {main.key === game.hq.A && (
+            {currentlyObserved && main.key === game.hq.A && (
               <Stat label="HQ" value="ALPHA HQ" tone="text-[hsl(var(--primary))]" />
             )}
-            {main.key === game.hq.B && (
+            {currentlyObserved && main.key === game.hq.B && (
               <Stat label="HQ" value="BRAVO HQ" tone="text-[hsl(var(--secondary))]" />
             )}
-            {hexState.owner === team && canAct && (
+            {currentlyObserved && hexState.owner === team && canAct && mayInspectActive && (
               <Button
                 size="sm"
                 onClick={() => dispatch({ type: 'fortify', hex: main.key })}
@@ -182,12 +205,25 @@ export function StrategicSidebar({
       </Panel>
 
       <ContentsPanel game={game} view={view} />
-      <NodePanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
-      <SupplyPanel game={game} mainHex={main?.key ?? null} />
-      <RoadRepairPanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
+      <NodePanel
+        game={game}
+        mainHex={main?.key ?? null}
+        view={view}
+        canAct={canAct && mayInspectActive}
+      />
+      <SupplyPanel game={game} mainHex={main?.key ?? null} view={view} />
+      {mayInspectActive && (
+        <RoadRepairPanel game={game} mainHex={main?.key ?? null} canAct={canAct} view={view} />
+      )}
 
       {game.infrastructure ? (
-        <CampaignRecruitmentPanel game={game} mainHex={main?.key ?? null} canAct={canAct} />
+        mayInspectActive ? (
+          <CampaignRecruitmentPanel
+            game={game}
+            mainHex={currentlyObserved ? (main?.key ?? null) : null}
+            canAct={canAct}
+          />
+        ) : null
       ) : (
         <Panel
           id="recruit"
@@ -227,6 +263,7 @@ export function StrategicSidebar({
       <Panel id="campaign-log" title="CAMPAIGN LOG" bodyClassName="h-48">
         <ol className="text-[10px] leading-4 h-full overflow-auto">
           {game.log
+            .filter((entry) => view === null || !game.settings.fog || entry.team === view)
             .slice(-60)
             .reverse()
             .map((l, i) => (

@@ -247,6 +247,8 @@ export interface GameState {
   cp: Record<Team, number>;
   hq: Record<Team, HexKey>;
   hexes: Record<HexKey, MainHexState>;
+  /** Last observed territorial owner per player. Missing MainHex keys are unknown; null is observed neutral. */
+  ownershipKnowledge?: Record<Team, Record<HexKey, Team | null>>;
   armies: Army[];
   /** Sub-hex fortification levels (persist between battles). */
   forts: Record<HexKey, number>;

@@ -193,6 +193,7 @@ body {
 .map-callout [data-testid='map-command-preview'] {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   min-height: 0;
 }
 .map-callout [data-testid='map-command-preview'] > :not(.map-command-help) {
@@ -341,6 +342,7 @@ body {
   }
 }
 
-.map-callout[data-callout-mode='context'] {
+.map-callout[data-callout-mode='context'],
+.map-callout[data-callout-mode='preview'] {
   overflow-y: auto;
 }

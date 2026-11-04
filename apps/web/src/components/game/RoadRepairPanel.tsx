@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { GameState } from '@iron-ridge/engine';
+import type { GameState, Team } from '@iron-ridge/engine';
 import { campaignRoadRepairOptions } from '@iron-ridge/engine';
-import { useGameStore } from '../../stores/useGameStore.ts';
+import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
+import { strategicKnowledge } from '../../lib/strategicVisibility.ts';
 import { Button } from '../ui/Button.tsx';
 import { Panel } from '../ui/Panel.tsx';
 
@@ -10,22 +11,33 @@ export function RoadRepairPanel({
   mainHex,
   canAct,
   engineerUnitId,
+  view,
 }: {
   game: GameState;
   mainHex: string | null;
   canAct: boolean;
   engineerUnitId?: string | null;
+  view?: Team | null;
 }): React.ReactElement | null {
   const dispatch = useGameStore((state) => state.dispatch);
   const [selectedId, setSelectedId] = useState('');
+  const observer = view === undefined ? viewTeam(game) : view;
+  const knowledge = useMemo(
+    () => (game.phase === 'strategic' ? strategicKnowledge(game, observer) : null),
+    [game, observer],
+  );
   const options = useMemo(
     () =>
       campaignRoadRepairOptions(game).filter(
         (option) =>
           (mainHex === null || option.mainHex === mainHex) &&
-          (engineerUnitId === undefined || option.engineerUnitId === engineerUnitId),
+          (engineerUnitId === undefined || option.engineerUnitId === engineerUnitId) &&
+          (!knowledge ||
+            !!game.infrastructure?.supply?.roads
+              .find((road) => road.id === option.roadId)
+              ?.path.every((key) => knowledge.cells.has(key))),
       ),
-    [game, mainHex, engineerUnitId],
+    [game, mainHex, engineerUnitId, knowledge],
   );
   if (options.length === 0) return null;
   const selected = options.find((option) => option.request?.requestId === selectedId);

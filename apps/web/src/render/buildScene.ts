@@ -53,6 +53,7 @@ import type {
 import { TEAM_COLOR, topY } from './spec.ts';
 import type { OverlayMode } from './overlays.ts';
 import { CAPTURE_COLOR, basicColors, controlColors, heightColors } from './overlays.ts';
+import { strategicKnowledge } from '../lib/strategicVisibility.ts';
 
 export function tokenKind(typeId: string): TokenKind {
   const t = unitType(typeId);
@@ -136,16 +137,24 @@ export function buildStrategicScene(
 ): SceneSpec {
   const { world, terrain } = worldOf(game);
   const hOf = heightFn(world, terrain.heights);
+  const knowledge = strategicKnowledge(game, view);
   const cells: CellSpec[] = world.subs.map((s) => {
     const h = terrain.heights[s.index]!;
-    const owner = game.hexes[s.main]?.owner ?? null;
+    const owner = knowledge.owners.get(s.main);
     const colors =
       overlay === 'height'
         ? heightColors(h)
-        : overlay === 'control'
+        : overlay === 'control' && owner !== undefined
           ? controlColors(owner ? { kind: 'team', team: owner } : { kind: 'none' })
           : basicColors;
-    return { key: s.key, q: s.hex.q, r: s.hex.r, h, ...colors, fort: game.forts[s.key] ?? 0 };
+    return {
+      key: s.key,
+      q: s.hex.q,
+      r: s.hex.r,
+      h,
+      ...colors,
+      fort: knowledge.cells.has(s.key) ? (game.forts[s.key] ?? 0) : 0,
+    };
   });
 
   const allMains = world.mains.map((m) => m.key);
@@ -159,13 +168,13 @@ export function buildStrategicScene(
   ];
   // Territory frontiers drawn in team colour.
   for (const team of ['A', 'B'] as Team[]) {
-    const owned = allMains.filter((k) => game.hexes[k]?.owner === team);
+    const owned = allMains.filter((k) => knowledge.owners.get(k) === team);
     borders.push({
       segments: mainOutline(
         world,
         owned,
         hOf,
-        (_i, outer) => outer === null || game.hexes[outer]?.owner !== team,
+        (_i, outer) => outer === null || knowledge.owners.get(outer) !== team,
       ),
       color: TEAM_COLOR[team],
       width: 2.6,
@@ -174,7 +183,11 @@ export function buildStrategicScene(
   }
 
   const overlays: OverlaySpec[] = [];
-  let path: string[] = [...inspectedSupplyRoute];
+  let path: string[] =
+    (view === null || view === game.active) &&
+    inspectedSupplyRoute.every((key) => knowledge.cells.has(key))
+      ? [...inspectedSupplyRoute]
+      : [];
   const selected = ui.selectedArmy ? game.armies.find((a) => a.id === ui.selectedArmy) : null;
   const hl = commandHighlights(game, ui.selectedArmy, ui.checkedUnits, view);
   // Holder/building clicks select or engage, even when the underlying cell can
@@ -213,6 +226,7 @@ export function buildStrategicScene(
   const legacyHqs: Team[] = game.infrastructure ? [] : ['A', 'B'];
   for (const team of legacyHqs) {
     const hq = world.mainByKey.get(game.hq[team])!;
+    if (!knowledge.mains.has(hq.key)) continue;
     if (game.hexes[hq.key]?.owner !== team) continue;
     // The garrison's count rides on the HQ label when the viewer can see it.
     const garrison = seen.find((a) => a.kind === 'garrison' && a.team === team);
@@ -233,7 +247,8 @@ export function buildStrategicScene(
   }
   for (const node of campaignNodeViews(game)) {
     const site = game.infrastructure!.sites.find((candidate) => candidate.nodeId === node.nodeId)!;
-    if (node.owner === null) {
+    if (!knowledge.mains.has(site.mainHex)) continue;
+    if (node.owner === null && knowledge.cells.has(site.centerSubHex)) {
       overlays.push({
         key: site.centerSubHex,
         color: node.status === 'ruined' ? 0xffa03c : 0x899aaf,
@@ -241,6 +256,7 @@ export function buildStrategicScene(
       });
     }
     for (const building of node.buildings.filter((candidate) => candidate.placement === 'annex')) {
+      if (!knowledge.cells.has(building.subHex)) continue;
       overlays.push({
         key: building.subHex,
         color: building.ruined ? 0xffa03c : node.owner ? TEAM_COLOR[node.owner] : 0x899aaf,
@@ -252,7 +268,7 @@ export function buildStrategicScene(
         overlays.push({ key: cell, color: 0x899aaf, opacity: 0.12 });
       }
     }
-    if (!node.owner) continue;
+    if (!node.owner || !knowledge.cells.has(site.centerSubHex)) continue;
     const center = node.buildings.find((building) => building.placement === 'center');
     const holder = seen.find(
       (candidate) =>

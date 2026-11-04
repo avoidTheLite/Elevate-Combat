@@ -1059,6 +1059,10 @@ export class HexScene {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      this.cancelAllPointers();
+      return;
+    }
     if (isInteractiveKeyTarget(e.target)) return;
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
@@ -1083,10 +1087,15 @@ export class HexScene {
   };
 
   private cancelAllPointers(): void {
+    const pointerIds = [...this.activePointers.keys()];
     this.cancelGesture();
     this.activePointers.clear();
     this.multiPointer = false;
     this.multiPanCenter = null;
+    const el = this.renderer.domElement;
+    for (const id of pointerIds) {
+      if (el.hasPointerCapture(id)) el.releasePointerCapture(id);
+    }
   }
 
   private emitInteraction(interaction: SceneInteraction): void {

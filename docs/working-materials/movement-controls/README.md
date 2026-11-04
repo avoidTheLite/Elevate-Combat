@@ -24,3 +24,14 @@ node docs/working-materials/movement-controls/browser-feedback.mjs
 ```
 
 Output defaults to `/tmp/ux-controls-commands` and `/tmp/ux-controls-input`. `QA_URL` and `UX_EVIDENCE_DIR` can override the URL/output for the command script; see the input script's environment names for its output override. Physical-device long-press behavior is a separate verification limit.
+
+The November 4 review follow-up adds fog-safe blind-fire details and retained per-player strategic ownership. One visible SubHex updates its MainHex owner; occlusion keeps the last observation. Saves now use schema 5; older saves initialize only currently visible ownership, with no retroactive knowledge of hidden changes.
+
+Additional reproducible proof (prepared initial fixtures are imported through the ordinary save UI; no fabricated combat outcomes):
+
+```sh
+node docs/working-materials/movement-controls/browser-review.mjs
+node docs/working-materials/movement-controls/browser-ownership.mjs
+```
+
+See the DKR execution guide’s PR-feedback section for pinned results and the independent review. The Copilot setup job’s private CLI clone authentication failure is a separate environment limitation; the review comments themselves were available and addressed.

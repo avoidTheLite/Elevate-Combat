@@ -83,8 +83,14 @@ function AnchoredCallout({
         data-anchor-key={anchor?.key}
         onPointerEnter={controls.calloutEnter}
         onPointerLeave={controls.calloutLeave}
-        onFocus={controls.calloutEnter}
-        onBlur={controls.calloutLeave}
+        onFocus={controls.calloutFocus}
+        onBlur={(event) => {
+          if (
+            !(event.relatedTarget instanceof Node) ||
+            !event.currentTarget.contains(event.relatedTarget)
+          )
+            controls.calloutBlur();
+        }}
       >
         {children}
       </div>
