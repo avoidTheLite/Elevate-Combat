@@ -213,6 +213,35 @@ try {
   assert.deepEqual(await game(m), mb);
   check('Preference prose is optional touch-accessible Help');
   await m.close();
+  for (const viewport of [
+    { width: 568, height: 320 },
+    { width: 320, height: 568 },
+  ]) {
+    const small = await fresh(true);
+    await small.setViewportSize(viewport);
+    await small.getByRole('button', { name: 'SELECT ENG', exact: true }).tap();
+    const original = await game(small);
+    await small.getByRole('button', { name: 'Selected tile actions', exact: true }).tap();
+    const card = small.locator('.map-callout[data-callout-mode="context"]');
+    assert.equal(await card.evaluate((e) => getComputedStyle(e).overflowY), 'auto');
+    const deselect = card.getByRole('button', { name: 'DESELECT', exact: true });
+    await deselect.scrollIntoViewIfNeeded();
+    assert.ok(
+      await deselect.evaluate((e) => {
+        const r = e.getBoundingClientRect(),
+          c = e.closest('.map-callout').getBoundingClientRect();
+        return r.top >= c.top && r.bottom <= c.bottom + 1 && r.bottom <= innerHeight;
+      }),
+    );
+    await shot(small, `05-context-scroll-${viewport.width}x${viewport.height}`);
+    await deselect.tap();
+    assert.equal(await small.locator('.map-callout').count(), 0);
+    assert.deepEqual(await game(small), original);
+    check(
+      `Small ${viewport.width}x${viewport.height} contextual actions scroll and remain reachable`,
+    );
+    await small.close();
+  }
   assert.deepEqual(report.errors, []);
   report.status = 'PASS';
 } catch (e) {

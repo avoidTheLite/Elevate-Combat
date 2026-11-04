@@ -340,3 +340,7 @@ body {
     min-height: 44px;
   }
 }
+
+.map-callout[data-callout-mode='context'] {
+  overflow-y: auto;
+}

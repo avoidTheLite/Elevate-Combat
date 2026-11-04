@@ -79,6 +79,7 @@ function AnchoredCallout({
         ref={box}
         className={`map-callout${controls.exiting ? ' map-callout-exit' : ''}`}
         data-callout-kind="target"
+        data-callout-mode={controls.pending ? 'preview' : 'context'}
         data-anchor-key={anchor?.key}
         onPointerEnter={controls.calloutEnter}
         onPointerLeave={controls.calloutLeave}
