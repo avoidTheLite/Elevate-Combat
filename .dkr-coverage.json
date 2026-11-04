@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "a7153796d20f6af00a3e65c2a94f3a741c36d524",
+  "implementation_sha": "323011affd0dff4ab0040f64c6b186fc1c650bd6",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -682,6 +682,26 @@
         {
           "path": "apps/web/src/render/HexScene.input.test.ts",
           "name": "real scene pointer bindings trusted Chromium Shift+F10 event shape uses keyboard fallback despite its mouse pointer type",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts selection shows no persistent popup; a requested tile context retains unit actions",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts keeps preview explanations out of the default layout with accessible descriptions and optional help",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle native context selects and exposes a previously unselected unit without an automatic persistent card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.test.tsx",
+          "name": "map command interaction lifecycle deliberate context survives native touch leave/scroll delay but Escape cancels without spending",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
