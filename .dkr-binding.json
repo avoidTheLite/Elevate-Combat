@@ -7,7 +7,8 @@
   },
   "implementation": {
     "repo": "avoidTheLite/Elevate-Combat",
-    "sha": "f6cda97b258fd1023abbdcfd9f8b8c7d696a88f4"
+    "sha": "f6cda97b258fd1023abbdcfd9f8b8c7d696a88f4",
+    "pr": "https://github.com/avoidTheLite/Elevate-Combat/pull/19"
   },
   "fidelity": "proto-ahead",
   "coverage": {
