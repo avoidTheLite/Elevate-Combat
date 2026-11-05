@@ -431,6 +431,19 @@ try {
 
   const s = await fresh({ regular: true });
   const sHash = await gameHash(s);
+  const commander = await s.evaluate(() =>
+    window.__ironRidge.store
+      .getState()
+      .game.armies.find((a) => a.team === 'A' && a.kind === 'commander'),
+  );
+  const commanderPoint = await point(s, commander.pos);
+  assert.ok(commanderPoint);
+  await s.mouse.click(commanderPoint.x, commanderPoint.y);
+  assert.equal(
+    await s.evaluate(() => window.__ironRidge.store.getState().ui.selectedArmy),
+    commander.id,
+  );
+  assert.equal(await gameHash(s), sHash);
   const sCommand = await stageMove(s);
   assert.equal((await snapshot(s)).kind, 'move');
   assert.equal(await gameHash(s), sHash);
