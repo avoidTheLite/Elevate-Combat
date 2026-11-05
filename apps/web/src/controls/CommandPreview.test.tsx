@@ -10,8 +10,9 @@ import {
   ATTACK_PREVIEW_COLOR,
   CommandPreviewLine,
   commandRoute,
+  commandGlow,
   MOVE_PREVIEW_COLOR,
-  MoveConfirmation,
+  CommandConfirmation,
 } from './CommandPreview.tsx';
 import type { SceneTileAnchor } from './types.ts';
 import { TEAM_COLOR } from '../render/spec.ts';
@@ -48,7 +49,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
       let confirmed = 0;
       let cancelled = 0;
       render(
-        <MoveConfirmation
+        <CommandConfirmation
           pending={{ game, command, dragging: false }}
           helpId="compat-click"
           confirm={() => {
@@ -108,7 +109,8 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
     const anchors = [anchor(command.origin, 10, 15), anchor(command.target, 90, 95)];
     const view = render(<CommandPreviewLine command={command} anchors={anchors} staged animate />);
     const route = view.container.querySelector('[data-command-route]')!;
-    expect(route).toHaveAttribute('d', 'M10,15 L90,95');
+    expect(commandRoute(command, anchors)).toBe('M10,15 L90,95');
+    expect(route).toHaveAttribute('d', commandRoute(command, anchors, true));
     expect(ATTACK_PREVIEW_COLOR).toBe(`#${TEAM_COLOR.B.toString(16)}`);
     expect(view.container.querySelector('.map-command-line')).toHaveAttribute(
       'href',
@@ -152,7 +154,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
     };
     const pending = { game, command, dragging: true };
     const view = render(
-      <MoveConfirmation
+      <CommandConfirmation
         pending={pending}
         anchor={anchor(command.target, 200, 150)}
         helpId="move-test"
@@ -165,7 +167,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
     expect(button).toHaveAccessibleDescription(/MP/);
     expect(button).not.toHaveFocus();
     view.rerender(
-      <MoveConfirmation
+      <CommandConfirmation
         pending={{ ...pending, dragging: false }}
         anchor={anchor(command.target, 200, 150)}
         helpId="move-test"
@@ -178,5 +180,38 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
     button.click();
     expect(confirmed).toBe(1);
     expect(game).toEqual(before);
+  });
+
+  it('repeats lights roughly every three tiles on a long route without changing spacing under zoom', () => {
+    const command: MapCommand = {
+      ...moveCommand(createMovementDemo()),
+      origin: '0,0',
+      target: '12,0',
+      kind: 'attack',
+    };
+    const style = commandGlow(command) as Record<string, string>;
+    const period = Number(style['--map-flow-spacing']);
+    expect((period / 100) * 12).toBeCloseTo(3);
+    // More than one luminous segment fits the same line; normalized geometry
+    // keeps the world spacing unchanged when camera projection changes.
+    const view = render(
+      <CommandPreviewLine
+        command={command}
+        anchors={[anchor('0,0', 0, 0), anchor('12,0', 240, 20)]}
+        staged={false}
+        animate
+      />,
+    );
+    const before = view.container.querySelector('.map-command-glow')!.getAttribute('style');
+    view.rerender(
+      <CommandPreviewLine
+        command={command}
+        anchors={[anchor('0,0', 0, 0), anchor('12,0', 960, 80)]}
+        staged={false}
+        animate
+      />,
+    );
+    expect(view.container.querySelector('.map-command-glow')).toHaveAttribute('style', before);
+    expect(100 / period).toBe(4);
   });
 });

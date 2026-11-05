@@ -142,6 +142,10 @@ async function stageMove(p, { touch = false, min = 3 } = {}) {
   if (touch) await p.touchscreen.tap(c.hit.x, c.hit.y);
   else await p.mouse.click(c.hit.x, c.hit.y);
   await p.getByRole('dialog', { name: 'MOVE command preview', exact: true }).waitFor();
+  await fitControls(p);
+  return c.command;
+}
+async function fitControls(p) {
   await p.waitForFunction(() => {
     const b = document.querySelector('.map-move-confirmation');
     if (!b) return false;
@@ -167,7 +171,44 @@ async function stageMove(p, { touch = false, min = 3 } = {}) {
     };
     return points.every(inside);
   });
-  return c.command;
+}
+async function attackCandidate(p) {
+  const enemies = await p.evaluate(() => {
+    const h = window.__ironRidge,
+      { game: g, ui } = h.store.getState();
+    const unit = g.battle.units.find((u) => u.id === ui.selectedUnit),
+      ctx = h.engine.contextFor(g);
+    return g.battle.units.filter(
+      (u) =>
+        u.team !== unit.team && u.pos && h.engine.previewAttack(ctx, g.battle, unit, u.pos).legal,
+    );
+  });
+  await p.getByTitle('Reset view (R)', { exact: true }).click();
+  await p.waitForTimeout(750);
+  let enemy, target;
+  for (let rotation = 0; rotation < 8 && !target; rotation++) {
+    for (const candidate of enemies) {
+      target = await point(p, candidate.pos);
+      if (target) {
+        enemy = candidate;
+        break;
+      }
+    }
+    if (!target) {
+      await p.getByTitle('Rotate right (E)', { exact: true }).click();
+      await p.waitForTimeout(500);
+    }
+  }
+  assert.ok(target, 'A real legal enemy tile must be clickable');
+  return { enemy, target };
+}
+async function stageAttack(p, touch = false) {
+  const { enemy, target } = await attackCandidate(p);
+  if (touch) await p.touchscreen.tap(target.x, target.y);
+  else await p.mouse.click(target.x, target.y);
+  await p.getByRole('dialog', { name: 'ATTACK command preview', exact: true }).waitFor();
+  await fitControls(p);
+  return enemy;
 }
 async function snapshot(p) {
   return p.evaluate(() => {
@@ -190,6 +231,9 @@ async function snapshot(p) {
       width: line && getComputedStyle(line).strokeWidth,
       animation: glow && getComputedStyle(glow).animationName,
       dash: glow && getComputedStyle(glow).strokeDashoffset,
+      duration: glow && getComputedStyle(glow).animationDuration,
+      dashArray: glow && getComputedStyle(glow).strokeDasharray,
+      pulseSpacing: glow && getComputedStyle(glow).getPropertyValue('--map-flow-spacing'),
       legacyEffects: s.fxGroup.children.length,
       viewSize: s.viewSize,
       viewSizeGoal: s.viewSizeGoal,
@@ -272,6 +316,8 @@ try {
     await p.waitForTimeout(140);
   }
   assert.equal(staged.animation, 'map-command-flow');
+  assert.equal(staged.duration, '0.9s');
+  assert.ok(Math.abs((Number(staged.pulseSpacing) * (c.command.path.length - 1)) / 100 - 3) < 1e-6);
   assert.ok(new Set(offsets).size > 1);
   check('Glow moves along the shared route toward its arrow', { offsets });
   const expected = await p.evaluate(
@@ -313,35 +359,7 @@ try {
 
   const a = await fresh(),
     aHash = await gameHash(a);
-  const enemies = await a.evaluate(() => {
-    const h = window.__ironRidge,
-      { game: g, ui } = h.store.getState();
-    const unit = g.battle.units.find((u) => u.id === ui.selectedUnit),
-      ctx = h.engine.contextFor(g);
-    return g.battle.units.filter(
-      (u) =>
-        u.team !== unit.team && u.pos && h.engine.previewAttack(ctx, g.battle, unit, u.pos).legal,
-    );
-  });
-  await a.getByTitle('Reset view (R)', { exact: true }).click();
-  await a.waitForTimeout(750);
-  let enemy, target;
-  for (let rotation = 0; rotation < 8 && !target; rotation++) {
-    for (const candidate of enemies) {
-      target = await point(a, candidate.pos);
-      if (target) {
-        enemy = candidate;
-        break;
-      }
-    }
-    if (!target) {
-      await a.getByTitle('Rotate right (E)', { exact: true }).click();
-      await a.waitForTimeout(500);
-    }
-  }
-  assert.ok(target, 'A real legal enemy tile must be clickable from an ordinary map view');
-  await a.mouse.click(target.x, target.y);
-  await a.getByRole('dialog', { name: 'ATTACK command preview', exact: true }).waitFor();
+  const enemy = await stageAttack(a);
   await a.waitForTimeout(250);
   const attack = await snapshot(a),
     enemyColor = await a.evaluate(
@@ -355,24 +373,55 @@ try {
   assert.equal(attack.geometryCount, 1);
   assert.equal((attack.d.match(/[ML]/g) || []).length, 2);
   assert.equal(attack.legacyEffects, 0);
-  await a.locator('summary[aria-label="ATTACK command details"]').click();
-  assert.match(
-    await a.getByRole('dialog', { name: 'ATTACK command preview' }).innerText(),
-    /Expected damage/,
-  );
+  assert.equal(attack.buttons.length, 2);
+  assert.ok(attack.buttons.every((b) => b.width === 44 && b.height === 44 && b.visible));
+  assert.equal(await a.locator('.map-callout').count(), 0);
+  assert.equal(await a.locator('.map-command-help').count(), 0);
+  const attackAX = await ax(a);
+  assert.match(attackAX.find((b) => b.name === 'CONFIRM ATTACK').description, /Hit \d+%/);
+  assert.doesNotMatch(JSON.stringify(attackAX), /TN |Expected damage/);
   assert.equal(await gameHash(a), aHash);
   await shot(a, '03-attack-single-red-arrow');
-  check(
-    'Attack uses one direct red arrow matching enemy names; existing Help and no-spend behavior remain',
-    { attack, enemyColor },
-  );
+  check('Attack has one red arrow and in-hex44px check/X, compact hit description and no Help', {
+    attack,
+    enemyColor,
+    attackAX,
+  });
   await a.getByRole('button', { name: '◎ FIRE VIEW (F)', exact: true }).click();
   await a.waitForTimeout(600);
   assert.equal((await snapshot(a)).legacyEffects, 0);
   assert.equal((await snapshot(a)).geometryCount, 1);
   assert.equal(await gameHash(a), aHash);
   check('Existing firing view keeps a single command arrow and leaves game authority unchanged');
+  await a.getByRole('button', { name: 'CANCEL', exact: true }).click();
+  assert.equal(await gameHash(a), aHash);
+  const enemyAgain = await stageAttack(a);
+  const expectedAttack = await a.evaluate((target) => {
+    const h = window.__ironRidge,
+      { game: g, ui } = h.store.getState();
+    return h.engine.apply(g, { type: 'attack', unitId: ui.selectedUnit, cell: target }).state;
+  }, enemyAgain.pos);
+  await a.keyboard.press('Enter');
+  assert.deepEqual(await game(a), expectedAttack);
+  check('Attack X cancels without spend; keyboard check confirms exactly one engine attack');
   await a.close();
+
+  const hoverPage = await fresh();
+  const { target: hp } = await attackCandidate(hoverPage);
+  await hoverPage.mouse.move(hp.x, hp.y);
+  const card = hoverPage.locator('.map-callout');
+  await card.waitFor();
+  const hoverText = await card.innerText(),
+    hoverRect = await card.boundingBox();
+  assert.match(hoverText, /TILE .*Height .*Hit \d+%/s);
+  assert.doesNotMatch(hoverText, /HELP|Expected damage|TN |PREVIEW/);
+  assert.ok(hoverRect.width <= 205 && hoverRect.height < 150);
+  await shot(hoverPage, '09-small-hover-summary');
+  check('Hover window is at most204px, with basic tile summary and hit percentage and no Help', {
+    hoverText,
+    hoverRect,
+  });
+  await hoverPage.close();
 
   for (const size of [
     { width: 390, height: 844 },
@@ -400,6 +449,28 @@ try {
       { path: cmd.path, view },
     );
     await m.close();
+    const t = await fresh({ touch: true, ...size }),
+      tHash = await gameHash(t);
+    await stageAttack(t, true);
+    const tView = await snapshot(t);
+    assert.ok(tView.buttons.every((b) => b.width === 44 && b.height === 44 && b.visible));
+    assert.equal(await gameHash(t), tHash);
+    await shot(t, `10-touch-attack-${size.width}x${size.height}`);
+    await t.getByRole('button', { name: 'CANCEL', exact: true }).tap();
+    assert.equal(await gameHash(t), tHash);
+    const te = await stageAttack(t, true);
+    const expected = await t.evaluate((target) => {
+      const h = window.__ironRidge,
+        { game: g, ui } = h.store.getState();
+      return h.engine.apply(g, { type: 'attack', unitId: ui.selectedUnit, cell: target }).state;
+    }, te.pos);
+    await t.getByRole('button', { name: 'CONFIRM ATTACK', exact: true }).tap();
+    assert.deepEqual(await game(t), expected);
+    check(
+      `Trusted touch attack ${size.width}x${size.height}: initial tap never fires, in-hex controls cancel and confirm exactly once`,
+      { tView },
+    );
+    await t.close();
   }
 
   const r = await fresh({ reduced: true });
@@ -536,15 +607,16 @@ try {
     await v.mouse.click(target.x, target.y);
     const dialog = v.getByRole('dialog', { name: 'ATTACK command preview', exact: true });
     await dialog.waitFor();
-    await v.locator('summary[aria-label="ATTACK command details"]').click();
-    const text = await dialog.innerText(),
+    const text = await dialog
+        .getAttribute('aria-describedby')
+        .then((id) => v.locator(`[id="${id}"]`).textContent()),
       a11y = await ax(v);
     privacy.push({ config, text, a11y, route: (await snapshot(v)).d });
     if (config.fog) {
       assert.doesNotMatch(text, /TN |direct hit|Expected damage|armor/);
-      assert.match(text, /statistics are unknown/);
+      assert.match(text, /Hit chance unknown/);
       assert.doesNotMatch(JSON.stringify(a11y), /TN |direct hit|Expected damage|armor/);
-    } else assert.match(text, /Expected damage/);
+    } else assert.match(text, /Hit \d+%/);
     if (config.occupied && config.fog) await shot(v, '08-blind-fire-remains-redacted');
     await v.close();
   }
@@ -557,7 +629,7 @@ try {
     'Same route within0.25CSSpx camera-settling tolerance',
   );
   check(
-    'Prepared valid blind empty/hidden-tank fixtures preserve fog redaction and identical route; fog-off stays detailed',
+    'Prepared valid blind empty/hidden-tank fixtures preserve fog redaction and identical route; fog-off shows hit percentage',
     {
       privacy,
       fixtureProvenance:

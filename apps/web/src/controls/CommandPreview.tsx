@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { MapCommand, PendingCommand } from './commands.ts';
 import type { SceneTileAnchor } from './types.ts';
 import { TEAM_COLOR } from '../render/spec.ts';
+import { hexDistance, parseKey } from '@iron-ridge/engine';
 
 // Reuse the existing healthy-unit green and enemy-name red; no team palette change.
 export const MOVE_PREVIEW_COLOR = '#33ff88';
@@ -22,7 +23,7 @@ export function commandRoute(
   if (points.some((point) => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)))
     return null;
   const route = points.map((point) => ({ x: point!.x, y: point!.y }));
-  if (compactConfirmation && command.kind === 'move') {
+  if (compactConfirmation) {
     const end = route.at(-1)!;
     const previous = route.at(-2)!;
     const dx = end.x - previous.x;
@@ -37,6 +38,20 @@ export function commandRoute(
     end.y -= dy * inset;
   }
   return route.map((point, i) => `${i ? 'L' : 'M'}${point.x},${point.y}`).join(' ');
+}
+
+/** A new light enters every three grid steps, independent of path length or zoom. */
+export function commandGlow(command: PreviewRoute): CSSProperties {
+  const tiles = Math.max(
+    1,
+    command.kind === 'move'
+      ? command.path.length - 1
+      : hexDistance(parseKey(command.origin), parseKey(command.target)),
+  );
+  return {
+    '--map-flow-spacing': (300 / tiles).toString(),
+    '--map-flow-dashes': `${45 / tiles} ${255 / tiles}`,
+  } as CSSProperties;
 }
 
 export function CommandPreviewLine({
@@ -87,13 +102,18 @@ export function CommandPreviewLine({
         </filter>
       </defs>
       <use className="map-command-line" href={`#${id}-route`} markerEnd={`url(#${id}-arrow)`} />
-      {/* One luminous segment travels on that same route, never a second connector. */}
-      <use className="map-command-glow" href={`#${id}-route`} filter={`url(#${id}-glow)`} />
+      {/* Repeated lights share the one route, never another connector. */}
+      <use
+        className="map-command-glow"
+        href={`#${id}-route`}
+        filter={`url(#${id}-glow)`}
+        style={commandGlow(command)}
+      />
     </svg>
   );
 }
 
-export function MoveConfirmation({
+export function CommandConfirmation({
   pending,
   anchor,
   helpId,
@@ -108,6 +128,11 @@ export function MoveConfirmation({
 }): React.ReactElement {
   const confirmButton = useRef<HTMLButtonElement>(null);
   const pressed = useRef<'confirm' | 'cancel' | null>(null);
+  const label = pending.command.label;
+  const description =
+    pending.command.kind === 'attack'
+      ? pending.command.hitSummary
+      : pending.command.details.join(' ');
   useEffect(() => {
     if (!pending.dragging) confirmButton.current?.focus({ preventScroll: true });
   }, [pending.command.target, pending.dragging]);
@@ -122,14 +147,14 @@ export function MoveConfirmation({
       className={`map-move-confirmation${anchor ? '' : ' map-move-confirmation-fallback'}`}
       style={style}
       role="dialog"
-      aria-label="MOVE command preview"
+      aria-label={`${label} command preview`}
       aria-describedby={helpId}
       data-testid="map-command-preview"
       data-anchor-key={pending.command.target}
+      data-kind={pending.command.kind}
     >
       <span id={helpId} className="sr-only" aria-live="polite">
-        Move from {pending.command.origin} to {pending.command.target}.{' '}
-        {pending.command.details.join(' ')}{' '}
+        {label} from {pending.command.origin} to {pending.command.target}. {description}{' '}
         {pending.dragging
           ? 'Release, then confirm. Release does not execute.'
           : 'Confirm with the check mark or cancel with X or Escape. Details remain in the unit sidebar.'}
@@ -139,9 +164,9 @@ export function MoveConfirmation({
         type="button"
         className="map-move-confirm"
         disabled={pending.dragging}
-        aria-label="CONFIRM MOVE"
+        aria-label={`CONFIRM ${label}`}
         aria-describedby={helpId}
-        title={pending.command.details.join(' ')}
+        title={description}
         onPointerDown={(event) => {
           if (event.button === 0 && event.isPrimary !== false) pressed.current = 'confirm';
         }}

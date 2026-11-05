@@ -71,7 +71,56 @@ function anchors(from: string, to: string): void {
   );
 }
 
-describe('screen command artifacts', () => {
+describe('GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts', () => {
+  it('shows a compact hovered tile and hit percentage without the full attack preview or Help', () => {
+    vi.useFakeTimers();
+    const game = store().game!;
+    const ctx = contextFor(game);
+    const unit = game.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
+    const target = game.battle!.units.find(
+      (u) => u.team === 'B' && u.pos && previewAttack(ctx, game.battle!, unit, u.pos).legal,
+    )!;
+    render(<GameScreen />);
+    act(() => scene.onHover(target.pos!));
+    act(() => vi.advanceTimersByTime(500));
+    const card = document.querySelector('.map-callout') as HTMLElement;
+    expect(card).toHaveTextContent(`TILE ${target.pos}`);
+    expect(card).toHaveTextContent('Height');
+    expect(card).toHaveTextContent(
+      `Hit ${Math.round(previewAttack(ctx, game.battle!, unit, target.pos!).pDirect * 100)}%`,
+    );
+    expect(card.textContent).not.toMatch(/TN |Expected damage|HELP|PREVIEW/);
+    expect(card.querySelector('details')).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('attack check/X preserves state until confirmation and then dispatches exactly one engine attack', () => {
+    const mounted = render(<GameScreen />);
+    const game = store().game!;
+    const ctx = contextFor(game);
+    const unit = game.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
+    const target = game.battle!.units.find(
+      (u) => u.team === 'B' && u.pos && previewAttack(ctx, game.battle!, unit, u.pos).legal,
+    )!.pos!;
+    act(() => click(target));
+    expect(scene.commandControls.confirmationKey).toBe(target);
+    expect(mounted.container.querySelector('.map-callout')).toBeNull();
+    const preview = screen.getByRole('dialog', { name: 'ATTACK command preview' });
+    const confirm = within(preview).getByRole('button', { name: 'CONFIRM ATTACK' });
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(/Hit \d+%/);
+    expect(confirm.title).not.toMatch(/Expected damage|TN |HELP/);
+    expect(store().game).toBe(game);
+    fireEvent.click(within(preview).getByRole('button', { name: 'CANCEL' }));
+    expect(store().game).toBe(game);
+    expect(screen.queryByTestId('map-command-preview')).toBeNull();
+    act(() => click(target));
+    const expected = apply(game, { type: 'attack', unitId: unit.id, cell: target });
+    expect(expected.error).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM ATTACK' }));
+    expect(store().game).toEqual(expected.state);
+    expect(screen.queryByTestId('map-command-preview')).toBeNull();
+  });
   it('does not reveal a hidden direct-fire defender through an arrow or firing-view affordance', () => {
     const game = createMovementDemo();
     game.settings.fog = true;

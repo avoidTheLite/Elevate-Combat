@@ -53,6 +53,8 @@ describe('PR18 review information and interaction regressions', () => {
     hidden.hp = source.hp = hidden.maxHp = engine.unitType('ww2_tank').hp;
     const occupied = commandAt(f.game, f.ui, f.target, 'attack')!;
     expect(occupied.details).toEqual(empty.details);
+    expect(occupied.hitSummary).toBe(empty.hitSummary);
+    expect(occupied.hitSummary).toBe('Hit chance unknown · blind fire');
     expect(occupied.details.join(' ')).toContain('Blind fire');
     expect(occupied.details.join(' ')).not.toMatch(
       /TN |direct hit|splash|Expected damage|armor|Side|Front/,
@@ -78,7 +80,7 @@ describe('PR18 review information and interaction regressions', () => {
     mounted.rerender(<TacticalSidebar game={f.game} ctx={ctx} view={null} canAct seenIds={null} />);
     expect(screen.getByTestId('target-detail')).toHaveTextContent('TN');
   });
-  it('blind Help, hover titles and accessibility descriptions expose the same safe details', () => {
+  it('blind compact controls, hover titles and accessibility descriptions expose the same safe details', () => {
     const f = blindFireFixture();
     const hidden = f.battle.units.find((u) => u.team === 'B')!;
     hidden.pos = f.target;
@@ -107,10 +109,11 @@ describe('PR18 review information and interaction regressions', () => {
       }),
     );
     const preview = screen.getByRole('dialog', { name: 'ATTACK command preview' });
-    expect(preview).toHaveAccessibleDescription(/Defender statistics are unknown/);
+    expect(preview).toHaveAccessibleDescription(/Hit chance unknown/);
     const confirm = within(preview).getByRole('button', { name: 'CONFIRM ATTACK' });
     expect(confirm.title).not.toMatch(/TN |direct hit|Expected damage|armor/);
     expect(preview.textContent).not.toMatch(/TN |direct hit|Expected damage/);
+    expect(within(preview).queryByText(/HELP/)).not.toBeInTheDocument();
   });
   it('a hovered action survives pointer leave while keyboard focus remains inside', () => {
     vi.useFakeTimers();

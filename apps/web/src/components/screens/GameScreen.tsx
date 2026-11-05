@@ -148,6 +148,8 @@ export function GameScreen(): React.ReactElement {
     ],
   );
 
+  const targetHeight = spec.cells.find((cell) => cell.key === controls.targetKey)?.h;
+
   const seenIds = useMemo(() => {
     if (!tactical || !view || !game.battle) return null;
     const ids = new Set(liveUnits(game.battle, view).map((u) => u.id));
@@ -345,7 +347,7 @@ export function GameScreen(): React.ReactElement {
               selectionScope: controls.selectionScope,
               selectedOriginKey: controls.enabled ? selectedKey : null,
               confirmationKey:
-                controls.pending?.command.kind === 'move' && !controls.pending.dragging
+                controls.pending && !controls.pending.dragging
                   ? controls.pending.command.target
                   : null,
               protectedKeys: spec.tokens
@@ -370,7 +372,11 @@ export function GameScreen(): React.ReactElement {
               onLayout: controls.setAnchors,
             }}
           >
-            <MapCallouts controls={controls} previewRoute={previewRoute} />
+            <MapCallouts
+              controls={controls}
+              previewRoute={previewRoute}
+              tileSummary={targetHeight !== undefined ? `Height ${targetHeight}` : undefined}
+            />
           </SceneView>
           <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && game.phase !== 'battle-pending' && (

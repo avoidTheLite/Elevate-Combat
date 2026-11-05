@@ -32,6 +32,8 @@ export interface MapCommand {
   target: string;
   action: GameAction;
   details: string[];
+  /** Fog-safe, compact presentation; full fire-control details remain in the sidebar. */
+  hitSummary?: string;
   path: string[];
 }
 
@@ -213,6 +215,10 @@ function deriveCommand(
         action,
         path: [actor.pos, key],
         details: attackDetails(preview, derivation.view),
+        hitSummary:
+          derivation.view !== null && preview.blind
+            ? 'Hit chance unknown · blind fire'
+            : `Hit ${Math.round(preview.pDirect * 100)}%`,
       };
   }
   const action: GameAction = { type: 'move', unitId: unit.id, cell: key };

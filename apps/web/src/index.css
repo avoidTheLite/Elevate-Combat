@@ -140,7 +140,8 @@ body {
 .map-callout {
   position: absolute;
   z-index: 1;
-  width: min(260px, calc(100% - 16px));
+  width: min(204px, calc(100% - 16px));
+  padding: 7px;
   max-height: calc(100% - 94px);
   overflow-y: auto;
   pointer-events: auto;
@@ -175,29 +176,13 @@ body {
   color: hsl(var(--muted-foreground));
   font-size: 10px;
 }
-.map-callout ul {
-  margin: 6px 0;
-  padding-left: 16px;
+.map-callout .map-hit-summary {
+  color: hsl(var(--foreground));
+  font-weight: bold;
+  margin: 3px 0 6px;
 }
-.map-preview-details {
-  max-height: 190px;
-  min-height: 32px;
-  flex: 0 1 auto;
-  overflow-y: auto;
-}
-.map-callout[data-callout-kind='target'] {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.map-callout [data-testid='map-command-preview'] {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  min-height: 0;
-}
-.map-callout [data-testid='map-command-preview'] > :not(.map-command-help) {
-  flex-shrink: 0;
+.map-callout .map-tile-summary {
+  margin: 3px 0;
 }
 .map-callout-buttons {
   display: flex;
@@ -255,14 +240,14 @@ body {
   stroke: #fff;
   stroke-width: 4px;
   stroke-linecap: round;
-  stroke-dasharray: 12 88;
+  stroke-dasharray: var(--map-flow-dashes);
   opacity: 0.8;
-  animation: map-command-flow 1.6s linear infinite;
+  animation: map-command-flow 0.9s linear infinite;
   marker-end: none;
 }
 @keyframes map-command-flow {
   to {
-    stroke-dashoffset: -100;
+    stroke-dashoffset: calc(-1 * var(--map-flow-spacing));
   }
 }
 .map-command-route[data-motion='off'] .map-command-glow {
@@ -394,30 +379,8 @@ body {
   }
 }
 
-.map-command-help summary {
-  cursor: pointer;
-  color: hsl(var(--primary));
-  min-height: 36px;
-  padding: 6px 0;
-}
-.map-command-help summary:focus-visible {
-  outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
-}
 @media (pointer: coarse) {
-  .map-command-help summary,
   .map-context-trigger {
-    min-height: 44px;
-  }
-}
-
-.map-callout .map-command-help {
-  min-height: 36px;
-  flex: 0 1 auto;
-  overflow-y: auto;
-}
-@media (pointer: coarse) {
-  .map-callout .map-command-help {
     min-height: 44px;
   }
 }
