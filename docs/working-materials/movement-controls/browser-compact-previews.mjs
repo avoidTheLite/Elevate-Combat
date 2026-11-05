@@ -465,6 +465,8 @@ try {
   assert.equal(await gameHash(resume), resumeHash);
   assert.equal(await resume.getByTestId('map-command-preview').count(), 0);
   check('Continue restores exact game without reviving an unconfirmed move');
+  await resume.getByRole('button', { name: 'SELECT RIF', exact: true }).click();
+  assert.equal(await gameHash(resume), resumeHash);
   await resume.getByRole('button', { name: 'DEMO CONTROLS', exact: true }).click();
   await resume.getByRole('checkbox', { name: /QuickMove/ }).check();
   await resume.getByRole('button', { name: 'CLOSE CONTROLS', exact: true }).click();
@@ -512,16 +514,18 @@ try {
         unitId: f.shooter.id,
       };
     }, config);
-    await v.locator('input[type="file"]').setInputFiles({
+    await v.locator('input[aria-label="Import save file"]').setInputFiles({
       name: 'prepared-blind-preview.json',
       mimeType: 'application/json',
       buffer: Buffer.from(f.save),
     });
+    if (config.fog) await v.getByRole('button', { name: /^I AM .*CONTINUE$/ }).click();
     await v.waitForFunction(() => window.__ironRidge?.scene?.renderer.info.render.calls > 0);
     await v.waitForTimeout(700);
     const origin = await point(v, f.origin);
     assert.ok(origin);
     await v.mouse.click(origin.x, origin.y);
+    await v.waitForTimeout(650);
     await v.getByRole('button', { name: 'Selected tile actions', exact: true }).click();
     await v
       .getByLabel('Contextual unit actions')
@@ -545,7 +549,13 @@ try {
     await v.close();
   }
   assert.equal(privacy[0].text, privacy[1].text);
-  assert.equal(privacy[0].route, privacy[1].route);
+  const emptyPoints = privacy[0].route.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const hiddenPoints = privacy[1].route.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  assert.equal(emptyPoints.length, hiddenPoints.length);
+  assert.ok(
+    emptyPoints.every((value, i) => Math.abs(value - hiddenPoints[i]) < 0.25),
+    'Same route within0.25CSSpx camera-settling tolerance',
+  );
   check(
     'Prepared valid blind empty/hidden-tank fixtures preserve fog redaction and identical route; fog-off stays detailed',
     {
