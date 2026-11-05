@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "15e622217de7d8fa77b86b0ba1924e689d8d1778",
+  "implementation_sha": "f6cda97b258fd1023abbdcfd9f8b8c7d696a88f4",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -132,6 +132,11 @@
         {
           "path": "apps/web/src/strategicFog.test.tsx",
           "name": "GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog leaves omniscient and fog-disabled inspection fully available",
+          "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts does not reveal a hidden direct-fire defender through an arrow or firing-view affordance",
           "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
         }
       ]
@@ -511,7 +516,7 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts persists a real movement path and connector across pointer leave, then removes them on selection change",
+          "name": "screen command artifacts persists one real movement route across pointer leave, then removes it on selection change",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -796,7 +801,7 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts keeps preview explanations out of the default layout with accessible descriptions and optional help",
+          "name": "screen command artifacts uses compact movement check and cancel controls with accessible cost and no confirmation card",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -857,6 +862,46 @@
         {
           "path": "apps/web/src/render/HexScene.input.test.ts",
           "name": "real scene pointer bindings Escape releases both touch captures and stops an active two-finger pan",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews rejects a retargeted compatibility click on CONFIRM MOVE until a fresh press starts on that control",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews rejects a retargeted compatibility click on CANCEL until a fresh press starts on that control",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews follows every actual movement path cell and refuses a straight shortcut across a missing cell",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews uses one direct attack arrow in the exact enemy-name red and shares its geometry with the glow",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews transitions the same route into a staged arrow and honors the animation preference",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews focuses accessible confirmation only after release and leaves engine authority to the callbacks",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "screen command artifacts keeps unavailable attack inspection to one red route without inventing a legal confirmation",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.input.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: one projected route removes and disposes prior 3D preview effects",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
