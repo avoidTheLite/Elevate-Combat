@@ -171,6 +171,12 @@ async function fitControls(p) {
     };
     return points.every(inside);
   });
+  await p.waitForFunction(() => {
+    const s = window.__ironRidge.scene;
+    return (
+      Math.abs(s.viewSize - s.viewSizeGoal) < 0.0001 && s.target.distanceTo(s.targetGoal) < 0.0001
+    );
+  });
 }
 async function attackCandidate(p) {
   const enemies = await p.evaluate(() => {
@@ -607,6 +613,7 @@ try {
     await v.mouse.click(target.x, target.y);
     const dialog = v.getByRole('dialog', { name: 'ATTACK command preview', exact: true });
     await dialog.waitFor();
+    await fitControls(v);
     const text = await dialog
         .getAttribute('aria-describedby')
         .then((id) => v.locator(`[id="${id}"]`).textContent()),
