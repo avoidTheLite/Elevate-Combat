@@ -190,7 +190,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews', () => {
       kind: 'attack',
     };
     const style = commandGlow(command) as Record<string, string>;
-    const period = Number(style['--map-flow-spacing']);
+    const period = parseFloat(style['--map-flow-spacing']!);
     expect((period / 100) * 12).toBeCloseTo(3);
     // More than one luminous segment fits the same line; normalized geometry
     // keeps the world spacing unchanged when camera projection changes.

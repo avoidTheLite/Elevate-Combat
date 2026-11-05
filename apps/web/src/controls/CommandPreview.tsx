@@ -49,7 +49,7 @@ export function commandGlow(command: PreviewRoute): CSSProperties {
       : hexDistance(parseKey(command.origin), parseKey(command.target)),
   );
   return {
-    '--map-flow-spacing': (300 / tiles).toString(),
+    '--map-flow-spacing': `${300 / tiles}px`,
     '--map-flow-dashes': `${45 / tiles} ${255 / tiles}`,
   } as CSSProperties;
 }

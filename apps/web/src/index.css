@@ -246,6 +246,9 @@ body {
   marker-end: none;
 }
 @keyframes map-command-flow {
+  from {
+    stroke-dashoffset: 0px;
+  }
   to {
     stroke-dashoffset: calc(-1 * var(--map-flow-spacing));
   }

@@ -323,8 +323,18 @@ try {
   }
   assert.equal(staged.animation, 'map-command-flow');
   assert.equal(staged.duration, '0.9s');
-  assert.ok(Math.abs((Number(staged.pulseSpacing) * (c.command.path.length - 1)) / 100 - 3) < 1e-6);
-  assert.ok(new Set(offsets).size > 1);
+  assert.ok(
+    Math.abs((parseFloat(staged.pulseSpacing) * (c.command.path.length - 1)) / 100 - 3) < 1e-6,
+  );
+  assert.equal(
+    new Set(offsets).size,
+    3,
+    'Light must move continuously, not jump between endpoints',
+  );
+  assert.ok(
+    offsets.every((value) => /^-?\d+(\.\d+)?px$/.test(value)),
+    'Interpolated offsets must be resolved lengths',
+  );
   check('Glow moves along the shared route toward its arrow', { offsets });
   const expected = await p.evaluate(
     ({ before, command }) => window.__ironRidge.engine.apply(before, command.action).state,
