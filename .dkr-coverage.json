@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "f6cda97b258fd1023abbdcfd9f8b8c7d696a88f4",
+  "implementation_sha": "d8d186c1341748698505bc445f82f28e16e8947d",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -136,7 +136,7 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts does not reveal a hidden direct-fire defender through an arrow or firing-view affordance",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts does not reveal a hidden direct-fire defender through an arrow or firing-view affordance",
           "use_case_id": "GAMES-ELEVATE-WORLD-UC-002"
         }
       ]
@@ -226,7 +226,7 @@
         },
         {
           "path": "packages/engine/src/game.test.ts",
-          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: a forced engagement produces a playable tactical battle",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: campaign GAMES-ELEVATE-CAMPAIGN-UC-002: a forced engagement produces a playable tactical battle",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -506,42 +506,42 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=false)",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=false)",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=true)",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts a successful strategic move follows the selected holder into its destination MainHex (QuickMove=true)",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts persists one real movement route across pointer leave, then removes it on selection change",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts persists one real movement route across pointer leave, then removes it on selection change",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts removes attack trajectory, firing target and preview on deselect, then ignores stale hover",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts removes attack trajectory, firing target and preview on deselect, then ignores stale hover",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts exposes proposed browser preferences as keyboard-focusable controls",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts exposes proposed browser preferences as keyboard-focusable controls",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts explicit ATTACK on an empty destination and MOVE on an enemy never fall through to another command",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts explicit ATTACK on an empty destination and MOVE on an enemy never fall through to another command",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts an indirect MOVE preview shows the real path without an attack trajectory or firing view",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts an indirect MOVE preview shows the real path without an attack trajectory or firing view",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts QuickMove body-click inspects an owned empty node, while a neutral center remains a real move",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts QuickMove body-click inspects an owned empty node, while a neutral center remains a real move",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -796,12 +796,12 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts selection shows no persistent popup; a requested tile context retains unit actions",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts selection shows no persistent popup; a requested tile context retains unit actions",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts uses compact movement check and cancel controls with accessible cost and no confirmation card",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts uses compact movement check and cancel controls with accessible cost and no confirmation card",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -826,7 +826,7 @@
         },
         {
           "path": "apps/web/src/controls/review.controls.test.tsx",
-          "name": "PR18 review information and interaction regressions blind Help, hover titles and accessibility descriptions expose the same safe details",
+          "name": "PR18 review information and interaction regressions blind compact controls, hover titles and accessibility descriptions expose the same safe details",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -896,12 +896,27 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "screen command artifacts keeps unavailable attack inspection to one red route without inventing a legal confirmation",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts keeps unavailable attack inspection to one red route without inventing a legal confirmation",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
           "path": "apps/web/src/render/HexScene.input.test.ts",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: one projected route removes and disposes prior 3D preview effects",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/CommandPreview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: compact command previews repeats lights roughly every three tiles on a long route without changing spacing under zoom",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts shows a compact hovered tile and hit percentage without the full attack preview or Help",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts attack check/X preserves state until confirmation and then dispatches exactly one engine attack",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
@@ -921,7 +936,7 @@
         },
         {
           "path": "packages/engine/src/game.test.ts",
-          "name": "GAMES-ELEVATE-TACTICAL-UC-001: auto-resolve settles a pending battle",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: campaign GAMES-ELEVATE-TACTICAL-UC-001: auto-resolve settles a pending battle",
           "use_case_id": "GAMES-ELEVATE-TACTICAL-UC-001"
         },
         {
@@ -1151,7 +1166,7 @@
         },
         {
           "path": "packages/engine/src/engagementSave.test.ts",
-          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity uses schema 4 to prevent older builds ignoring deployment provenance, without rewriting schemas 2/3",
+          "name": "GAMES-ELEVATE-SESSION-UC-001: commander participation continuity uses schema 5 to preserve ownership knowledge and deployment provenance, without rewriting schemas 2/3",
           "use_case_id": "GAMES-ELEVATE-SESSION-UC-001"
         },
         {

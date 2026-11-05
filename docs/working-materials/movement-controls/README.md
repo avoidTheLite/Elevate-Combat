@@ -11,7 +11,7 @@ corepack pnpm --filter @iron-ridge/web dev --host 127.0.0.1
 
 Open Vite's local URL. Choose **OPEN PREPARED TACTICAL CONTROLS** or **START READY MOVEMENT CAMPAIGN**. Explicit starts replace the browser autosave; export a game to preserve first. Continue and save import remain available.
 
-Preview movement to see one green route and two check/X controls inside the destination hex. Preview an attack to see one red arrow and the existing Help/confirmation controls. Quick Move and Quick Attack remain separate preferences in **DEMO CONTROLS**. The check/X controls preserve keyboard and touch access; reduced motion makes the new animation static.
+Preview movement to see one green route and two check/X controls inside the destination hex. Preview an attack to see one red arrow and the same in-hex check/X controls. Hover windows show only tile key, height and hit chance; blind fire shows an unknown chance. Inline Help is removed; detailed fire control remains in the sidebar. The trial light repeats about every three tiles, entering every 0.9 seconds. Quick Move and Quick Attack remain separate preferences in **DEMO CONTROLS**. The check/X controls preserve keyboard and touch access; reduced motion makes the new animation static.
 
 Canonical intake, implementation choices, review steps and evidence live in the paired DKR at `domains/games/Elevate-Combat/features/campaign/stages/03-execution/movement-controls/COMPACT_PREVIEWS.md`. This product folder holds launch notes and runnable proof only.
 
