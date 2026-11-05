@@ -9,6 +9,8 @@ import {
   contextFor,
   createGame,
   reachable,
+  previewAttack,
+  revealedEnemies,
   refreshCampaignNodeSnapshot,
   setHolderPos,
   unitType,
@@ -70,6 +72,55 @@ function anchors(from: string, to: string): void {
 }
 
 describe('screen command artifacts', () => {
+  it('does not reveal a hidden direct-fire defender through an arrow or firing-view affordance', () => {
+    const game = createMovementDemo();
+    game.settings.fog = true;
+    const ctx = contextFor(game);
+    const seen = new Set(revealedEnemies(ctx, game.battle!, 'A').map((unit) => unit.id));
+    const hidden = game.battle!.units.find((unit) => unit.team === 'B' && !seen.has(unit.id))!;
+    expect(hidden).toBeDefined();
+    useGameStore.setState({ game, handoff: null });
+    store().setUi(movementDemoFocus(game));
+    const mounted = render(<GameScreen />);
+    act(() => scene.onHover(hidden.pos!));
+    anchors(scene.commandControls.selectedOriginKey!, hidden.pos!);
+    expect(mounted.container.querySelector('.map-command-route')).toBeNull();
+    expect(scene.spec.commandOverlay).toBe(true);
+    expect(scene.spec.fireView).toBeNull();
+    expect(store().game).toBe(game);
+  });
+  it('keeps unavailable attack inspection to one red route without inventing a legal confirmation', () => {
+    const mounted = render(<GameScreen />);
+    const before = store().game!;
+    const ctx = contextFor(before);
+    const unit = before.battle!.units.find(
+      (candidate) => candidate.id === store().ui.selectedUnit,
+    )!;
+    const target = before.battle!.units.find(
+      (candidate) =>
+        candidate.team !== unit.team &&
+        candidate.pos &&
+        !previewAttack(ctx, before.battle!, unit, candidate.pos).legal,
+    )!.pos!;
+    expect(target).toBeDefined();
+    openUnitContext();
+    fireEvent.click(
+      within(screen.getByLabelText('Contextual unit actions')).getByRole('button', {
+        name: 'ATTACK',
+      }),
+    );
+    act(() => scene.onHover(target));
+    anchors(unit.pos!, target);
+    expect(mounted.container.querySelectorAll('.map-command-route')).toHaveLength(1);
+    expect(mounted.container.querySelector('.map-command-route')).toHaveAttribute(
+      'data-kind',
+      'attack',
+    );
+    expect(scene.spec.commandOverlay).toBe(true);
+    act(() => click(target));
+    expect(screen.queryByTestId('map-command-preview')).not.toBeInTheDocument();
+    expect(store().game).toBe(before);
+  });
   it('selection shows no persistent popup; a requested tile context retains unit actions', () => {
     const mounted = render(<GameScreen />);
     const before = store().game;
@@ -85,7 +136,7 @@ describe('screen command artifacts', () => {
     expect(store().game).toBe(before);
   });
 
-  it('keeps preview explanations out of the default layout with accessible descriptions and optional help', () => {
+  it('uses compact movement check and cancel controls with accessible cost and no confirmation card', () => {
     render(<GameScreen />);
     const before = store().game!;
     const rifle = before.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
@@ -97,14 +148,11 @@ describe('screen command artifacts', () => {
     const confirm = within(preview).getByRole('button', { name: 'CONFIRM MOVE' });
     expect(confirm).toHaveAccessibleDescription(/MP/);
     expect(confirm).toHaveAttribute('title', expect.stringContaining('MP'));
-    const help = within(preview).getByText('? HELP');
-    expect(help.closest('details')).not.toHaveAttribute('open');
-    expect(
-      within(preview)
-        .getByText(/Movement preserves/, { selector: 'li' })
-        .closest('details'),
-    ).not.toHaveAttribute('open');
-    fireEvent.click(help);
+    expect(within(preview).getAllByRole('button')).toHaveLength(2);
+    expect(within(preview).getByRole('button', { name: 'CANCEL' })).toBeInTheDocument();
+    expect(preview.querySelector('details')).toBeNull();
+    expect(preview.closest('.map-callout')).toBeNull();
+    expect(confirm).toHaveFocus();
     expect(store().game).toBe(before);
   });
 
@@ -130,7 +178,7 @@ describe('screen command artifacts', () => {
       expect(store().ui.selectedMain).toBe(main);
     },
   );
-  it('persists a real movement path and connector across pointer leave, then removes them on selection change', () => {
+  it('persists one real movement route across pointer leave, then removes it on selection change', () => {
     const mounted = render(<GameScreen />);
     const game = store().game!;
     const rifle = game.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
@@ -139,7 +187,9 @@ describe('screen command artifacts', () => {
     anchors(rifle.pos!, key);
     expect(screen.getByRole('dialog', { name: 'MOVE command preview' })).toBeInTheDocument();
     expect(scene.spec.path.at(-1)).toBe(key);
-    expect(mounted.container.querySelector('.map-command-connector line')).toBeInTheDocument();
+    expect(
+      mounted.container.querySelector('.map-command-route [data-command-route]'),
+    ).toBeInTheDocument();
     act(() => scene.onHover(null));
     expect(scene.spec.path.at(-1)).toBe(key);
     const other = game.battle!.units.find((u) => u.team === 'A' && u.id !== rifle.id)!;
@@ -149,7 +199,7 @@ describe('screen command artifacts', () => {
     expect(scene.spec.trajectory).toBeNull();
     expect(scene.spec.fireView).toBeNull();
     expect(screen.queryByTestId('map-command-preview')).not.toBeInTheDocument();
-    expect(mounted.container.querySelector('.map-command-connector')).not.toBeInTheDocument();
+    expect(mounted.container.querySelector('.map-command-route')).not.toBeInTheDocument();
   });
 
   it('removes attack trajectory, firing target and preview on deselect, then ignores stale hover', () => {
@@ -171,7 +221,7 @@ describe('screen command artifacts', () => {
     expect(scene.spec.path).toEqual([]);
     expect(scene.spec.trajectory).toBeNull();
     expect(scene.spec.fireView).toBeNull();
-    expect(mounted.container.querySelector('.map-command-connector')).not.toBeInTheDocument();
+    expect(mounted.container.querySelector('.map-command-route')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Selected unit actions')).not.toBeInTheDocument();
   });
 

@@ -105,15 +105,47 @@ export function GameScreen(): React.ReactElement {
     [game, sceneUi, view, inBattle, overlay, inspectedSupplyRoute],
   );
   const rawSpec = tactical?.spec ?? strategic!;
+  const previewRoute = useMemo(() => {
+    if (controls.previewCommand) return controls.previewCommand;
+    // Unavailable attack inspection still uses the same single red arrow. It
+    // is presentation only: no legal command or confirmation is invented.
+    const target = rawSpec.trajectory;
+    const inspectable =
+      target && (target.indirect || rawSpec.tokens.some((token) => token.key === target.to));
+    return controls.enabled && controls.previewKind !== 'move' && target && inspectable
+      ? {
+          kind: 'attack' as const,
+          origin: target.from,
+          target: target.to,
+          path: [target.from, target.to],
+        }
+      : null;
+  }, [
+    controls.previewCommand,
+    controls.enabled,
+    controls.previewKind,
+    rawSpec.trajectory,
+    rawSpec.tokens,
+  ]);
   const spec = useMemo(
     () => ({
       ...rawSpec,
+      commandOverlay:
+        !!previewRoute || (controls.enabled && !!controls.actor && !!controls.previewKey),
       path:
         controls.previewKind === 'attack' ? [] : (controls.pending?.command.path ?? rawSpec.path),
       trajectory: controls.previewKind === 'move' ? null : rawSpec.trajectory,
-      fireView: controls.previewKind === 'move' ? null : rawSpec.fireView,
+      fireView: previewRoute?.kind === 'attack' ? rawSpec.fireView : null,
     }),
-    [rawSpec, controls.previewKind, controls.pending],
+    [
+      rawSpec,
+      controls.previewKind,
+      controls.pending,
+      previewRoute,
+      controls.enabled,
+      controls.actor,
+      controls.previewKey,
+    ],
   );
 
   const seenIds = useMemo(() => {
@@ -312,6 +344,10 @@ export function GameScreen(): React.ReactElement {
               enabled: controls.enabled,
               selectionScope: controls.selectionScope,
               selectedOriginKey: controls.enabled ? selectedKey : null,
+              confirmationKey:
+                controls.pending?.command.kind === 'move' && !controls.pending.dragging
+                  ? controls.pending.command.target
+                  : null,
               protectedKeys: spec.tokens
                 .filter((token) => token.key !== selectedKey)
                 .map((token) => token.key),
@@ -320,7 +356,9 @@ export function GameScreen(): React.ReactElement {
                   [
                     selectedKey,
                     controls.targetKey,
+                    controls.previewKey,
                     controls.pending?.command.target,
+                    ...(previewRoute?.path ?? []),
                     ...spec.tokens.map((token) => token.key),
                   ].filter((key): key is string => !!key),
                 ),
@@ -332,7 +370,7 @@ export function GameScreen(): React.ReactElement {
               onLayout: controls.setAnchors,
             }}
           >
-            <MapCallouts controls={controls} />
+            <MapCallouts controls={controls} previewRoute={previewRoute} />
           </SceneView>
           <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && game.phase !== 'battle-pending' && (

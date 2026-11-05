@@ -86,6 +86,8 @@ export interface SceneSpec {
   tokens: TokenSpec[];
   path: string[];
   trajectory: TrajectorySpec | null;
+  /** A single projected command route replaces the legacy terrain/trajectory effect. */
+  commandOverlay?: boolean;
   /** Rotation (radians) that squares the main grid to the screen. */
   worldRotation: number;
   fireView: { from: string; to: string } | null;

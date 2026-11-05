@@ -3,6 +3,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { SceneTileAnchor } from './types.ts';
 import type { useMapControls } from './useMapControls.ts';
 import { bridgeSegments, calloutBridge, placeCallouts } from './calloutLayout.ts';
+import { CommandPreviewLine, MoveConfirmation } from './CommandPreview.tsx';
+import type { PreviewRoute } from './CommandPreview.tsx';
 
 type Controls = ReturnType<typeof useMapControls>;
 
@@ -98,17 +100,23 @@ function AnchoredCallout({
   );
 }
 
-export function MapCallouts({ controls }: { controls: Controls }): React.ReactElement | null {
+export function MapCallouts({
+  controls,
+  previewRoute,
+}: {
+  controls: Controls;
+  previewRoute?: PreviewRoute | null;
+}): React.ReactElement | null {
   const helpId = useId();
   if (!controls.enabled) return null;
   const anchor = (key: string | null | undefined): SceneTileAnchor | undefined =>
     controls.anchors.find((a) => a.key === key);
   const selected = controls.actor;
   const pending = controls.pending;
-  const from = anchor(selected?.pos);
   const to = anchor(pending?.command.target);
   const atSelected = controls.targetKey === selected?.pos;
   const showTarget =
+    pending?.command.kind !== 'move' &&
     !!controls.targetKey &&
     (!!pending ||
       !!controls.hoverCommand ||
@@ -122,23 +130,20 @@ export function MapCallouts({ controls }: { controls: Controls }): React.ReactEl
   } as CSSProperties;
   return (
     <div className="map-callouts" style={style} data-testid="map-callouts">
-      {from && to && pending && (
-        <svg className="map-command-connector" aria-hidden="true">
-          <defs>
-            <marker
-              id="map-command-arrow"
-              markerWidth="7"
-              markerHeight="7"
-              refX="6"
-              refY="3.5"
-              orient="auto"
-            >
-              <path d="M0,0 L7,3.5 L0,7 Z" fill="currentColor" />
-            </marker>
-          </defs>
-          <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} markerEnd="url(#map-command-arrow)" />
-          <circle cx={to.x} cy={to.y} r={Math.max(8, to.radius * 0.4)} />
-        </svg>
+      <CommandPreviewLine
+        command={previewRoute === undefined ? controls.previewCommand : previewRoute}
+        anchors={controls.anchors}
+        staged={!!pending}
+        animate={controls.preferences.animationMs > 0}
+      />
+      {pending?.command.kind === 'move' && (
+        <MoveConfirmation
+          pending={pending}
+          anchor={to}
+          helpId={helpId}
+          confirm={controls.confirm}
+          cancel={controls.cancel}
+        />
       )}
       {showTarget && (
         <AnchoredCallout anchor={anchor(controls.targetKey)} controls={controls}>

@@ -29,6 +29,7 @@ export interface MapControls {
   actions: MapCommand[];
   previewKey: string | null;
   previewKind: MapCommand['kind'] | null;
+  previewCommand: MapCommand | null;
   selectionScope: string;
   targetKey: string | null;
   hoverCommand: MapCommand | null;
@@ -420,22 +421,27 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   }, [scheduleCalloutExit]);
   const targetKey =
     validPending?.command.target ?? (hover.selection === selection ? dwelled : null);
-  const { hoverCommand, moveCommand, attackCommand, targetOccupants, previewKind } = useMemo(
-    () => ({
-      hoverCommand: enabled && targetKey ? resolveCommand(targetKey, targetingMode) : null,
-      moveCommand: enabled && targetKey ? resolveCommand(targetKey, 'move') : null,
-      attackCommand: enabled && targetKey ? resolveCommand(targetKey, 'attack') : null,
-      targetOccupants: enabled && targetKey ? selectableAt(game, targetKey) : [],
-      previewKind:
-        validPending?.command.kind ??
-        (targetingMode !== 'auto'
-          ? targetingMode
-          : previewKey
-            ? (resolveCommand(previewKey)?.kind ?? null)
-            : null),
-    }),
-    [enabled, targetKey, resolveCommand, targetingMode, game, validPending, previewKey],
-  );
+  const { hoverCommand, moveCommand, attackCommand, targetOccupants, previewKind, previewCommand } =
+    useMemo(
+      () => ({
+        hoverCommand: enabled && targetKey ? resolveCommand(targetKey, targetingMode) : null,
+        moveCommand: enabled && targetKey ? resolveCommand(targetKey, 'move') : null,
+        attackCommand: enabled && targetKey ? resolveCommand(targetKey, 'attack') : null,
+        targetOccupants: enabled && targetKey ? selectableAt(game, targetKey) : [],
+        previewCommand: enabled
+          ? (validPending?.command ??
+            (previewKey ? resolveCommand(previewKey, targetingMode) : null))
+          : null,
+        previewKind:
+          validPending?.command.kind ??
+          (targetingMode !== 'auto'
+            ? targetingMode
+            : previewKey
+              ? (resolveCommand(previewKey)?.kind ?? null)
+              : null),
+      }),
+      [enabled, targetKey, resolveCommand, targetingMode, game, validPending, previewKey],
+    );
   return {
     preferences,
     setPreference,
@@ -445,6 +451,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     actions,
     previewKey,
     previewKind,
+    previewCommand,
     selectionScope,
     targetKey,
     hoverCommand,
