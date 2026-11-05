@@ -5,7 +5,7 @@
   "refs": [
     "GAMES-ELEVATE-CAMPAIGN-UC-002"
   ],
-  "twin_pr": null,
+  "twin_pr": "https://github.com/avoidTheLite/DKR/pull/218",
   "dkr_sync_sha": null,
   "product_pr": null
 }
