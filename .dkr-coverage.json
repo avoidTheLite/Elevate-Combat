@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "d8d186c1341748698505bc445f82f28e16e8947d",
+  "implementation_sha": "50064e876f3e2070c7e465d552d603c204d8c88d",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -202,6 +202,136 @@
         {
           "path": "apps/web/src/setup.journeys.test.tsx",
           "name": "visible setup and scenario flows uses the approved new commander default and keeps Classic free of infrastructure rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.journeys.test.tsx",
+          "name": "visible setup and scenario flows opens authored scenarios through Play Scenario, separately from campaign creation",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.journeys.test.tsx",
+          "name": "visible setup and scenario flows loads custom configuration for editing, then starts without setup or balance overrides",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "Home intent navigation offers five entries, keeps scenarios out of Create, and opens shared Settings",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "Home intent navigation Quick Start launches the actual sandbox immediately",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "Home intent navigation Resume imports exact saved progress independently of new-campaign settings",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains starts Classic after clearing dormant node prices without constructing or repricing nodes",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains applies Ready Regular without launching or touching applied/draft Lab rules; map seed never changes node seed",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains saves, reuses and deletes named copies while built-ins stay read-only and available",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains imports campaign settings for editing without adding active rules or mutating a Lab draft",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains validates imported preset scope and applies a map file without replacing independent rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/setup.navigation.test.tsx",
+          "name": "editable presets and independent domains retains an imported AI Alpha / Human Bravo mapping until a normal opponent is chosen",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/lib/playerPresets.test.ts",
+          "name": "player preset ownership and snapshots replaces all map infrastructure fields while retaining unowned campaign rules",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/lib/playerPresets.test.ts",
+          "name": "player preset ownership and snapshots captures a whole campaign by value and removes old infrastructure through a Classic map",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/lib/playerPresets.test.ts",
+          "name": "player preset ownership and snapshots rejects unknown scope/version, mismatched settings and invalid or oversized map inputs",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/lib/playerPresets.test.ts",
+          "name": "bounded browser player collection persists, reloads and deletes player copies while built-ins remain read-only",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/lib/playerPresets.test.ts",
+          "name": "bounded browser player collection enforces the collection limit and safely rejects corrupt/unsupported collections",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store chooses a building before a legal map tile, then commits the quoted spend once and saves it",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store uses the already inspected empty tile without asking for another location",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store opens the building-first catalog from the inspected center while retaining tile context",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store ignores illegal placement clicks and cancellation spends no CP, work or engineer allowance",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store upgrades the selected building with a local engineer and no new placement request",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store repairs the selected ruined building in place",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store shows the engine refusal for an upgrade without local engineers and leaves CP untouched",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store shows unaffordable build choices with the actual engine reason and quoted CP price",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store refuses a changed price after a location quote without spending anything",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/NodePanel.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store keeps placement highlights and action choices within current fog knowledge",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
         }
       ]
@@ -521,7 +651,7 @@
         },
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
-          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts removes attack trajectory, firing target and preview on deselect, then ignores stale hover",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts removes attack trajectory and ignores stale hover when a repeated body click deselects",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -701,7 +831,7 @@
         },
         {
           "path": "apps/web/src/controls/useMapControls.test.tsx",
-          "name": "map command interaction lifecycle selection and deselection clear every pending and hover artifact until new intent",
+          "name": "map command interaction lifecycle selection clears pending intent, repeated entity choice persists, and a repeated body click deselects",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         },
         {
@@ -917,6 +1047,91 @@
         {
           "path": "apps/web/src/controls/GameScreen.controls.test.tsx",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts attack check/X preserves state until confirmation and then dispatches exactly one engine attack",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/ContentsPanel.test.tsx",
+          "name": "Recruit panel shows the inspected HQ garrison count/cap and disables recruitment at cap",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceChrome.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: persistent interface chrome toggles details independently from active highlighting through pointer and keyboard",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceChrome.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: persistent interface chrome keeps end turn and retreat native controls outside context, with waiting/phase gates",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceChrome.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: persistent interface chrome shared player settings change preferences without altering current game or save configuration",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceChrome.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: persistent interface chrome header-accessible log filters opponent-private events without exposing global content in selection context",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceChrome.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: persistent interface chrome does not reveal a hidden blind-fire defender through shooter-owned raw combat messages",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context offers separate commander and actual annex building cards without node-wide roster panels",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context inspects a valid tactical unit and Workshop together and keeps direct Raze Tile available before a choice",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context does not reveal an unseen tactical annex building or allow choosing its card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context keeps node placement confirmation visible after inspecting the chosen empty annex tile",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context refreshes map preferences when Settings changes them without executing an order",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context has no empty sidebar or global status panels before an inspection",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context inspects an empty legal tactical destination without staging or spending, while retaining its actor",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context immediately chooses one entity, and repeated tile inspection keeps it selected",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context opens every real co-occupant card, exposes nearby icons, then focuses the deliberately chosen card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context runs a direct node action from an expanded unchosen entity card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context never exposes a hidden hostile entity through cards, icons, or an explicit choice",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
