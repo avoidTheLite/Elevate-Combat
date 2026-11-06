@@ -310,7 +310,7 @@ export function GameScreen(): React.ReactElement {
           <span className="text-[hsl(var(--primary))]">α {game.cp.A} CP</span>
           <span className="text-[hsl(var(--secondary))]">β {game.cp.B} CP</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap max-w-full">
           <TurnControls
             game={game}
             blocked={
@@ -392,7 +392,7 @@ export function GameScreen(): React.ReactElement {
 
       {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
       <div className="relative flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-        <main className="relative flex-1 min-h-0">
+        <main className="relative z-0 flex-1 min-h-0">
           <SceneView
             spec={spec}
             fx={fx}

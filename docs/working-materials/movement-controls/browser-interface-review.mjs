@@ -767,6 +767,17 @@ try {
     const turn = c.getByRole('group', { name: 'Turn actions' });
     assert.ok(await turn.getByRole('button', { name: 'END TURN →', exact: true }).isVisible());
     assert.ok(await turn.getByRole('button', { name: 'RETREAT', exact: true }).isVisible());
+    for (const name of ['END TURN →', 'RETREAT', 'SETTINGS', 'LOG', 'MENU']) {
+      const rect = await c.getByRole('button', { name, exact: true }).boundingBox();
+      assert.ok(
+        rect &&
+          rect.x >= 0 &&
+          rect.x + rect.width <= size.width &&
+          rect.y >= 0 &&
+          rect.y + rect.height <= size.height,
+        `${name} stays within viewport at${size.width}x${size.height}`,
+      );
+    }
     await c.getByRole('button', { name: /2 HEIGHT/ }).click();
     await c.getByRole('button', { name: /2 HEIGHT/ }).click();
     assert.equal(await c.getByTestId('overlay-legend').count(), 0);
