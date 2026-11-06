@@ -328,16 +328,37 @@ try {
   assert.ok(
     Math.abs((parseFloat(staged.pulseSpacing) * (c.command.path.length - 1)) / 100 - 3) < 1e-6,
   );
+  const timelineOffsets = await p.evaluate(async () => {
+    const glow = document.querySelector('.map-command-glow'),
+      animation = glow.getAnimations()[0];
+    animation.pause();
+    await animation.ready;
+    const values = [];
+    for (const time of [150, 300, 450]) {
+      animation.currentTime = time;
+      values.push(getComputedStyle(glow).strokeDashoffset);
+    }
+    animation.play();
+    return values;
+  });
   assert.equal(
-    new Set(offsets).size,
+    new Set(timelineOffsets).size,
     3,
-    'Light must move continuously, not jump between endpoints',
+    'Browser animation must interpolate between endpoints',
   );
   assert.ok(
-    offsets.every((value) => /^-?\d+(\.\d+)?px$/.test(value)),
+    timelineOffsets.every((value) => /^-?\d+(\.\d+)?px$/.test(value)),
     'Interpolated offsets must be resolved lengths',
   );
-  check('Glow moves along the shared route toward its arrow', { offsets });
+  assert.ok(
+    parseFloat(timelineOffsets[0]) > parseFloat(timelineOffsets[1]) &&
+      parseFloat(timelineOffsets[1]) > parseFloat(timelineOffsets[2]),
+  );
+  check('Glow moves along the shared route toward its arrow', {
+    naturalFrameOffsets: offsets,
+    browserTimelineOffsets: timelineOffsets,
+    note: 'Native CSS animation timeline sampled at150/300/450ms to avoid GPU contention frame repeats; no game state or styles changed.',
+  });
   const expected = await p.evaluate(
     ({ before, command }) => window.__ironRidge.engine.apply(before, command.action).state,
     { before, command: c.command },
