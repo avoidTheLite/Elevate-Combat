@@ -1,4 +1,5 @@
 import type { GameState, Team } from '@iron-ridge/engine';
+import { TEAM_NAME, income } from '@iron-ridge/engine';
 import { Button } from '../ui/Button.tsx';
 import { InterfaceDialog } from '../ui/InterfaceDialog.tsx';
 
@@ -22,6 +23,30 @@ export function GameLog({
           CLOSE LOG
         </Button>
       </div>
+      <details className="text-[11px] leading-5">
+        <summary className="cursor-pointer min-h-11 flex items-center">SESSION STATUS</summary>
+        <p>
+          Turn {game.turn} · {game.phase} · {TEAM_NAME[view ?? game.active]} income +
+          {income(game, view ?? game.active)} CP/turn
+        </p>
+        {game.battle && (
+          <>
+            <p>
+              Attacker {TEAM_NAME[game.battle.attacker]} · Defender{' '}
+              {TEAM_NAME[game.battle.defender]}
+            </p>
+            <p>
+              Round {game.battle.round}/{game.battle.maxRounds} · Warning {game.battle.warningTurns}
+            </p>
+            <p>
+              Objective{' '}
+              {game.battle.objective.kind === 'capture_point'
+                ? game.battle.objective.captureKey
+                : game.battle.contested}
+            </p>
+          </>
+        )}
+      </details>
       {game.battle && (
         <section>
           <h3>COMBAT LOG</h3>

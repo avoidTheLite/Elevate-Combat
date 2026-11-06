@@ -285,7 +285,7 @@ export function GameScreen(): React.ReactElement {
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[hsl(var(--border-bright))] text-[11px] flex-wrap">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
           <span className="font-bold tracking-[0.3em] text-glow">▲ IRON RIDGE</span>
           <span className="text-[hsl(var(--muted-foreground))]">
             {game.settings.era.toUpperCase()} · {game.settings.grid.mainCols}×
@@ -299,9 +299,13 @@ export function GameScreen(): React.ReactElement {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
           <span className="text-[hsl(var(--muted-foreground))]">TURN {game.turn}</span>
-          {inBattle && <span className="text-[hsl(var(--warning))]">⚔ TACTICAL</span>}
+          {inBattle && (
+            <span className="text-[hsl(var(--warning))]">
+              ⚔ TACTICAL · R{game.battle!.round}/{game.battle!.maxRounds}
+            </span>
+          )}
           {acting && (
             <span className={`font-bold ${teamClass(acting)}`}>
               ◈ {TEAM_NAME[acting]} ACTIVE{aiTurn ? ' (AI thinking…)' : ''}
