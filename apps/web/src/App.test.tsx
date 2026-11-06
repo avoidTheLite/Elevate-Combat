@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from './App.tsx';
+import { inspectTile } from './lib/selection.ts';
 import { useGameStore } from './stores/useGameStore.ts';
 
 beforeEach(() => {
@@ -11,12 +12,14 @@ beforeEach(() => {
 describe('App – setup screen', () => {
   it('renders the title and a START NEW GAME button', () => {
     render(<App />);
-    expect(screen.getByText(/iron ridge/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
+    expect(screen.getByRole('heading', { name: 'CREATE CAMPAIGN' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start new game/i })).toBeInTheDocument();
   });
 
   it('grid sliders update the configured size summary', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText(/sub-grid radius/i), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText(/main cols/i), { target: { value: '4' } });
     fireEvent.change(screen.getByLabelText(/main rows/i), { target: { value: '3' } });
@@ -28,6 +31,7 @@ describe('App – setup screen', () => {
 describe('App – game start flow', () => {
   it('START NEW GAME transitions to the strategic view', async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });
@@ -42,11 +46,15 @@ describe('App – game start flow', () => {
 
   it('recruiting at HQ spends command points', async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     await screen.findByRole('button', { name: /end turn/i });
+    const game = useGameStore.getState().game!;
+    const hq = game.armies.find((holder) => holder.kind === 'garrison' && holder.team === 'A')!;
+    act(() => inspectTile(game, hq.pos));
     const before = useGameStore.getState().game!.cp.A;
     fireEvent.click(screen.getByRole('button', { name: /rifle infantry/i }));
     expect(useGameStore.getState().game!.cp.A).toBe(before - 3);
@@ -55,6 +63,7 @@ describe('App – game start flow', () => {
   it('ending the turn hands control to the AI and back', async () => {
     useGameStore.getState().setAiSpeed(1);
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });
@@ -66,18 +75,21 @@ describe('App – game start flow', () => {
 
   it('MENU opens quit dialog; Save & Quit keeps CONTINUE', async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });
     fireEvent.click(screen.getByRole('button', { name: /start new game/i }));
     fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
     fireEvent.click(await screen.findByRole('button', { name: /save & quit/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
     expect(await screen.findByRole('button', { name: /end turn/i })).toBeInTheDocument();
   });
 
   it('Abandon clears the autosave so CONTINUE disappears', async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });
@@ -85,7 +97,7 @@ describe('App – game start flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: /menu/i }));
     fireEvent.click(await screen.findByRole('button', { name: /abandon/i }));
     expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /start new game/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CREATE CAMPAIGN' })).toBeInTheDocument();
   });
 });
 
@@ -94,6 +106,7 @@ describe('App – information overlays', () => {
     const { useViewStore } = await import('./stores/useViewStore.ts');
     act(() => useViewStore.getState().setOverlay('basic'));
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
     });

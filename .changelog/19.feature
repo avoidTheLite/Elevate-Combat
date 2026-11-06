@@ -1,0 +1,1 @@
+- Consolidate setup and selection context, retain accessible command previews, and add scoped player presets, persistent turn controls, logs, settings and contextual node construction.

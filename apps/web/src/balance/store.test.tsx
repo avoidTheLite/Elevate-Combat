@@ -87,6 +87,7 @@ describe('SetupScreen integration', () => {
       useBalanceStore.getState().applyAll();
     });
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     expect(screen.getByTestId('custom-rules-badge')).toHaveTextContent(/custom rules active/i);
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '11' },
@@ -102,6 +103,7 @@ describe('SetupScreen integration', () => {
       useBalanceStore.getState().applyAll();
     });
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.click(screen.getByRole('button', { name: /reset custom rules/i }));
     expect(screen.queryByTestId('custom-rules-badge')).toBeNull();
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
@@ -114,8 +116,10 @@ describe('SetupScreen integration', () => {
 
   it('does not launch fallback Classic through the lab when selected Advanced prices are missing', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
     fireEvent.change(screen.getByLabelText('MAP SEED'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('NODE PLACEMENT SEED'), { target: { value: '42' } });
     fireEvent.change(screen.getByLabelText('NON-HQ NODES'), { target: { value: '5' } });
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
       target: { value: '' },
@@ -147,6 +151,7 @@ describe('SetupScreen integration', () => {
 
   it('keeps the same configured Advanced map, players, costs and draft rules through the lab launch', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' }));
     fireEvent.click(screen.getByRole('button', { name: 'HOTSEAT 2P' }));
     fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
@@ -155,6 +160,7 @@ describe('SetupScreen integration', () => {
     fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), { target: { value: '7' } });
     fireEvent.change(screen.getByLabelText('Raze Node price (CP)'), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText('MAP SEED'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('NODE PLACEMENT SEED'), { target: { value: '42' } });
     fireEvent.change(screen.getByLabelText('NON-HQ NODES'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     const source = structuredClone(useBalanceStore.getState().setup);
@@ -176,6 +182,7 @@ describe('SetupScreen integration', () => {
 
   it('BALANCE LAB button opens the lab with the current setup', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.click(screen.getByRole('button', { name: /medieval/i }));
     fireEvent.click(screen.getByRole('button', { name: /balance lab/i }));
     expect(useBalanceStore.getState().view).toBe('lab');

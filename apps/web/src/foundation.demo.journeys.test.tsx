@@ -8,6 +8,7 @@ import {
   validateGameState,
 } from '@iron-ridge/engine';
 import App from './App.tsx';
+import { inspectTile } from './lib/selection.ts';
 import { useGameStore } from './stores/useGameStore.ts';
 
 beforeEach(() => {
@@ -16,9 +17,9 @@ beforeEach(() => {
 });
 
 function start(label: string, capture = '7', raze = '3'): void {
-  fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
+  fireEvent.click(screen.getByRole('button', { name: 'PLAY SCENARIO' }));
   fireEvent.click(screen.getByRole('button', { name: label }));
-  expect(screen.getByRole('button', { name: 'START NEW GAME' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'START SCENARIO' })).toBeEnabled();
   expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(5);
   expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(2);
   fireEvent.change(screen.getByLabelText('Capture Node price (CP)'), {
@@ -28,8 +29,8 @@ function start(label: string, capture = '7', raze = '3'): void {
   fireEvent.change(screen.getByLabelText('Commander training price (CP)'), {
     target: { value: '11' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
-  expect(screen.queryByRole('button', { name: 'START NEW GAME' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'START SCENARIO' }));
+  expect(screen.queryByRole('button', { name: 'START SCENARIO' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Prepared demo guide' })).toBeInTheDocument();
   expect(validateGameState(useGameStore.getState().game)).toEqual([]);
 }
@@ -116,6 +117,12 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / UC-002: prepared scenarios in normal s
       expect(useGameStore.getState().importSave(saved.text)).toBe(true);
     });
     expect(useGameStore.getState().game).toEqual(damaged);
+    const resumed = useGameStore.getState().game!;
+    const objective = resumed.battle!.objective;
+    if (objective.kind !== 'capture_point' || !objective.captureKey)
+      throw new Error('Expected capture point');
+    const captureKey = objective.captureKey;
+    act(() => inspectTile(resumed, captureKey));
     fireEvent.click(screen.getByRole('button', { name: 'SECURE' }));
     fireEvent.click(screen.getByRole('button', { name: 'RETURN TO CAMPAIGN' }));
     expect(useGameStore.getState().game!.infrastructure!.capture.pending!.event.kind).toBe(
@@ -135,6 +142,8 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / UC-002: prepared scenarios in normal s
     ).toMatchObject({ ruined: true, data: workshop.data });
     expect(validateGameState(committed)).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'INSPECT DEMO NODE' }));
-    expect(screen.getByRole('region', { name: 'Infrastructure node' })).toHaveTextContent('RUINED');
+    expect(screen.getByRole('region', { name: 'Infrastructure node' })).toHaveTextContent(
+      /RUINED/i,
+    );
   });
 });

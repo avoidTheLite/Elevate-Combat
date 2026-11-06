@@ -74,8 +74,9 @@ describe('GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog', () => {
     ).toBe(true);
     render(<NodePanel game={game} mainHex={site.mainHex} canAct={false} view="A" />);
     expect(screen.getByText('Node state').parentElement).toHaveTextContent('UNKNOWN');
-    expect(screen.queryByLabelText('Node order')).not.toBeInTheDocument();
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Upgrade.*Town center/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Manage Town center/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Node buildings')).not.toBeInTheDocument();
   });
 
   it('retains legal activation of an observed neutral site without exposing other teams’ work choices', () => {
@@ -95,12 +96,14 @@ describe('GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog', () => {
     expect(legal.length).toBeGreaterThan(0);
     expect(strategicKnowledge(game, 'A').cells.has(site.centerSubHex)).toBe(true);
     render(<NodePanel game={game} mainHex={site.mainHex} canAct view="A" />);
-    expect(screen.getByLabelText('Node order')).toBeInTheDocument();
+    expect(screen.getByLabelText('Contextual node actions')).toBeInTheDocument();
     for (const choice of legal)
       expect(
-        screen.getByRole('option', { name: `${choice.label} · ${choice.cpCost} CP` }),
-      ).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /unavailable/ })).not.toBeInTheDocument();
+        screen.getByRole('button', { name: `${choice.label} ${choice.cpCost} CP` }),
+      ).toBeEnabled();
+    expect(
+      screen.queryByRole('button', { name: /Upgrade|Repair|Build Workshop/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('hides wholly occluded damaged roads while keeping fog-off and omniscient inspection', () => {
@@ -248,7 +251,8 @@ describe('GAMES-ELEVATE-WORLD-UC-002: ownership through strategic fog', () => {
     render(<StrategicSidebar game={game} view="A" canAct={false} />);
     expect(screen.getByText('Owner').parentElement).toHaveTextContent('NEUTRAL');
     expect(screen.getByText(/Last observed owner/)).toBeInTheDocument();
-    expect(screen.getByText(/Node details are hidden by fog of war/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Infrastructure node' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Contextual node actions')).not.toBeInTheDocument();
     expect(screen.queryByText('Node owner')).not.toBeInTheDocument();
     expect(screen.queryByText('Territorial claim')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Node buildings')).not.toBeInTheDocument();

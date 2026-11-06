@@ -8,6 +8,43 @@ import type { PreviewRoute } from './CommandPreview.tsx';
 
 type Controls = ReturnType<typeof useMapControls>;
 
+function EntityChoiceButton({
+  entity,
+  selected,
+  onChoose,
+}: {
+  entity: Controls['inspectionEntities'][number];
+  selected: boolean;
+  onChoose: () => void;
+}): React.ReactElement {
+  const pressed = useRef(false);
+  return (
+    <button
+      type="button"
+      className="shrink-0 w-11 h-11 border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] text-[hsl(var(--primary))]"
+      aria-label={`Select ${entity.label}`}
+      aria-pressed={selected}
+      title={entity.label}
+      onPointerDown={(event) => {
+        pressed.current = event.button === 0 && event.isPrimary !== false;
+      }}
+      onPointerCancel={() => {
+        pressed.current = false;
+      }}
+      onBlur={() => {
+        pressed.current = false;
+      }}
+      onClick={(event) => {
+        if (event.detail !== 0 && !pressed.current) return;
+        pressed.current = false;
+        onChoose();
+      }}
+    >
+      {entity.icon}
+    </button>
+  );
+}
+
 function AnchoredCallout({
   anchor,
   controls,
@@ -114,23 +151,39 @@ export function MapCallouts({
   const anchor = (key: string | null | undefined): SceneTileAnchor | undefined =>
     controls.anchors.find((a) => a.key === key);
   const selected = controls.actor;
+  const inspectedAnchor = anchor(controls.inspectionKey);
   const pending = controls.pending;
   const to = anchor(pending?.command.target);
   const atSelected = controls.targetKey === selected?.pos;
-  const showTarget =
-    !pending &&
-    !!controls.targetKey &&
-    (!!controls.hoverCommand ||
-      !!controls.moveCommand ||
-      !!controls.attackCommand ||
-      controls.targetOccupants.length > 0 ||
-      atSelected);
+  const showTarget = !pending && !!controls.targetKey;
   const style = {
     '--map-callout-duration': `${controls.preferences.animationMs}ms`,
     '--map-callout-easing': controls.preferences.easing,
   } as CSSProperties;
   return (
     <div className="map-callouts" style={style} data-testid="map-callouts">
+      {inspectedAnchor && controls.inspectionEntities?.length > 1 && (
+        <div
+          role="group"
+          aria-label="Entities on inspected tile"
+          className="absolute flex gap-1 pointer-events-auto overflow-x-auto"
+          style={{
+            left: `clamp(min(${controls.inspectionEntities.length * 24}px, 50%), ${inspectedAnchor.x}px, calc(100% - min(${controls.inspectionEntities.length * 24}px, 50%)))`,
+            top: `clamp(24px, ${inspectedAnchor.y}px, calc(100% - 24px))`,
+            transform: 'translate(-50%, -50%)',
+            maxWidth: 'calc(100% - 8px)',
+          }}
+        >
+          {controls.inspectionEntities.map((entity) => (
+            <EntityChoiceButton
+              key={entity.id}
+              entity={entity}
+              selected={controls.inspectionSelection === entity.id}
+              onChoose={() => controls.select(entity.id, controls.inspectionKey!)}
+            />
+          ))}
+        </div>
+      )}
       <CommandPreviewLine
         command={previewRoute === undefined ? controls.previewCommand : previewRoute}
         anchors={controls.anchors}
@@ -187,14 +240,17 @@ export function MapCallouts({
               ))}
               <button
                 type="button"
-                title="Clear unit selection and pending preview"
-                onClick={() => controls.select(selected.id, selected.pos)}
+                title="Clear the movement actor and pending preview; keep tile inspection"
+                onClick={controls.deselect}
               >
                 DESELECT
               </button>
             </div>
           )}
           <div className="map-callout-buttons" aria-label="Choose occupant on contextual tile">
+            <button type="button" onClick={() => controls.inspect(controls.targetKey!)}>
+              INSPECT TILE
+            </button>
             {controls.targetOccupants.map((o) => (
               <button
                 key={o.id}

@@ -251,7 +251,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts', () => {
     expect(mounted.container.querySelector('.map-command-route')).not.toBeInTheDocument();
   });
 
-  it('removes attack trajectory, firing target and preview on deselect, then ignores stale hover', () => {
+  it('removes attack trajectory and ignores stale hover when a repeated body click deselects', () => {
     const mounted = render(<GameScreen />);
     const game = store().game!;
     const rifle = game.battle!.units.find((u) => u.id === store().ui.selectedUnit)!;
@@ -266,6 +266,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts', () => {
     act(() => click(rifle.pos!));
     act(() => staleHover(target.pos));
     expect(store().ui.selectedUnit).toBeNull();
+    expect(store().ui.inspectedCell).toBe(rifle.pos);
     expect(store().ui.hoverCell).toBeNull();
     expect(scene.spec.path).toEqual([]);
     expect(scene.spec.trajectory).toBeNull();
@@ -276,11 +277,9 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-002: screen command artifacts', () => {
 
   it('exposes proposed browser preferences as keyboard-focusable controls', () => {
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole('button', { name: 'DEMO CONTROLS' }));
-    expect(
-      screen.getByRole('dialog', { name: 'Proposed map control preferences' }),
-    ).toBeInTheDocument();
-    const quick = screen.getByRole('checkbox', { name: /QuickMove/ });
+    fireEvent.click(screen.getByRole('button', { name: 'SETTINGS' }));
+    expect(screen.getByRole('dialog', { name: 'Player Settings' })).toBeInTheDocument();
+    const quick = screen.getByRole('checkbox', { name: /Quick Move/ });
     expect(quick).not.toBeChecked();
     fireEvent.click(quick);
     expect(quick).toBeChecked();

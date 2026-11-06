@@ -16,9 +16,14 @@ import {
 import type { MapCommand, PendingCommand, TargetingMode } from './commands.ts';
 import { holderForClick, isFriendlyNodeCenter } from '../lib/holders.ts';
 import { viewTeam } from '../stores/useGameStore.ts';
-import { readControlPreferences, saveControlPreferences } from './preferences.ts';
+import {
+  CONTROL_PREFERENCES_CHANGED,
+  readControlPreferences,
+  saveControlPreferences,
+} from './preferences.ts';
 import type { ControlPreferences } from './preferences.ts';
 import type { SceneInteraction, SceneTileAnchor } from './types.ts';
+import { chooseTileEntity, inspectTile, visibleTileEntities } from '../lib/selection.ts';
 
 export interface MapControls {
   preferences: ControlPreferences;
@@ -36,6 +41,10 @@ export interface MapControls {
   moveCommand: MapCommand | null;
   attackCommand: MapCommand | null;
   targetOccupants: ReturnType<typeof selectableAt>;
+  inspectionKey: string | null;
+  inspectionSelection: string | null;
+  inspectionEntities: ReturnType<typeof visibleTileEntities>;
+  inspect: (key: string) => void;
   anchors: readonly SceneTileAnchor[];
   setAnchors: Dispatch<SetStateAction<readonly SceneTileAnchor[]>>;
   exiting: boolean;
@@ -46,6 +55,7 @@ export interface MapControls {
   interact: (intent: SceneInteraction) => boolean;
   issue: (command: MapCommand, forcePreview?: boolean, dragging?: boolean) => void;
   select: (id: string, key: string, requestContext?: boolean) => void;
+  deselect: () => void;
   confirm: () => void;
   cancel: () => void;
   calloutEnter: () => void;
@@ -57,13 +67,19 @@ export interface MapControls {
 /** Keep selection/territory inspection in step with the successful engine order. */
 function dispatchMapCommand(command: MapCommand): void {
   const store = useGameStore.getState();
-  if (!store.dispatch(command.action) || command.action.type !== 'moveCommander') return;
+  if (!store.dispatch(command.action)) return;
+  if (command.action.type !== 'moveCommander' && command.action.type !== 'move') return;
   const next = useGameStore.getState();
   const moved = next.game?.armies.find((army) => army.id === command.actorId);
   const destinationMain = next.game
     ? (worldOf(next.game).world.subByKey.get(command.target)?.main ?? null)
     : null;
-  next.setUi({ selectedMain: moved?.at ?? destinationMain, selectedArmy: moved?.id ?? null });
+  next.setUi({
+    inspectedCell: command.target,
+    selectedEntity: command.actorId,
+    selectedMain: moved?.at ?? destinationMain,
+    ...(command.action.type === 'moveCommander' ? { selectedArmy: moved?.id ?? null } : {}),
+  });
 }
 
 export function useMapControls(game: GameState, ui: UiState, blocked: boolean): MapControls {
@@ -88,20 +104,25 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
   const overCallout = useRef(false);
   const focusWithinCallout = useRef(false);
   const revision = useRef({ game, id: 0 });
+  const inspectionRevision = useRef(0);
+  const inspectionEpoch = inspectionRevision.current;
   if (revision.current.game !== game) revision.current = { game, id: revision.current.id + 1 };
-  const commandUi = useMemo(
-    () => ({
+  const commandUi = useMemo(() => {
+    const picked = game.battle?.units.find((unit) => unit.id === ui.selectedUnit);
+    const visibleSelection =
+      !picked?.pos ||
+      visibleTileEntities(game, picked.pos).some((entity) => entity.id === picked.id);
+    return {
       selectedArmy: ui.selectedArmy,
-      selectedUnit: ui.selectedUnit,
+      selectedUnit: visibleSelection ? ui.selectedUnit : null,
       checkedUnits: ui.checkedUnits,
-    }),
-    [ui.selectedArmy, ui.selectedUnit, ui.checkedUnits],
-  );
+    };
+  }, [game, ui.selectedArmy, ui.selectedUnit, ui.checkedUnits]);
   const resolveCommand = useMemo(() => createCommandResolver(game, commandUi), [game, commandUi]);
   const enabled = useMemo(() => !blocked && controlsEnabled(game), [blocked, game]);
   const actor = useMemo(() => selectedActor(game, commandUi), [game, commandUi]);
   const selection = actor?.id ?? null;
-  const selectionScope = `${revision.current.id}:${selection ?? ''}:${blocked}`;
+  const selectionScope = `${revision.current.id}:${selection ?? ''}:${inspectionEpoch}:${blocked}`;
   const validPending = useMemo(
     () => (pending && enabled && pendingValid(pending, game, commandUi) ? pending : null),
     [pending, enabled, game, commandUi],
@@ -149,17 +170,26 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     };
   }, [cancel]);
 
+  useEffect(() => {
+    const refresh = (): void => setPreferences(readControlPreferences());
+    window.addEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
+
   const setPreference = useCallback((patch: Partial<ControlPreferences>) => {
-    setPreferences((previous) => {
-      const next = { ...previous, ...patch };
-      saveControlPreferences(next);
-      return next;
-    });
+    const next = { ...readControlPreferences(), ...patch };
+    saveControlPreferences(next);
+    setPreferences(next);
   }, []);
 
   const onHover = useCallback(
     (key: string | null) => {
       if (!enabled || validPending || contextPinned) return;
+      if (inspectionRevision.current !== inspectionEpoch) return;
       const current = useGameStore.getState();
       if (current.game !== game || (selectedActor(game, current.ui)?.id ?? null) !== selection)
         return;
@@ -196,26 +226,36 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       dwelled,
       preferences.dwellMs,
       preferences.animationMs,
+      inspectionEpoch,
     ],
   );
 
   const select = useCallback(
     (id: string, key: string, requestContext = false) => {
+      inspectionRevision.current += 1;
       cancel();
       if (requestContext) contextRequest.current = { game, actorId: id, key };
       const s = useGameStore.getState();
-      if (game.phase === 'battle')
-        s.setUi({ selectedUnit: id === ui.selectedUnit ? null : id, hoverCell: null });
-      else
-        s.setUi({
-          selectedArmy: id === ui.selectedArmy ? null : id,
-          selectedMain: worldOf(game).world.subByKey.get(key)?.main ?? null,
-          checkedUnits: [],
-          hoverCell: null,
-        });
+      chooseTileEntity(game, key, id);
+      s.setUi({ hoverCell: null });
     },
     [cancel, game, ui.selectedUnit, ui.selectedArmy],
   );
+  const inspect = useCallback(
+    (key: string) => {
+      inspectionRevision.current += 1;
+      cancel();
+      inspectTile(game, key);
+    },
+    [cancel, game],
+  );
+  const deselect = useCallback(() => {
+    inspectionRevision.current += 1;
+    cancel();
+    useGameStore
+      .getState()
+      .setUi({ selectedArmy: null, selectedUnit: null, selectedEntity: null, checkedUnits: [] });
+  }, [cancel]);
 
   const issue = useCallback(
     (command: MapCommand, forcePreview = false, dragging = false) => {
@@ -257,25 +297,16 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       if (intent.source === 'context') {
         if (validPending) return true;
         if (intent.targetKey && enabled) {
-          if (
-            game.phase === 'strategic' &&
-            isFriendlyNodeCenter(game, viewTeam(game), intent.targetKey) &&
-            !holderForClick(game, viewTeam(game), intent.targetKey)
-          ) {
-            cancel();
-            return false;
-          }
-          const command = resolveCommand(intent.targetKey, targetingMode);
-          if (command) issue(command, true);
-          else {
-            const occupants = selectableAt(game, intent.targetKey);
-            if (occupants[0] && actor?.pos !== intent.targetKey)
-              select(occupants[0].id, intent.targetKey, true);
+          inspect(intent.targetKey);
+          {
+            const occupants = visibleTileEntities(game, intent.targetKey);
+            if (occupants.length === 1 && actor?.id !== occupants[0]!.id)
+              contextRequest.current = { game, actorId: occupants[0]!.id, key: intent.targetKey };
             else {
               clearTimeout(timer.current);
               setHover({ key: intent.targetKey, selection });
               setDwelled(intent.targetKey);
-              setContextPinned(occupants.length > 0 || actor?.pos === intent.targetKey);
+              setContextPinned(true);
               setExiting(false);
             }
           }
@@ -305,19 +336,29 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
         return false;
       }
       if (intent.source === 'click') setContextPinned(false);
+      const occupants = visibleTileEntities(game, intent.targetKey);
       if (
-        actor &&
-        (actor.pos === intent.targetKey ||
-          (game.phase === 'strategic' &&
-            holderForClick(game, viewTeam(game), intent.targetKey)?.id === actor.id))
+        occupants.length === 1 &&
+        occupants[0]!.id === actor?.id &&
+        actor.pos === intent.targetKey
       ) {
-        select(actor.id, intent.targetKey);
+        inspect(intent.targetKey);
+        deselect();
         return true;
       }
-      const occupants = selectableAt(game, intent.targetKey);
-      const selectedOccupant = occupants.find((occupant) => occupant.id === actor?.id);
-      if (selectedOccupant || occupants[0]) {
-        select((selectedOccupant ?? occupants[0])!.id, intent.targetKey);
+      if (
+        occupants.some((entity) =>
+          entity.kind === 'node' || entity.kind === 'building'
+            ? game.infrastructure?.capture.nodes.some(
+                (node) =>
+                  node.id === entity.nodeId && node.owner === (game.battle?.active ?? game.active),
+              )
+            : entity.kind === 'holder'
+              ? entity.holder.team === game.active
+              : entity.unit.team === game.battle?.active,
+        )
+      ) {
+        inspect(intent.targetKey);
         return true;
       }
       // Owned empty node buildings remain body-click inspection targets. Their
@@ -340,11 +381,11 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       // Invalid explicit targeting must never fall through to the legacy click
       // heuristic, which could execute a DIFFERENT legal command immediately.
       if (targetingMode !== 'auto' || game.phase === 'battle') {
-        cancel();
+        inspect(intent.targetKey);
         return true;
       }
-      cancel();
-      return false;
+      inspect(intent.targetKey);
+      return true;
     },
     [
       game,
@@ -358,6 +399,8 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
       validPending,
       issue,
       select,
+      inspect,
+      deselect,
       cancel,
       replacePending,
       resolveCommand,
@@ -458,6 +501,10 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     moveCommand,
     attackCommand,
     targetOccupants,
+    inspectionKey: ui.inspectedCell,
+    inspectionSelection: ui.selectedEntity,
+    inspectionEntities: ui.inspectedCell ? visibleTileEntities(game, ui.inspectedCell) : [],
+    inspect,
     anchors,
     setAnchors,
     exiting,
@@ -468,6 +515,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     interact,
     issue,
     select,
+    deselect,
     confirm,
     cancel,
     calloutEnter,

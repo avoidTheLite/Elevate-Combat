@@ -392,3 +392,65 @@ body {
 .map-callout[data-callout-mode='preview'] {
   overflow-y: auto;
 }
+
+/* Shared home/in-game chrome; preferences never enter GameState. */
+.interface-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: hsl(var(--background) / 0.92);
+}
+.interface-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border: 1px solid hsl(var(--border-bright));
+  background: hsl(var(--panel));
+  font-size: 12px;
+}
+.interface-dialog h2,
+.interface-dialog h3 {
+  color: hsl(var(--primary));
+  letter-spacing: 0.1em;
+}
+.interface-dialog label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.interface-dialog input[type='range'] {
+  width: 100%;
+}
+.interface-dialog select {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border-bright));
+  padding: 6px;
+}
+@media (max-width: 767px) {
+  .interface-modal {
+    align-items: flex-end;
+  }
+  .interface-dialog {
+    max-height: calc(100dvh - 12px);
+  }
+}
+@media (max-width: 767px) and (orientation: landscape) {
+  .game-selection-context {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    width: min(320px, 55vw);
+    z-index: 8;
+    background: hsl(var(--panel));
+  }
+}
