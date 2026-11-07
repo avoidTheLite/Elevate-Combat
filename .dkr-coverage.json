@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "50064e876f3e2070c7e465d552d603c204d8c88d",
+  "implementation_sha": "818b20c3c2945db0f7830a366666029897718523",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -1132,6 +1132,41 @@
         {
           "path": "apps/web/src/components/game/selectionContext.test.tsx",
           "name": "persistent tile and entity context never exposes a hidden hostile entity through cards, icons, or an explicit choice",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: empty HQ neighbor inspection has no proxy occupant and retains the prior actor (false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: empty HQ neighbor inspection has no proxy occupant and retains the prior actor (true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: classic explicit nearby HQ selection inspects its real tile without spending",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: ready explicit nearby HQ selection inspects its real tile without spending",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: HQ ring clicks inspect; explicit MOVE alone spends the legal cost (QuickMove false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: HQ ring clicks inspect; explicit MOVE alone spends the legal cost (QuickMove true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/selectionContext.test.tsx",
+          "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: nearby HQ navigation respects fog and yields to a real commander",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
