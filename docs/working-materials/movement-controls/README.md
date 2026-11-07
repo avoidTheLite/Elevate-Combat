@@ -1,6 +1,6 @@
 # Movement controls review
 
-Review branch: `feature/compact-command-previews`. The earlier movement-control PRs #18/#209 have merged. The compact preview draft pair is game PR #19 and DKR #218. This review does not merge or deploy a site.
+Review branch: `feature/compact-command-previews`. The earlier movement-control PRs #18/#209 have merged. Game PR #19 and DKR #218 are open and ready for review. Their DKR stage artifacts remain drafts pending acceptance. This review does not merge or deploy a site.
 
 From the product root, with Node 22+ and pnpm 12.6.0:
 

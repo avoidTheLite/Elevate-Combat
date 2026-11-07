@@ -247,6 +247,17 @@ export function MapCallouts({
               </button>
             </div>
           )}
+          {controls.nearbyHq && (
+            <div className="map-callout-buttons" aria-label="Nearby headquarters navigation">
+              <button
+                type="button"
+                title={`Inspect HQ on tile ${controls.nearbyHq.pos}`}
+                onClick={() => controls.selectNearbyHq(controls.targetKey!)}
+              >
+                SELECT NEARBY HQ
+              </button>
+            </div>
+          )}
           <div className="map-callout-buttons" aria-label="Choose occupant on contextual tile">
             <button type="button" onClick={() => controls.inspect(controls.targetKey!)}>
               INSPECT TILE

@@ -14,7 +14,7 @@ import {
   targetingOptions,
 } from './commands.ts';
 import type { MapCommand, PendingCommand, TargetingMode } from './commands.ts';
-import { holderForClick, isFriendlyNodeCenter } from '../lib/holders.ts';
+import { holderForClick, isFriendlyNodeCenter, nearbyHqForTile } from '../lib/holders.ts';
 import { viewTeam } from '../stores/useGameStore.ts';
 import {
   CONTROL_PREFERENCES_CHANGED,
@@ -23,7 +23,12 @@ import {
 } from './preferences.ts';
 import type { ControlPreferences } from './preferences.ts';
 import type { SceneInteraction, SceneTileAnchor } from './types.ts';
-import { chooseTileEntity, inspectTile, visibleTileEntities } from '../lib/selection.ts';
+import {
+  chooseNearbyHq,
+  chooseTileEntity,
+  inspectTile,
+  visibleTileEntities,
+} from '../lib/selection.ts';
 
 export interface MapControls {
   preferences: ControlPreferences;
@@ -41,6 +46,8 @@ export interface MapControls {
   moveCommand: MapCommand | null;
   attackCommand: MapCommand | null;
   targetOccupants: ReturnType<typeof selectableAt>;
+  nearbyHq: ReturnType<typeof nearbyHqForTile>;
+  selectNearbyHq: (key: string) => void;
   inspectionKey: string | null;
   inspectionSelection: string | null;
   inspectionEntities: ReturnType<typeof visibleTileEntities>;
@@ -249,6 +256,14 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     },
     [cancel, game],
   );
+  const selectNearbyHq = useCallback(
+    (key: string) => {
+      inspectionRevision.current += 1;
+      cancel();
+      chooseNearbyHq(game, key);
+    },
+    [cancel, game],
+  );
   const deselect = useCallback(() => {
     inspectionRevision.current += 1;
     cancel();
@@ -358,6 +373,12 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
               : entity.unit.team === game.battle?.active,
         )
       ) {
+        inspect(intent.targetKey);
+        return true;
+      }
+      // Inspect the ring tile without selecting an off-tile HQ or issuing a move.
+      const nearbyHq = nearbyHqForTile(game, viewTeam(game), intent.targetKey);
+      if (nearbyHq?.team === game.active) {
         inspect(intent.targetKey);
         return true;
       }
@@ -501,6 +522,8 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     moveCommand,
     attackCommand,
     targetOccupants,
+    nearbyHq: targetKey ? nearbyHqForTile(game, viewTeam(game), targetKey) : undefined,
+    selectNearbyHq,
     inspectionKey: ui.inspectedCell,
     inspectionSelection: ui.selectedEntity,
     inspectionEntities: ui.inspectedCell ? visibleTileEntities(game, ui.inspectedCell) : [],

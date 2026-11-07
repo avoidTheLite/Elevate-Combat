@@ -16,8 +16,8 @@ import {
 import { Button } from '../ui/Button.tsx';
 import { Panel, Stat } from '../ui/Panel.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
-import { canOrder, holderName } from '../../lib/holders.ts';
-import { chooseTileEntity, visibleTileEntities } from '../../lib/selection.ts';
+import { canOrder, holderName, nearbyHqForTile } from '../../lib/holders.ts';
+import { chooseNearbyHq, chooseTileEntity, visibleTileEntities } from '../../lib/selection.ts';
 import { strategicKnowledge } from '../../lib/strategicVisibility.ts';
 import { ContentsPanel } from './ContentsPanel.tsx';
 import { NodePanel } from './NodePanel.tsx';
@@ -60,6 +60,7 @@ export function StrategicSidebar({
   );
   if (!key || !cell || !selectedMain || !hexState) return null;
   const entities = visibleTileEntities(game, key, view);
+  const nearbyHq = nearbyHqForTile(game, view, key);
   const selectedId = entities.some((e) => e.id === ui.selectedEntity) ? ui.selectedEntity : null;
   const site = game.infrastructure?.sites.find(
     (candidate) => candidate.mainHex === selectedMain.key,
@@ -114,6 +115,16 @@ export function StrategicSidebar({
       data-testid="selection-context"
     >
       <Panel id="hex" title={`TILE ${key} · HEX ${selectedMain.col},${selectedMain.row}`}>
+        {nearbyHq && (
+          <Button
+            size="sm"
+            className="min-h-11"
+            title={`Inspect HQ on tile ${nearbyHq.pos}`}
+            onClick={() => chooseNearbyHq(game, key)}
+          >
+            SELECT NEARBY HQ
+          </Button>
+        )}
         <Stat label="Elevation" value={`H${terrain.heights[cell.index] ?? 0}`} />
         <Stat
           label="Owner"

@@ -5,6 +5,7 @@ import {
   apply,
   campaignNodeActionChoices,
   campaignNodeViews,
+  commanderReach,
   canSee,
   createFoundationPlaytestConfiguration,
   createGame,
@@ -20,7 +21,7 @@ import {
 import { useGameStore } from '../../stores/useGameStore.ts';
 import { chooseTileEntity, inspectTile, visibleTileEntities } from '../../lib/selection.ts';
 import { regularPlaytestSettings } from '../../lib/campaignScenarios.ts';
-import { commanderOf, strategicGame } from '../../lib/testGames.ts';
+import { alphaGarrison, commanderOf, strategicGame } from '../../lib/testGames.ts';
 import { createMovementDemo, movementDemoFocus } from '../../controls/demoScenario.ts';
 import { blindFireFixture } from '../../controls/reviewFixtures.ts';
 import { useMapControls } from '../../controls/useMapControls.ts';
@@ -30,6 +31,20 @@ import { StrategicSidebar } from './StrategicSidebar.tsx';
 import { TacticalSidebar } from './TacticalSidebar.tsx';
 import { createFoundationDemoScenario } from '../../foundation/demoScenarios.ts';
 import { useNodePlacementStore } from '../../stores/useNodePlacementStore.ts';
+import { holderForClick, nearbyHqForTile } from '../../lib/holders.ts';
+import { selectableAt } from '../../controls/commands.ts';
+
+function emptyHqNeighbor(game: ReturnType<typeof strategicGame>): string {
+  const hq = alphaGarrison(game);
+  const cell = worldOf(game).world.subs.find(
+    (candidate) =>
+      candidate.key !== hq.pos &&
+      !game.armies.some((holder) => holder.pos === candidate.key) &&
+      holderForClick(game, 'A', candidate.key)?.id === hq.id,
+  );
+  if (!cell) throw new Error('Fixture requires an actually empty HQ ring subhex');
+  return cell.key;
+}
 
 const store = (): ReturnType<typeof useGameStore.getState> => useGameStore.getState();
 beforeEach(() => {
@@ -54,6 +69,141 @@ function StrategicContext(): React.ReactElement {
 }
 
 describe('persistent tile and entity context', () => {
+  it.each([false, true])(
+    'GAMES-ELEVATE-CAMPAIGN-UC-002: empty HQ neighbor inspection has no proxy occupant and retains the prior actor (%s)',
+    (hasActor) => {
+      const game = strategicGame(true);
+      const neighbor = emptyHqNeighbor(game);
+      const actor = hasActor ? commanderOf(game, 'A').id : null;
+      useGameStore.setState({ game, handoff: null });
+      store().setUi({ selectedArmy: actor });
+      const before = structuredClone(game);
+      expect(holderForClick(game, 'A', neighbor)?.id).toBe(alphaGarrison(game).id);
+      expect(visibleTileEntities(game, neighbor)).toEqual([]);
+      for (let i = 0; i < 5; i++) {
+        act(() => inspectTile(game, neighbor));
+        expect(store().ui.inspectedCell).toBe(neighbor);
+        expect(store().ui.selectedArmy).toBe(actor);
+        expect(store().ui.selectedEntity).toBeNull();
+      }
+      expect(store().game).toEqual(before);
+    },
+  );
+  it.each(['classic', 'ready'] as const)(
+    'GAMES-ELEVATE-CAMPAIGN-UC-002: %s explicit nearby HQ selection inspects its real tile without spending',
+    (preset) => {
+      const game = preset === 'ready' ? createGame(regularPlaytestSettings()) : strategicGame(true);
+      const neighbor = emptyHqNeighbor(game);
+      const hq = alphaGarrison(game);
+      useGameStore.setState({ game, handoff: null });
+      act(() => inspectTile(game, neighbor));
+      render(<StrategicContext />);
+      expect(screen.queryByTestId('entity-context-body')).not.toBeInTheDocument();
+      expect(selectableAt(game, neighbor)).toEqual([]);
+      // A stale occupant choice cannot treat the off-tile HQ as being here.
+      act(() => chooseTileEntity(game, neighbor, hq.id));
+      expect(store().ui.selectedArmy).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'SELECT NEARBY HQ' }));
+      expect(store().ui.inspectedCell).toBe(hq.pos);
+      expect(store().ui.selectedEntity).toBe(
+        visibleTileEntities(game, hq.pos).find((e) => e.id === hq.id || e.kind === 'node')!.id,
+      );
+      expect(screen.queryByRole('button', { name: 'SELECT NEARBY HQ' })).not.toBeInTheDocument();
+      expect(store().game).toBe(game);
+      const selected = store().ui.selectedArmy;
+      act(() => inspectTile(game, neighbor));
+      expect(store().ui.selectedArmy).toBe(selected);
+      expect(screen.queryByTestId('entity-context-body')).not.toBeInTheDocument();
+      expect(store().game).toBe(game);
+    },
+  );
+
+  it.each([false, true])(
+    'GAMES-ELEVATE-CAMPAIGN-UC-002: HQ ring clicks inspect; explicit MOVE alone spends the legal cost (QuickMove %s)',
+    (quickMove) => {
+      const game = strategicGame(true);
+      const actor = commanderOf(game, 'A');
+      const reach = commanderReach(game, actor);
+      const neighbor = [...reach.keys()].find(
+        (key) =>
+          key !== actor.pos && nearbyHqForTile(game, 'A', key)?.id === alphaGarrison(game).id,
+      )!;
+      expect(neighbor).toBeDefined();
+      useGameStore.setState({ game, handoff: null });
+      store().setUi({ selectedArmy: actor.id });
+      const { result } = renderHook(() =>
+        useMapControls(
+          useGameStore((s) => s.game)!,
+          useGameStore((s) => s.ui),
+          false,
+        ),
+      );
+      act(() => result.current.setPreference({ quickMove }));
+      for (let i = 0; i < 4; i++) {
+        act(() =>
+          result.current.interact({
+            source: 'click',
+            originKey: null,
+            targetKey: neighbor,
+            button: 0,
+          }),
+        );
+        expect(store().ui.inspectedCell).toBe(neighbor);
+        expect(store().ui.selectedArmy).toBe(actor.id);
+        expect(result.current.pending).toBeNull();
+        expect(store().game).toBe(game);
+      }
+      act(() =>
+        result.current.interact({
+          source: 'context',
+          originKey: null,
+          targetKey: neighbor,
+          button: 0,
+        }),
+      );
+      expect(result.current.targetOccupants).toEqual([]);
+      expect(result.current.nearbyHq?.pos).toBe(alphaGarrison(game).pos);
+      render(<MapCallouts controls={result.current} />);
+      expect(screen.getByRole('button', { name: 'SELECT NEARBY HQ' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'MOVE' }));
+      if (!quickMove) {
+        expect(store().game).toBe(game);
+        expect(result.current.pending?.command.target).toBe(neighbor);
+        act(() => result.current.confirm());
+      }
+      const moved = commanderOf(store().game!, 'A');
+      expect(moved.pos).toBe(neighbor);
+      expect(moved.movesLeft).toBe(actor.movesLeft - reach.get(neighbor)!);
+      const committed = store().game;
+      act(() => result.current.confirm());
+      expect(store().game).toBe(committed);
+      expect(validateGameState(store().game!)).toEqual([]);
+    },
+  );
+
+  it('GAMES-ELEVATE-CAMPAIGN-UC-002: nearby HQ navigation respects fog and yields to a real commander', () => {
+    const game = strategicGame(true);
+    const enemyHq = game.armies.find((h) => h.team === 'B' && h.building === 'hq')!;
+    const enemyRing = worldOf(game).world.subs.find(
+      (c) => c.key !== enemyHq.pos && holderForClick(game, null, c.key)?.id === enemyHq.id,
+    )!.key;
+    expect(nearbyHqForTile(game, 'A', enemyRing)).toBeUndefined();
+    expect(visibleTileEntities(game, enemyRing, 'A')).toEqual([]);
+    expect(selectableAt(game, enemyRing)).toEqual([]);
+    useGameStore.setState({ game, handoff: null });
+    store().setUi({ inspectedCell: enemyRing });
+    render(<StrategicSidebar game={game} view="A" canAct />);
+    expect(screen.queryByRole('button', { name: 'SELECT NEARBY HQ' })).not.toBeInTheDocument();
+    const neighbor = emptyHqNeighbor(game);
+    const actor = commanderOf(game, 'A');
+    setHolderPos(worldOf(game).world, actor, neighbor);
+    expect(nearbyHqForTile(game, 'A', neighbor)).toBeUndefined();
+    expect(visibleTileEntities(game, neighbor).map((e) => e.id)).toEqual([actor.id]);
+    act(() => inspectTile(game, neighbor));
+    expect(store().ui.selectedArmy).toBe(actor.id);
+    expect(holderForClick(game, 'A', neighbor)?.id).toBe(actor.id);
+  });
+
   it('offers separate commander and actual annex building cards without node-wide roster panels', () => {
     let game = createGame({
       ...defaultSettings(),

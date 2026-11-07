@@ -8,7 +8,7 @@ import {
 } from '@iron-ridge/engine';
 import { useGameStore, viewTeam } from '../stores/useGameStore.ts';
 import type { UiState } from '../stores/useGameStore.ts';
-import { holderForClick, holderName, seenHolders } from './holders.ts';
+import { holderName, nearbyHqForTile, seenHolders } from './holders.ts';
 import { strategicKnowledge } from './strategicVisibility.ts';
 
 export type TileEntity =
@@ -82,9 +82,8 @@ export function visibleTileEntities(
   const knowledge = strategicKnowledge(game, view);
   const infrastructure = infrastructureAt(game, key, knowledge.cells.has(key));
   const node = infrastructure.find((entity) => entity.kind === 'node');
-  const primary = holderForClick(game, view, key);
   const holders: TileEntity[] = seenHolders(game, view)
-    .filter((holder) => holder.pos === key || holder.id === primary?.id)
+    .filter((holder) => holder.pos === key)
     // A node card includes its garrison roster; do not duplicate that building.
     .filter((holder) => !node || holder.kind !== 'garrison')
     .map((holder) => ({
@@ -138,4 +137,15 @@ export function chooseTileEntity(game: GameState, key: string, id: string): void
     selectedMain: worldOf(game).world.subByKey.get(key)?.main ?? null,
     ...entityPatch(entity),
   });
+}
+
+/** Explicit navigation selects the real HQ tile, including its combined node card. */
+export function chooseNearbyHq(game: GameState, key: string): void {
+  if (useGameStore.getState().game !== game) return;
+  const hq = nearbyHqForTile(game, viewTeam(game), key);
+  if (!hq) return;
+  const entity = visibleTileEntities(game, hq.pos).find(
+    (candidate) => candidate.id === hq.id || candidate.kind === 'node',
+  );
+  if (entity) chooseTileEntity(game, hq.pos, entity.id);
 }

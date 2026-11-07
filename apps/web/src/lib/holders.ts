@@ -101,6 +101,25 @@ export function holderForClick(
   });
 }
 
+/** An HQ ring shortcut navigates to another tile; it is never an occupant here. */
+export function nearbyHqForTile(
+  game: GameState,
+  view: Team | null,
+  subKey: HexKey,
+): Army | undefined {
+  if (game.phase !== 'strategic') return undefined;
+  const seen = seenHolders(game, view);
+  if (seen.some((holder) => holder.pos === subKey)) return undefined;
+  const { world } = worldOf(game);
+  const cell = world.subByKey.get(subKey);
+  if (!cell) return undefined;
+  return seen.find((holder) => {
+    if (holder.kind !== 'garrison' || holder.building !== 'hq') return false;
+    const center = world.subByKey.get(holder.pos);
+    return !!center && hexDistance(center.hex, cell.hex) === 1;
+  });
+}
+
 export interface CommandHighlights {
   /** Selected own commander's reachable cells → steps (own cell excluded). */
   reach: Map<HexKey, number>;

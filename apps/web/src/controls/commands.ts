@@ -79,8 +79,7 @@ export function selectableAt(game: GameState, key: string): { id: string; label:
     return (game.battle?.units ?? [])
       .filter((u) => u.hp > 0 && u.pos === key && u.team === game.battle?.active)
       .map((u) => ({ id: u.id, label: u.label }));
-  const primary = holderForClick(game, view, key);
-  const holders = seenHolders(game, view).filter((h) => h.pos === key || h.id === primary?.id);
+  const holders = seenHolders(game, view).filter((h) => h.pos === key);
   return holders
     .filter((h) => h.team === game.active)
     .map((h) => ({ id: h.id, label: holderName(h) }));
