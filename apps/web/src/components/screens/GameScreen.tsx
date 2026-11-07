@@ -9,8 +9,6 @@ import {
   engagementCosts,
   isAiTurn,
   liveUnits,
-  previewAttack,
-  reachable,
   unitType,
   revealedEnemies,
   foundationHasPending,
@@ -22,7 +20,6 @@ import { OverlayBar } from '../game/OverlayBar.tsx';
 import { SceneView } from '../game/SceneView.tsx';
 import { useViewStore } from '../../stores/useViewStore.ts';
 import { holderName, seenHolders } from '../../lib/holders.ts';
-import { strategicClick } from '../../lib/strategicClick.ts';
 import { StrategicSidebar } from '../game/StrategicSidebar.tsx';
 import { TacticalSidebar } from '../game/TacticalSidebar.tsx';
 import { Button } from '../ui/Button.tsx';
@@ -31,7 +28,12 @@ import { SaveMenu } from '../game/SaveMenu.tsx';
 import { FoundationResolution } from '../game/FoundationResolution.tsx';
 import { FoundationDemoGuide } from '../game/FoundationDemoGuide.tsx';
 import { useMapControls } from '../../controls/useMapControls.ts';
-import { MapCallouts, MapControlPreferences } from '../../controls/MapCallouts.tsx';
+import { MapCallouts } from '../../controls/MapCallouts.tsx';
+import { PlayerSettings } from '../game/PlayerSettings.tsx';
+import { TurnControls } from '../game/TurnControls.tsx';
+import { GameLog } from '../game/GameLog.tsx';
+import { inspectTile, chooseTileEntity } from '../../lib/selection.ts';
+import { useNodePlacementStore, nodePlacementTargets } from '../../stores/useNodePlacementStore.ts';
 import { isMovementDemo } from '../../controls/demoScenario.ts';
 
 function teamClass(t: Team): string {
@@ -46,10 +48,17 @@ export function GameScreen(): React.ReactElement {
   const aiSpeed = useGameStore((s) => s.aiSpeed);
   const fx = useGameStore((s) => s.fx);
   const quitPrompt = useGameStore((s) => s.quitPrompt);
-  const { aiTick, clearError, dismissHandoff, requestQuit, setAiSpeed } = useGameStore.getState();
+  const { aiTick, clearError, dismissHandoff, requestQuit } = useGameStore.getState();
   const [help, setHelp] = useState(false);
   const [controlSettings, setControlSettings] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [placementIssue, setPlacementIssue] = useState<string | null>(null);
+  const placement = useNodePlacementStore((state) => state.plan);
+  const cancelPlacement = useNodePlacementStore((state) => state.cancelPlacement);
+  useEffect(() => {
+    if (!placement) setPlacementIssue(null);
+  }, [placement]);
 
   const view = viewTeam(game);
   const acting = actingTeam(game);
@@ -57,7 +66,36 @@ export function GameScreen(): React.ReactElement {
   const humanActing = !aiTurn && acting !== null && game.settings.controllers[acting] === 'human';
   const inBattle = game.phase === 'battle' && game.battle !== null;
   const foundationPending = foundationHasPending(game);
-  const controls = useMapControls(game, ui, !!handoff || foundationPending || quitPrompt);
+  const controls = useMapControls(
+    game,
+    ui,
+    !!handoff ||
+      foundationPending ||
+      quitPrompt ||
+      !!placement ||
+      controlSettings ||
+      logOpen ||
+      help,
+  );
+  useEffect(() => {
+    if (controls.pending) setDetailsOpen(false);
+  }, [controls.pending]);
+  const placementTargets = useMemo(() => nodePlacementTargets(game, placement), [game, placement]);
+  useEffect(() => {
+    cancelPlacement();
+    setPlacementIssue(null);
+    return cancelPlacement;
+  }, [game, cancelPlacement]);
+  useEffect(() => {
+    if (ui.inspectedCell) setDetailsOpen(true);
+  }, [ui.inspectedCell]);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') cancelPlacement();
+    };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [cancelPlacement]);
   const sceneUi = useMemo(
     () => ({ ...ui, hoverCell: controls.previewKey }),
     [ui, controls.previewKey],
@@ -105,16 +143,58 @@ export function GameScreen(): React.ReactElement {
     [game, sceneUi, view, inBattle, overlay, inspectedSupplyRoute],
   );
   const rawSpec = tactical?.spec ?? strategic!;
+  const previewRoute = useMemo(() => {
+    if (controls.previewCommand) return controls.previewCommand;
+    // Unavailable attack inspection still uses the same single red arrow. It
+    // is presentation only: no legal command or confirmation is invented.
+    const target = rawSpec.trajectory;
+    const inspectable =
+      target && (target.indirect || rawSpec.tokens.some((token) => token.key === target.to));
+    return controls.enabled && controls.previewKind !== 'move' && target && inspectable
+      ? {
+          kind: 'attack' as const,
+          origin: target.from,
+          target: target.to,
+          path: [target.from, target.to],
+        }
+      : null;
+  }, [
+    controls.previewCommand,
+    controls.enabled,
+    controls.previewKind,
+    rawSpec.trajectory,
+    rawSpec.tokens,
+  ]);
   const spec = useMemo(
     () => ({
       ...rawSpec,
+      overlays: [
+        ...rawSpec.overlays,
+        ...placementTargets.map((key) => ({ key, color: 0x33ff88, opacity: 0.35 })),
+      ],
+      commandOverlay:
+        !!previewRoute || (controls.enabled && !!controls.actor && !!controls.previewKey),
       path:
-        controls.previewKind === 'attack' ? [] : (controls.pending?.command.path ?? rawSpec.path),
-      trajectory: controls.previewKind === 'move' ? null : rawSpec.trajectory,
-      fireView: controls.previewKind === 'move' ? null : rawSpec.fireView,
+        placement || controls.previewKind === 'attack'
+          ? []
+          : (controls.pending?.command.path ?? rawSpec.path),
+      trajectory: placement || controls.previewKind === 'move' ? null : rawSpec.trajectory,
+      fireView: !placement && previewRoute?.kind === 'attack' ? rawSpec.fireView : null,
     }),
-    [rawSpec, controls.previewKind, controls.pending],
+    [
+      rawSpec,
+      controls.previewKind,
+      controls.pending,
+      previewRoute,
+      controls.enabled,
+      controls.actor,
+      controls.previewKey,
+      placement,
+      placementTargets,
+    ],
   );
+
+  const targetHeight = spec.cells.find((cell) => cell.key === controls.targetKey)?.h;
 
   const seenIds = useMemo(() => {
     if (!tactical || !view || !game.battle) return null;
@@ -126,12 +206,19 @@ export function GameScreen(): React.ReactElement {
   const selectedKey = useMemo(() => {
     if (inBattle) {
       const u = game.battle!.units.find((x) => x.id === (ui.selectedUnit ?? ui.deployPick));
-      return u?.pos ?? null;
+      return u && (!view || u.team === view || seenIds?.has(u.id)) ? (u.pos ?? null) : null;
     }
     // Strategic: ring the selected holder's sub-hex (if the viewer can see it).
     return seenHolders(game, view).find((a) => a.id === ui.selectedArmy)?.pos ?? null;
-  }, [inBattle, game, view, ui.selectedUnit, ui.deployPick, ui.selectedArmy]);
+  }, [inBattle, game, view, seenIds, ui.selectedUnit, ui.deployPick, ui.selectedArmy]);
 
+  const hasSelectionContext = !!(
+    ui.inspectedCell ||
+    ui.selectedMain ||
+    ui.selectedArmy ||
+    ui.selectedUnit ||
+    (inBattle && game.battle?.phase === 'deploy')
+  );
   const onHover = controls.onHover;
 
   const onClick = useCallback((key: string, button: number) => {
@@ -140,11 +227,14 @@ export function GameScreen(): React.ReactElement {
     if (!g) return;
     const u = s.ui;
     if (button === 2 || !key) {
+      useNodePlacementStore.getState().cancelPlacement();
       s.setUi({
         selectedArmy: null,
         checkedUnits: [],
         selectedUnit: null,
         selectedMain: null,
+        inspectedCell: null,
+        selectedEntity: null,
         deployPick: null,
         placingFort: false,
         hoverCell: null,
@@ -156,8 +246,16 @@ export function GameScreen(): React.ReactElement {
     const human = act !== null && !isAiTurn(g) && g.settings.controllers[act] === 'human';
     if (foundationHasPending(g) || s.handoff || s.quitPrompt) return;
 
+    const nodePlan = useNodePlacementStore.getState().plan;
+    if (nodePlan) {
+      if (human && useNodePlacementStore.getState().selectTile(g, key)) {
+        s.setUi({ inspectedCell: key, selectedMain: nodePlan.mainHex });
+        setPlacementIssue(null);
+      } else setPlacementIssue('This tile is not an eligible building location.');
+      return;
+    }
     if (g.phase === 'strategic' || g.phase === 'battle-pending' || g.phase === 'over') {
-      strategicClick(key);
+      inspectTile(g, key, v);
       return;
     }
 
@@ -181,38 +279,13 @@ export function GameScreen(): React.ReactElement {
       }
       return;
     }
-    if (b.phase !== 'combat') return;
-    const mine = b.units.find((x) => x.pos === key && x.hp > 0 && x.team === b.active);
-    if (mine) {
-      s.setUi({ selectedUnit: mine.id });
-      return;
-    }
-    const sel = u.selectedUnit
-      ? b.units.find((x) => x.id === u.selectedUnit && x.hp > 0)
-      : undefined;
-    if (!sel) return;
-    const ctx = buildTacticalScene(g, u, v).ctx;
-    const t = unitType(sel.typeId);
-    const target = ctx.unitAt.get(key);
-    const wantsAttack =
-      t.attackType === 'indirect'
-        ? !reachable(ctx, sel).has(key) || !!target
-        : !!target && target.team !== sel.team;
-    if (wantsAttack && previewAttack(ctx, b, sel, key).legal) {
-      s.dispatch({ type: 'attack', unitId: sel.id, cell: key });
-      return;
-    }
-    if (!sel.stationed && !sel.acted && !sel.deployed && reachable(ctx, sel).has(key)) {
-      s.dispatch({ type: 'move', unitId: sel.id, cell: key });
-      return;
-    }
-    if (wantsAttack) s.dispatch({ type: 'attack', unitId: sel.id, cell: key }); // surfaces the reason
+    if (b.phase === 'combat') inspectTile(g, key, v);
   }, []);
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[hsl(var(--border-bright))] text-[11px] flex-wrap">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
           <span className="font-bold tracking-[0.3em] text-glow">▲ IRON RIDGE</span>
           <span className="text-[hsl(var(--muted-foreground))]">
             {game.settings.era.toUpperCase()} · {game.settings.grid.mainCols}×
@@ -226,9 +299,13 @@ export function GameScreen(): React.ReactElement {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
           <span className="text-[hsl(var(--muted-foreground))]">TURN {game.turn}</span>
-          {inBattle && <span className="text-[hsl(var(--warning))]">⚔ TACTICAL</span>}
+          {inBattle && (
+            <span className="text-[hsl(var(--warning))]">
+              ⚔ TACTICAL · R{game.battle!.round}/{game.battle!.maxRounds}
+            </span>
+          )}
           {acting && (
             <span className={`font-bold ${teamClass(acting)}`}>
               ◈ {TEAM_NAME[acting]} ACTIVE{aiTurn ? ' (AI thinking…)' : ''}
@@ -237,21 +314,24 @@ export function GameScreen(): React.ReactElement {
           <span className="text-[hsl(var(--primary))]">α {game.cp.A} CP</span>
           <span className="text-[hsl(var(--secondary))]">β {game.cp.B} CP</span>
         </div>
-        <div className="flex items-center gap-1">
-          <label className="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-foreground))]">
-            AI
-            <select
-              value={aiSpeed}
-              onChange={(e) => setAiSpeed(Number(e.target.value))}
-              className="bg-transparent border border-[hsl(var(--border-bright))] text-[hsl(var(--primary))]"
-            >
-              <option value={450}>slow</option>
-              <option value={220}>normal</option>
-              <option value={60}>fast</option>
-            </select>
-          </label>
-          <Button size="sm" variant="ghost" onClick={() => setControlSettings((open) => !open)}>
-            DEMO CONTROLS
+        <div className="flex items-center gap-1 flex-wrap max-w-full">
+          <TurnControls
+            game={game}
+            blocked={
+              !!handoff ||
+              foundationPending ||
+              quitPrompt ||
+              !!placement ||
+              controlSettings ||
+              logOpen ||
+              help
+            }
+          />
+          <Button size="sm" variant="ghost" onClick={() => setControlSettings(true)}>
+            SETTINGS
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setLogOpen(true)}>
+            LOG
           </Button>
           <Button
             size="sm"
@@ -259,9 +339,10 @@ export function GameScreen(): React.ReactElement {
             className="md:hidden"
             aria-expanded={detailsOpen}
             aria-controls="game-details"
+            disabled={!hasSelectionContext}
             onClick={() => setDetailsOpen((open) => !open)}
           >
-            {detailsOpen ? 'HIDE DETAILS' : 'DETAILS'}
+            {detailsOpen ? 'HIDE CONTEXT' : 'CONTEXT'}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setHelp(true)}>
             ? HELP
@@ -272,12 +353,25 @@ export function GameScreen(): React.ReactElement {
         </div>
       </header>
       <FoundationDemoGuide game={game} />
-      {isMovementDemo(game) && (
-        <div className="px-3 py-2 text-[10px] border-b border-[hsl(var(--border-bright))] flex items-center gap-2 flex-wrap">
+      {placement && (
+        <div className="px-3 py-1 text-[11px] flex gap-2 items-center" role="status">
           <span>
-            PREPARED INITIAL TACTICAL SANDBOX · Initial fixture awarded no combat outcome. Proposed
-            controls.
+            {placement.subHex
+              ? `Placement ${placement.subHex} · confirm in context`
+              : 'Choose a highlighted building tile'}
           </span>
+          {placementIssue && <span className="text-[hsl(var(--warning))]">{placementIssue}</span>}
+          <Button size="sm" variant="ghost" onClick={() => setDetailsOpen(true)}>
+            BUILDING CONTEXT
+          </Button>
+          <Button size="sm" variant="ghost" onClick={cancelPlacement}>
+            CANCEL BUILDING
+          </Button>
+        </div>
+      )}
+      {isMovementDemo(game) && inBattle && (
+        <div className="px-3 py-2 text-[10px] border-b border-[hsl(var(--border-bright))] flex items-center gap-2 flex-wrap">
+          <span>TACTICAL CONTROLS</span>
           {(['ww2_rifle_infantry', 'ww2_engineer', 'ww2_machine_gun'] as const).map((typeId) => {
             const unit = game.battle?.units.find(
               (u) => u.team === game.battle?.active && u.typeId === typeId && u.hp > 0,
@@ -288,7 +382,9 @@ export function GameScreen(): React.ReactElement {
                 variant="ghost"
                 key={typeId}
                 onClick={() =>
-                  useGameStore.getState().setUi({ selectedUnit: unit.id, hoverCell: null })
+                  unit.pos
+                    ? chooseTileEntity(game, unit.pos, unit.id)
+                    : useGameStore.getState().setUi({ deployPick: unit.id })
                 }
               >
                 SELECT {unitType(typeId).short}
@@ -299,8 +395,8 @@ export function GameScreen(): React.ReactElement {
       )}
 
       {/* Map and sidebar split the viewport; only the sidebar scrolls, the map never moves. */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-        <main className="relative flex-1 min-h-0">
+      <div className="relative flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+        <main className="relative z-0 flex-1 min-h-0">
           <SceneView
             spec={spec}
             fx={fx}
@@ -312,6 +408,10 @@ export function GameScreen(): React.ReactElement {
               enabled: controls.enabled,
               selectionScope: controls.selectionScope,
               selectedOriginKey: controls.enabled ? selectedKey : null,
+              confirmationKey:
+                controls.pending && !controls.pending.dragging
+                  ? controls.pending.command.target
+                  : null,
               protectedKeys: spec.tokens
                 .filter((token) => token.key !== selectedKey)
                 .map((token) => token.key),
@@ -320,19 +420,30 @@ export function GameScreen(): React.ReactElement {
                   [
                     selectedKey,
                     controls.targetKey,
+                    ui.inspectedCell,
+                    controls.previewKey,
                     controls.pending?.command.target,
+                    ...(previewRoute?.path ?? []),
                     ...spec.tokens.map((token) => token.key),
                   ].filter((key): key is string => !!key),
                 ),
               ],
               onInteraction: (intent) => {
+                if (useNodePlacementStore.getState().plan) {
+                  if (intent.source === 'click') onClick(intent.targetKey ?? '', intent.button);
+                  return;
+                }
                 if (!controls.interact(intent) && (intent.targetKey || intent.button === 2))
                   onClick(intent.targetKey ?? '', intent.button);
               },
               onLayout: controls.setAnchors,
             }}
           >
-            <MapCallouts controls={controls} />
+            <MapCallouts
+              controls={controls}
+              previewRoute={previewRoute}
+              tileSummary={targetHeight !== undefined ? `Height ${targetHeight}` : undefined}
+            />
           </SceneView>
           <OverlayBar battle={inBattle ? game.battle! : null} />
           {error && game.phase !== 'battle-pending' && (
@@ -344,26 +455,28 @@ export function GameScreen(): React.ReactElement {
             </div>
           )}
         </main>
-        <aside
-          id="game-details"
-          className={`${detailsOpen ? 'block' : 'hidden'} md:block flex-none h-[42dvh] md:h-auto md:w-[320px] min-h-0 overflow-hidden border-t md:border-t-0 md:border-l border-[hsl(var(--border-bright))]`}
-        >
-          {tactical ? (
-            <TacticalSidebar
-              game={game}
-              ctx={tactical.ctx}
-              view={view}
-              canAct={humanActing && !foundationPending}
-              seenIds={seenIds}
-            />
-          ) : (
-            <StrategicSidebar
-              game={game}
-              view={view}
-              canAct={humanActing && !foundationPending && game.phase === 'strategic'}
-            />
-          )}
-        </aside>
+        {hasSelectionContext && (
+          <aside
+            id="game-details"
+            className={`game-selection-context ${detailsOpen || (inBattle && game.battle?.phase === 'deploy') ? 'block' : 'hidden'} md:block flex-none h-[42dvh] md:h-auto md:w-[320px] min-h-0 overflow-hidden border-t md:border-t-0 md:border-l border-[hsl(var(--border-bright))]`}
+          >
+            {tactical ? (
+              <TacticalSidebar
+                game={game}
+                ctx={tactical.ctx}
+                view={view}
+                canAct={humanActing && !foundationPending}
+                seenIds={seenIds}
+              />
+            ) : (
+              <StrategicSidebar
+                game={game}
+                view={view}
+                canAct={humanActing && !foundationPending && game.phase === 'strategic'}
+              />
+            )}
+          </aside>
+        )}
       </div>
 
       {game.phase === 'battle-pending' &&
@@ -389,9 +502,8 @@ export function GameScreen(): React.ReactElement {
           </Button>
         </Overlay>
       )}
-      {controlSettings && (
-        <MapControlPreferences controls={controls} onClose={() => setControlSettings(false)} />
-      )}
+      {controlSettings && <PlayerSettings onClose={() => setControlSettings(false)} />}
+      {logOpen && <GameLog game={game} view={view} onClose={() => setLogOpen(false)} />}
       {help && <Help onClose={() => setHelp(false)} />}
       {quitPrompt && <QuitDialog />}
     </div>

@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  configurationDocument,
-  parseCampaignConfiguration,
-  regularPlaytestDocument,
-  regularPlaytestSettings,
-} from '../../lib/campaignScenarios.ts';
-import type { Controller, Era, GameSettings } from '@iron-ridge/engine';
+import type { Controller, Era, GameSettings, RulesOverride } from '@iron-ridge/engine';
 import {
   GRID_LIMITS,
   DEFAULT_CAMPAIGN_PRICES,
@@ -13,21 +7,24 @@ import {
   clusterSize,
   createFoundationPlaytestConfiguration,
   defaultSettings,
-  serializeSave,
 } from '@iron-ridge/engine';
+import { configurationDocument, parseCampaignConfiguration } from '../../lib/campaignScenarios.ts';
+import {
+  applyPlayerPreset,
+  builtInPresets,
+  createPlayerPreset,
+  loadPlayerPresets,
+  parsePlayerPreset,
+  persistPlayerPresets,
+  PLAYER_PRESETS_LIMIT,
+  selectionFromSettings,
+} from '../../lib/playerPresets.ts';
+import type { PlayerPreset, PresetScope } from '../../lib/playerPresets.ts';
 import { Button } from '../ui/Button.tsx';
 import { useGameStore } from '../../stores/useGameStore.ts';
 import type { SetupSelection } from '../../balance/store.ts';
 import { newCampaignProblem, useBalanceStore, withActiveRules } from '../../balance/store.ts';
 import { LabEntry } from '../balance/LabEntry.tsx';
-import { LoadList } from './LoadList.tsx';
-import {
-  FOUNDATION_DEMO_SCENARIOS,
-  createFoundationDemoScenario,
-  foundationDemoFocus,
-} from '../../foundation/demoScenarios.ts';
-import type { FoundationDemoSelection } from '../../foundation/demoScenarios.ts';
-import { createMovementDemo, movementDemoFocus } from '../../controls/demoScenario.ts';
 
 function NumberField(props: {
   label: string;
@@ -87,16 +84,19 @@ function Choice<T extends string>(props: {
   );
 }
 
-type Mode = 'ai' | 'hotseat' | 'spectate';
-type CampaignMode = 'classic' | 'simple' | 'advanced';
+type Mode = SetupSelection['mode'];
+type CampaignMode = SetupSelection['campaignMode'];
+type RuleSelection = SetupSelection & {
+  ruleSource?: 'active' | 'snapshot';
+  activeRulesAtOpen?: RulesOverride;
+};
 
-export function SetupScreen(): React.ReactElement {
+export function SetupScreen({ onHome }: { onHome?: () => void }): React.ReactElement {
   const newGame = useGameStore((s) => s.newGame);
-  const importSave = useGameStore((s) => s.importSave);
-  const loadSaved = useGameStore((s) => s.loadSaved);
-  useGameStore((s) => s.saveRev); // re-render when a slot changes (CONTINUE visibility)
-  const hasSave = useGameStore((s) => s.hasSave)();
-  const [restored] = useState(() => useBalanceStore.getState().setupSelection);
+  const activeRules = useBalanceStore((s) => s.active);
+  const [restored] = useState(
+    () => useBalanceStore.getState().setupSelection as RuleSelection | null,
+  );
   useEffect(() => {
     useBalanceStore.getState().clearSetupSelection();
   }, []);
@@ -105,17 +105,8 @@ export function SetupScreen(): React.ReactElement {
   const [campaignMode, setCampaignMode] = useState<CampaignMode>(
     restored?.campaignMode ?? 'classic',
   );
-  const [demoScenario, setDemoScenario] = useState<FoundationDemoSelection>('standard');
-  const [demoError, setDemoError] = useState<string | null>(null);
   const [commanderPrice, setCommanderPrice] = useState(
     restored?.commanderPrice ?? String(DEFAULT_CAMPAIGN_PRICES.commanderTraining),
-  );
-  const commanderCp = Number(commanderPrice);
-  const validCommanderPrice =
-    commanderPrice.trim() !== '' && Number.isSafeInteger(commanderCp) && commanderCp > 0;
-  const [additionalNodes, setAdditionalNodes] = useState(restored?.additionalNodes ?? 16);
-  const [nodePlacementSeed, setNodePlacementSeed] = useState(
-    restored?.nodePlacementSeed ?? settings.seed,
   );
   const [capturePrice, setCapturePrice] = useState(
     restored?.capturePrice ?? String(DEFAULT_CAMPAIGN_PRICES.captureNode),
@@ -123,8 +114,32 @@ export function SetupScreen(): React.ReactElement {
   const [razePrice, setRazePrice] = useState(
     restored?.razePrice ?? String(DEFAULT_CAMPAIGN_PRICES.razeNode),
   );
-  const captureCp = Number(capturePrice);
-  const razeCp = Number(razePrice);
+  const [additionalNodes, setAdditionalNodes] = useState(restored?.additionalNodes ?? 16);
+  const [nodePlacementSeed, setNodePlacementSeed] = useState(
+    restored?.nodePlacementSeed ?? settings.seed,
+  );
+  const [ruleSource, setRuleSource] = useState<'active' | 'snapshot'>(() =>
+    restored?.ruleSource === 'snapshot' &&
+    JSON.stringify(restored.activeRulesAtOpen) === JSON.stringify(activeRules)
+      ? 'snapshot'
+      : 'active',
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [builtins] = useState(builtInPresets);
+  const [playerPresets, setPlayerPresets] = useState(loadPlayerPresets);
+  const [presetId, setPresetId] = useState('builtin-ready-regular');
+  const [presetName, setPresetName] = useState('');
+  const [saveScope, setSaveScope] = useState<PresetScope>('campaign');
+  const importedPlayers =
+    mode === 'spectate' && settings.controllers.A === 'ai' && settings.controllers.B === 'human';
+  const presets = [...builtins, ...playerPresets];
+  const selectedPreset = presets.find((preset) => preset.id === presetId) ?? presets[0]!;
+  const commanderCp = Number(commanderPrice),
+    captureCp = Number(capturePrice),
+    razeCp = Number(razePrice);
+  const validCommanderPrice =
+    commanderPrice.trim() !== '' && Number.isSafeInteger(commanderCp) && commanderCp > 0;
   const validPrices =
     capturePrice.trim() !== '' &&
     razePrice.trim() !== '' &&
@@ -137,47 +152,39 @@ export function SetupScreen(): React.ReactElement {
     : campaignMode !== 'classic' && !validPrices
       ? 'The selected infrastructure mode needs positive whole Capture/Raze CP prices, with Raze lower than Capture.'
       : null;
-  const canStart = setupProblem === null;
-  const selection = (): SetupSelection => ({
-    settings,
-    mode,
-    campaignMode,
-    additionalNodes,
-    nodePlacementSeed,
-    commanderPrice,
-    capturePrice,
-    razePrice,
-  });
-  const prepared = demoScenario !== 'standard';
   const maximumAdditionalNodes = settings.grid.mainCols * settings.grid.mainRows - 3;
   const advancedCount = Math.min(additionalNodes, maximumAdditionalNodes);
-
-  const g = settings.grid;
-  const perMain = clusterSize(g.subRadius);
-  const total = perMain * g.mainCols * g.mainRows;
+  const g = settings.grid,
+    perMain = clusterSize(g.subRadius),
+    total = perMain * g.mainCols * g.mainRows;
   const setGrid = (patch: Partial<GameSettings['grid']>): void =>
     setSettings({ ...settings, grid: { ...settings.grid, ...patch } });
 
   const configured = (): GameSettings | null => {
-    if (!canStart) return null;
-    const controllers: Record<'A' | 'B', Controller> =
-      mode === 'ai'
+    if (setupProblem) return null;
+    const controllers: Record<'A' | 'B', Controller> = importedPlayers
+      ? structuredClone(settings.controllers)
+      : mode === 'ai'
         ? { A: 'human', B: 'ai' }
         : mode === 'hotseat'
           ? { A: 'human', B: 'human' }
           : { A: 'ai', B: 'ai' };
-    const { infrastructure: _previousInfrastructure, ...baseSettings } = settings;
-    void _previousInfrastructure;
+    const { infrastructure: previousInfrastructure, ...base } = settings;
+    const infrastructure =
+      campaignMode === 'classic'
+        ? undefined
+        : (previousInfrastructure ?? createFoundationPlaytestConfiguration(captureCp, razeCp));
     const candidate: GameSettings = {
-      ...baseSettings,
+      ...base,
       controllers,
-      ...(validCommanderPrice ? { commanderTrainingCp: commanderCp } : {}),
-      ...(campaignMode !== 'classic' && validPrices
+      commanderTrainingCp: commanderCp,
+      ...(infrastructure
         ? {
             infrastructure: {
-              ...createFoundationPlaytestConfiguration(captureCp, razeCp),
+              ...infrastructure,
               nodes: {
-                ...createFoundationPlaytestConfiguration(captureCp, razeCp).nodes,
+                ...infrastructure.nodes,
+                captureCosts: { capture: captureCp, raze: razeCp },
                 placement:
                   campaignMode === 'advanced'
                     ? {
@@ -191,148 +198,220 @@ export function SetupScreen(): React.ReactElement {
           }
         : {}),
     };
-    return newCampaignProblem(candidate) ? null : candidate;
+    const effective = ruleSource === 'active' ? withActiveRules(candidate) : candidate;
+    return newCampaignProblem(effective) ? null : effective;
   };
-  // Balance-lab overrides (if applied) ride along in settings.rules.
-  const start = (): void => {
+  const selection = (): RuleSelection => ({
+    settings,
+    mode,
+    campaignMode,
+    additionalNodes,
+    nodePlacementSeed,
+    commanderPrice,
+    capturePrice,
+    razePrice,
+    ruleSource,
+    activeRulesAtOpen: structuredClone(activeRules),
+  });
+  const canStart = setupProblem === null && configured() !== null;
+  const loadSelection = (next: SetupSelection): void => {
+    setSettings(structuredClone(next.settings));
+    setMode(next.mode);
+    setCampaignMode(next.campaignMode);
+    setAdditionalNodes(next.additionalNodes);
+    setNodePlacementSeed(next.nodePlacementSeed ?? next.settings.seed);
+    setCommanderPrice(next.commanderPrice);
+    setCapturePrice(next.capturePrice);
+    setRazePrice(next.razePrice);
+    setError(null);
+  };
+  const applyPreset = (preset: PlayerPreset): void => {
+    loadSelection(applyPlayerPreset(preset, selection()));
+    if (preset.scope === 'campaign') setRuleSource('snapshot');
+    setNotice(
+      `${preset.name} applied. ${preset.scope === 'map' ? 'Era, opponent and independent rules retained.' : 'Campaign settings replaced.'} All settings remain editable.`,
+    );
+  };
+  const savePreset = (): void => {
     const setup = configured();
     if (!setup) return;
-    setDemoError(null);
-    if (prepared) {
-      try {
-        const game = createFoundationDemoScenario(
-          demoScenario,
-          captureCp,
-          razeCp,
-          settings.era,
-          commanderCp,
-        );
-        if (importSave(serializeSave(game, `Prepared demo: ${demoScenario}`)))
-          useGameStore.getState().setUi(foundationDemoFocus(game));
-      } catch (error) {
-        setDemoError(error instanceof Error ? error.message : 'Prepared demo could not start');
-      }
-    } else newGame(withActiveRules(setup));
+    try {
+      const snapshot: SetupSelection = {
+        ...selection(),
+        settings: setup,
+        additionalNodes: advancedCount,
+      };
+      const preset = createPlayerPreset(saveScope, presetName, snapshot);
+      const next = [...playerPresets, preset];
+      persistPlayerPresets(next);
+      setPlayerPresets(next);
+      setPresetId(preset.id);
+      setPresetName('');
+      setError(null);
+      setNotice(`${preset.name} saved in this browser as a ${saveScope} snapshot.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save preset');
+    }
   };
-
-  const downloadConfiguration = (recipe: unknown, filename: string): void => {
-    const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+  const deletePreset = (): void => {
+    if (selectedPreset.builtin) return;
+    try {
+      const next = playerPresets.filter((preset) => preset.id !== selectedPreset.id);
+      persistPlayerPresets(next);
+      setPlayerPresets(next);
+      setPresetId('builtin-ready-regular');
+      setError(null);
+      setNotice(`${selectedPreset.name} deleted. Current editable settings retained.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not delete preset');
+    }
   };
   const exportConfiguration = (): void => {
     const setup = configured();
     if (!setup) return;
-    downloadConfiguration(
-      configurationDocument(withActiveRules(setup)),
-      'iron-ridge-campaign-configuration.json',
-    );
-  };
-  const useRegularPlaytest = (): void => {
-    const setup = regularPlaytestSettings();
-    const balance = useBalanceStore.getState();
-    const errors = balance.importJson(JSON.stringify(setup.rules));
-    if (errors.length) {
-      setDemoError(errors.join('; '));
-      return;
-    }
-    balance.applyAll();
-    setSettings(setup);
-    setMode('ai');
-    setCampaignMode('advanced');
-    setDemoScenario('standard');
-    setCommanderPrice(String(DEFAULT_CAMPAIGN_PRICES.commanderTraining));
-    setCapturePrice(String(DEFAULT_CAMPAIGN_PRICES.captureNode));
-    setRazePrice(String(DEFAULT_CAMPAIGN_PRICES.razeNode));
-    setAdditionalNodes(3);
-    setNodePlacementSeed(4277);
-    setDemoError(null);
+    const blob = new Blob([JSON.stringify(configurationDocument(setup), null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob),
+      link = document.createElement('a');
+    link.href = url;
+    link.download = 'iron-ridge-campaign-configuration.json';
+    link.click();
+    URL.revokeObjectURL(url);
   };
   const loadConfiguration = async (file: File | undefined): Promise<void> => {
     if (!file) return;
     try {
       if (file.size > 2_000_000) throw new Error('Configuration file is too large (maximum 2 MB)');
-      newGame(parseCampaignConfiguration(await file.text()));
-    } catch (error) {
-      setDemoError(error instanceof Error ? error.message : 'Could not start configuration');
+      const text = await file.text();
+      const doc = JSON.parse(text) as { kind?: string };
+      if (doc?.kind === 'iron-ridge-player-preset') applyPreset(parsePlayerPreset(text));
+      else {
+        loadSelection(selectionFromSettings(parseCampaignConfiguration(text)));
+        setRuleSource('snapshot');
+        setNotice('Configuration loaded for editing. Review the summary, then Start New Game.');
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load configuration');
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 scanlines">
-      <div className="text-center">
-        <div className="text-3xl font-bold tracking-[0.4em] text-glow">▲ IRON RIDGE</div>
-        <div className="text-[hsl(var(--muted-foreground))] text-xs tracking-widest mt-1">
-          // TRAINING SIMULATION :: V1.0 :: STRATEGIC + TACTICAL
-        </div>
+    <div className="min-h-screen flex flex-col items-center gap-5 p-4 py-8 scanlines">
+      <div className="w-full max-w-[680px] flex justify-between items-center gap-3">
+        <h1 className="text-xl tracking-widest text-glow">CREATE CAMPAIGN</h1>
+        {onHome && (
+          <Button variant="ghost" onClick={onHome}>
+            ← HOME
+          </Button>
+        )}
       </div>
-
-      <div className="w-full max-w-[560px] border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-4 flex flex-col gap-4">
-        <div className="text-[11px] text-[hsl(var(--primary))] tracking-widest">
-          [ NEW CAMPAIGN ]
-        </div>
-
-        <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-2">
-          <div className="text-xs font-bold">MOVEMENT &amp; ATTACK CONTROLS DEMO</div>
-          <p className="text-[11px] leading-4">
-            Review proposed on-map controls in a normal ready campaign, or open a prepared initial
-            tactical sandbox with a legal rifle move and attack, engineer Dig In and machine-gun Set
-            Up / Pack Up. No battle result is awarded.
+      <main className="w-full max-w-[680px] border border-[hsl(var(--border-bright))] bg-[hsl(var(--panel))] p-4 flex flex-col gap-5">
+        <section
+          aria-label="Presets"
+          className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-3"
+        >
+          <h2 className="text-sm tracking-widest">PRESETS</h2>
+          <label className="text-xs flex flex-col gap-2">
+            Choose a preset
+            <select
+              aria-label="Choose a preset"
+              value={selectedPreset.id}
+              onChange={(event) => setPresetId(event.target.value)}
+              className="w-full bg-[hsl(var(--panel))] border border-[hsl(var(--border-bright))] p-2"
+            >
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.scope === 'map' ? '▧ Map' : '◆ Campaign'} · {preset.name}
+                  {preset.builtin ? ' · Built-in' : ' · Yours'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-[11px] leading-4" data-testid="preset-scope">
+            {selectedPreset.scope === 'map'
+              ? '▧ Replaces Map: dimensions, terrain seed, infrastructure mode, node count, node seed and Capture/Raze CP. Retains Era, Opponent and independent rules, including fog.'
+              : '◆ Replaces Campaign: Era, Opponent, Map and independent rules, including fog, commander CP and combat tuning.'}
           </p>
+          {selectedPreset.id === 'builtin-ready-regular' && (
+            <p className="text-[11px] leading-4">
+              Ready Regular: generated WW2 campaign, 7×5 map, seed 20261101, two HQs and three extra
+              objectives; separate node seed 4277. Trial combat profile and multi-commander
+              engagements, Capture 5 CP, Raze 2 CP, commander training 15 CP.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => applyPreset(selectedPreset)}>APPLY PRESET</Button>
+            {selectedPreset.builtin ? (
+              <span className="text-[10px] self-center">Built-in · read-only</span>
+            ) : (
+              <Button variant="ghost" onClick={deletePreset}>
+                DELETE PRESET
+              </Button>
+            )}
+          </div>
           <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
-            QuickMove and QuickAttack are off by proposed default. Change browser-only preferences
-            with DEMO CONTROLS in game. The normal ready campaign keeps Capture 5 CP, Raze 2 CP and
-            commander training 15 CP.
+            Apply copies a snapshot into the controls below. You can edit it before starting;
+            presets never reference live settings.
           </p>
-          <Button onClick={() => newGame(regularPlaytestSettings())}>
-            START READY MOVEMENT CAMPAIGN
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              try {
-                const demo = createMovementDemo();
-                if (importSave(serializeSave(demo, 'Prepared initial movement controls sandbox')))
-                  useGameStore.getState().setUi(movementDemoFocus(demo));
-                setDemoError(null);
-              } catch (error) {
-                setDemoError(
-                  error instanceof Error ? error.message : 'Controls sandbox could not start',
-                );
+          <div className="border-t border-[hsl(var(--border))] pt-3 flex flex-col gap-2">
+            <label className="text-[11px] flex flex-col gap-1">
+              Preset name
+              <input
+                aria-label="Preset name"
+                value={presetName}
+                maxLength={60}
+                onChange={(event) => setPresetName(event.target.value)}
+                className="min-w-0 bg-transparent border border-[hsl(var(--border-bright))] p-2"
+              />
+            </label>
+            <Choice<PresetScope>
+              label="SAVE SCOPE"
+              value={saveScope}
+              options={[
+                { value: 'map', label: '▧ MAP ONLY' },
+                { value: 'campaign', label: '◆ WHOLE CAMPAIGN' },
+              ]}
+              onChange={setSaveScope}
+            />
+            <Button
+              variant="ghost"
+              onClick={savePreset}
+              disabled={
+                !canStart || !presetName.trim() || playerPresets.length >= PLAYER_PRESETS_LIMIT
               }
-            }}
-          >
-            OPEN PREPARED TACTICAL CONTROLS
-          </Button>
-        </div>
-
-        <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-2">
-          <div className="text-xs font-bold">READY REGULAR PLAYTEST</div>
-          <p className="text-[11px] leading-4">
-            Generated WW2 campaign, 7×5 MainHexes, seed 20261101: three extra strategic objectives
-            plus two HQ nodes. The middle objective is on natural height 7; each side has a nearer
-            objective. Ordinary starting forces and income apply.
+            >
+              SAVE PLAYER PRESET
+            </Button>
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              {playerPresets.length}/{PLAYER_PRESETS_LIMIT} saved in this browser. Delete a player
+              preset to free space. Built-ins remain available.
+            </p>
+          </div>
+          <label className="text-[11px] flex flex-col gap-2">
+            IMPORT CONFIGURATION OR PRESET (.json)
+            <input
+              type="file"
+              accept=".json,application/json"
+              aria-label="Import campaign configuration or preset"
+              className="w-full min-w-0 text-[10px]"
+              onChange={(event) => {
+                void loadConfiguration(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+          </label>
+          <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+            Imports load editable settings without starting a game. Campaign configurations keep
+            their own rules, including baseline when omitted. Use Home → Resume Game for exact saved
+            progress.
           </p>
-          <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">
-            Loads the tentative combat profile into Balance Lab for editing, with Capture 5 CP, Raze
-            2 CP and new commanders 15 CP. Multi-commander engagements are enabled. Then choose an
-            opponent below and start. Existing saves keep their own settings.
+        </section>
+        {notice && (
+          <p role="status" className="text-[11px] leading-4">
+            {notice}
           </p>
-          <Button onClick={useRegularPlaytest}>USE READY PLAYTEST SETUP</Button>
-          <Button
-            variant="ghost"
-            onClick={() =>
-              downloadConfiguration(regularPlaytestDocument(), 'strategic-objectives-playtest.json')
-            }
-          >
-            DOWNLOAD READY PLAYTEST CONFIG
-          </Button>
-        </div>
-
+        )}
         <Choice<Era>
           label="ERA"
           value={settings.era}
@@ -342,338 +421,297 @@ export function SetupScreen(): React.ReactElement {
           ]}
           onChange={(era) => setSettings({ ...settings, era })}
         />
-        {!prepared && (
-          <Choice<Mode>
-            label="OPPONENT"
-            value={mode}
-            options={[
-              { value: 'ai', label: 'VS AI' },
-              { value: 'hotseat', label: 'HOTSEAT 2P' },
-              { value: 'spectate', label: 'AI vs AI' },
-            ]}
-            onChange={setMode}
-          />
-        )}
-
-        {!prepared && (
-          <fieldset className="flex flex-col gap-1 text-[11px]">
-            <legend className="text-[hsl(var(--muted-foreground))] tracking-widest">
-              ENGAGEMENT RULES
-            </legend>
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                aria-label="Experimental multi-commander engagements"
-                checked={settings.engagement?.profile === 'multi-commander-v1'}
-                onChange={(event) => {
-                  const { engagement: _previous, ...rest } = settings;
-                  void _previous;
-                  setSettings(
-                    event.target.checked
-                      ? { ...rest, engagement: { ...EXPERIMENTAL_ENGAGEMENT_PROFILE } }
-                      : rest,
-                  );
-                }}
-                className="accent-[hsl(var(--primary))]"
-              />
-              <span>Experimental multi-commander engagements</span>
-            </label>
-            <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">
-              Choose each side’s commanders before deployment. Trial attack price: 5 CP plus 2 per
-              additional attacker. Initial defense is free; each additional defender costs 2 CP.
-              Additional commanders keep their position and movement; their units deploy around
-              their own commander. Move before engaging to reposition a zone. These trial prices are
-              separate from new commander training.
-            </p>
-          </fieldset>
-        )}
-
-        <Choice<CampaignMode>
-          label="INFRASTRUCTURE"
-          value={campaignMode}
+        <Choice<Mode | 'imported'>
+          label="OPPONENT"
+          value={importedPlayers ? 'imported' : mode}
           options={[
-            { value: 'classic', label: 'CLASSIC' },
-            { value: 'simple', label: 'SIMPLE NODES' },
-            { value: 'advanced', label: 'ADVANCED SEEDED NODES' },
+            { value: 'ai', label: 'VS AI' },
+            { value: 'hotseat', label: 'HOTSEAT 2P' },
+            { value: 'spectate', label: 'AI vs AI' },
+            ...(importedPlayers
+              ? [{ value: 'imported' as const, label: 'IMPORTED: AI ALPHA vs HUMAN BRAVO' }]
+              : []),
           ]}
-          onChange={(value) => {
-            setCampaignMode(value);
-            setDemoScenario('standard');
+          onChange={(next) => {
+            if (next === 'imported') return;
+            setMode(next);
+            setSettings({
+              ...settings,
+              controllers:
+                next === 'ai'
+                  ? { A: 'human', B: 'ai' }
+                  : next === 'hotseat'
+                    ? { A: 'human', B: 'human' }
+                    : { A: 'ai', B: 'ai' },
+            });
           }}
         />
-        <p className="text-[11px] leading-4 text-[hsl(var(--muted-foreground))]">
-          {campaignMode === 'classic'
-            ? 'Classic: HQ recruitment and territory fortification. No infrastructure nodes, node buildings or supply network.'
-            : campaignMode === 'simple'
-              ? 'Simple: one seven-tile node site in every MainHex. Select your HQ or any node in game to activate, build, upgrade and repair.'
-              : 'Advanced: nodes on a seeded selection of MainHexes, including both Home HQs. Other MainHexes retain territory and movement rules.'}
-        </p>
-        <label className="text-[11px] flex flex-col gap-1">
-          <span>Commander training price (CP)</span>
-          <input
-            aria-label="Commander training price (CP)"
-            aria-describedby="commander-price-hint"
-            type="number"
-            min="1"
-            step="1"
-            value={commanderPrice}
-            onChange={(event) => setCommanderPrice(event.target.value)}
-            required
-            className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
-          />
-          <span
-            id="commander-price-hint"
-            className="text-[10px] text-[hsl(var(--muted-foreground))]"
-          >
-            Default 15 CP for each NEW COMMANDER order, including splits. You can change the price
-            for this new game; existing saved configurations retain their price.
-          </span>
-        </label>
-        {campaignMode === 'advanced' && !prepared && (
-          <>
+        <section
+          aria-label="Map"
+          className="border border-[hsl(var(--border))] p-3 flex flex-col gap-4"
+        >
+          <h2 className="text-sm tracking-widest">▧ MAP</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <NumberField
-              label="NON-HQ NODES"
-              value={advancedCount}
-              min={0}
-              max={maximumAdditionalNodes}
-              onChange={setAdditionalNodes}
-              hint={`${advancedCount + 2} nodes total; both Home HQs are guaranteed. Each extra node occupies one selected MainHex center.`}
+              label="MAIN COLS"
+              value={g.mainCols}
+              min={GRID_LIMITS.mainCols.min}
+              max={GRID_LIMITS.mainCols.max}
+              onChange={(mainCols) => setGrid({ mainCols })}
             />
-            <label className="text-[11px] flex flex-col gap-1">
-              <span>NODE PLACEMENT SEED</span>
+            <NumberField
+              label="MAIN ROWS"
+              value={g.mainRows}
+              min={GRID_LIMITS.mainRows.min}
+              max={GRID_LIMITS.mainRows.max}
+              onChange={(mainRows) => setGrid({ mainRows })}
+            />
+            <NumberField
+              label="SUB-GRID RADIUS"
+              value={g.subRadius}
+              min={GRID_LIMITS.subRadius.min}
+              max={GRID_LIMITS.subRadius.max}
+              onChange={(subRadius) => setGrid({ subRadius })}
+            />
+          </div>
+          <p className="text-[10px] leading-4">
+            {g.mainCols}×{g.mainRows} main hexes · {perMain} sub-hexes each ·{' '}
+            {total.toLocaleString()} tactical cells. Sub-hexes share one lattice across MainHex
+            borders.
+          </p>
+          <label className="flex flex-col gap-1 text-[11px]">
+            MAP SEED
+            <div className="flex gap-2">
               <input
-                aria-label="NODE PLACEMENT SEED"
+                aria-label="MAP SEED"
                 type="number"
+                value={settings.seed}
                 min={0}
                 max={0xffffffff}
-                value={nodePlacementSeed}
                 onChange={(event) =>
-                  setNodePlacementSeed(
-                    Math.min(0xffffffff, Math.abs(Math.floor(Number(event.target.value) || 0))),
-                  )
+                  setSettings({
+                    ...settings,
+                    seed: Math.min(
+                      0xffffffff,
+                      Math.abs(Math.floor(Number(event.target.value) || 0)),
+                    ),
+                  })
                 }
-                className="bg-transparent border border-[hsl(var(--border-bright))] p-1"
+                className="min-w-0 flex-1 bg-transparent border border-[hsl(var(--border-bright))] p-1"
               />
-              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                Controls the sparse node selection separately from generated terrain. Ready playtest
-                uses 4277.
-              </span>
-            </label>
-          </>
-        )}
-        {campaignMode !== 'classic' && (
-          <div className="border border-[hsl(var(--border-bright))] p-3 flex flex-col gap-3">
-            <p className="text-[11px] text-[hsl(var(--warning))] leading-4">
-              Playtest nodes, supply and stationed garrisons with provisional balance values. Choose
-              the CP prices for Capture Node and Raze Node; Raze Node must be cheaper. Do nothing
-              remains free.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-[11px] flex flex-col gap-1">
-                <span>Capture Node price (CP)</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={capturePrice}
-                  onChange={(event) => setCapturePrice(event.target.value)}
-                  className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
-                  required
-                />
-              </label>
-              <label className="text-[11px] flex flex-col gap-1">
-                <span>Raze Node price (CP)</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={razePrice}
-                  onChange={(event) => setRazePrice(event.target.value)}
-                  className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
-                  required
-                />
-              </label>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSettings({ ...settings, seed: Math.floor(Math.random() * 1e6) })}
+              >
+                RANDOM
+              </Button>
             </div>
-            {!validPrices && (
-              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                Enter positive whole CP prices, with Raze Node lower than Capture Node, to start
-                this playtest.
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="border border-[hsl(var(--border))] p-3 flex flex-col gap-2">
-          <Choice<FoundationDemoSelection>
-            label="TEAM SCENARIOS"
-            value={demoScenario}
-            options={FOUNDATION_DEMO_SCENARIOS}
-            onChange={(value) => {
-              setDemoScenario(value);
-              if (value !== 'standard') setCampaignMode('simple');
-            }}
+          </label>
+          <Choice<CampaignMode>
+            label="INFRASTRUCTURE"
+            value={campaignMode}
+            options={[
+              { value: 'classic', label: 'CLASSIC' },
+              { value: 'simple', label: 'SIMPLE NODES' },
+              { value: 'advanced', label: 'ADVANCED SEEDED NODES' },
+            ]}
+            onChange={setCampaignMode}
           />
-          <p className="text-[11px] leading-4">
-            {
-              FOUNDATION_DEMO_SCENARIOS.find((scenario) => scenario.value === demoScenario)
-                ?.description
-            }
+          <p className="text-[11px] leading-4 text-[hsl(var(--muted-foreground))]">
+            {campaignMode === 'classic'
+              ? 'Classic: HQ recruitment and territory fortification. No infrastructure nodes, node buildings or supply network.'
+              : campaignMode === 'simple'
+                ? 'Simple: one seven-tile node site in every MainHex. Select your HQ or any node to activate, build, upgrade and repair.'
+                : 'Advanced: nodes on a seeded selection of MainHexes, including both Home HQs. Other MainHexes retain territory and movement rules.'}
           </p>
-          {prepared && (
-            <p className="text-[10px] text-[hsl(var(--warning))] leading-4">
-              Prepared demo positions, not a completed campaign: 3×3 map, radius 2, seed 1, no fog
-              and two human players. Infrastructure is activated and built through normal actions.
-              CP comes from normal income; your prices are kept exactly. Commander training uses
-              your CP price. Other tuning is playtest. Standard campaign keeps your map and opponent
-              settings.
-            </p>
-          )}
-        </div>
-
-        {!prepared && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {campaignMode === 'advanced' && (
+            <>
               <NumberField
-                label="MAIN COLS"
-                value={g.mainCols}
-                min={GRID_LIMITS.mainCols.min}
-                max={GRID_LIMITS.mainCols.max}
-                onChange={(v) => setGrid({ mainCols: v })}
+                label="NON-HQ NODES"
+                value={advancedCount}
+                min={0}
+                max={maximumAdditionalNodes}
+                onChange={setAdditionalNodes}
+                hint={`${advancedCount + 2} nodes total; both Home HQs are guaranteed.`}
               />
-              <NumberField
-                label="MAIN ROWS"
-                value={g.mainRows}
-                min={GRID_LIMITS.mainRows.min}
-                max={GRID_LIMITS.mainRows.max}
-                onChange={(v) => setGrid({ mainRows: v })}
-              />
-              <NumberField
-                label="SUB-GRID RADIUS"
-                value={g.subRadius}
-                min={GRID_LIMITS.subRadius.min}
-                max={GRID_LIMITS.subRadius.max}
-                onChange={(v) => setGrid({ subRadius: v })}
-              />
-            </div>
-            <div className="text-[10px] text-[hsl(var(--muted-foreground))] leading-4">
-              {g.mainCols}×{g.mainRows} main hexes · {perMain} sub-hexes each ·{' '}
-              {total.toLocaleString()} tactical cells. Every main hex is a radius-{g.subRadius}{' '}
-              cluster on one shared sub-hex lattice, so sub-hexes line up exactly across every
-              main-hex border.
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <NumberField
-                label="BATTLE ROUND LIMIT"
-                value={settings.battleRounds}
-                min={4}
-                max={20}
-                onChange={(v) => setSettings({ ...settings, battleRounds: v })}
-              />
-              <label className="flex flex-col gap-1 text-[11px]" htmlFor="f-seed">
-                <span className="text-[hsl(var(--muted-foreground))] tracking-widest">
-                  MAP SEED
+              <label className="text-[11px] flex flex-col gap-1">
+                NODE PLACEMENT SEED
+                <input
+                  aria-label="NODE PLACEMENT SEED"
+                  type="number"
+                  min={0}
+                  max={0xffffffff}
+                  value={nodePlacementSeed}
+                  onChange={(event) =>
+                    setNodePlacementSeed(
+                      Math.min(0xffffffff, Math.abs(Math.floor(Number(event.target.value) || 0))),
+                    )
+                  }
+                  className="bg-transparent border border-[hsl(var(--border-bright))] p-1"
+                />
+                <span className="text-[10px]">
+                  Independent from terrain. Editing or randomizing MAP SEED keeps this seed.
                 </span>
-                <div className="flex gap-2">
-                  <input
-                    id="f-seed"
-                    aria-label="MAP SEED"
-                    type="number"
-                    value={settings.seed}
-                    onChange={(e) => {
-                      const seed = Math.min(
-                        0xffffffff,
-                        Math.abs(Math.floor(Number(e.target.value) || 0)),
-                      );
-                      setNodePlacementSeed(seed);
-                      setSettings({
-                        ...settings,
-                        seed,
-                      });
-                    }}
-                    className="min-w-0 flex-1 bg-transparent border border-[hsl(var(--border-bright))] px-2 py-1 text-[hsl(var(--primary))]"
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      const seed = Math.floor(Math.random() * 1e6);
-                      setNodePlacementSeed(seed);
-                      setSettings({ ...settings, seed });
-                    }}
-                  >
-                    RANDOM
-                  </Button>
-                </div>
               </label>
+            </>
+          )}
+          {campaignMode !== 'classic' && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] leading-4">
+                Playtest nodes, supply and stationed garrisons. Raze must cost less than Capture; Do
+                nothing stays free.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  {
+                    label: 'Capture Node price (CP)',
+                    value: capturePrice,
+                    change: setCapturePrice,
+                  },
+                  { label: 'Raze Node price (CP)', value: razePrice, change: setRazePrice },
+                ].map((field) => (
+                  <label key={field.label} className="text-[11px] flex flex-col gap-1">
+                    {field.label}
+                    <input
+                      aria-label={field.label}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={field.value}
+                      onChange={(event) => field.change(event.target.value)}
+                      className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
+                      required
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
-
-            <label className="flex items-center gap-2 text-[11px] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.fog}
-                onChange={(e) => setSettings({ ...settings, fog: e.target.checked })}
-                className="accent-[hsl(var(--primary))]"
-              />
-              <span className="tracking-widest text-[hsl(var(--muted-foreground))]">
-                FOG OF WAR (LOS-based spotting)
-              </span>
-            </label>
-          </>
-        )}
-
-        {demoError && (
-          <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
-            {demoError}
+          )}
+        </section>
+        <section
+          aria-label="Independent rules"
+          className="border border-[hsl(var(--border))] p-3 flex flex-col gap-4"
+        >
+          <h2 className="text-sm tracking-widest">◆ INDEPENDENT RULES</h2>
+          <label className="text-[11px] flex flex-col gap-1">
+            Commander training price (CP)
+            <input
+              aria-label="Commander training price (CP)"
+              type="number"
+              min={1}
+              step={1}
+              value={commanderPrice}
+              onChange={(event) => setCommanderPrice(event.target.value)}
+              required
+              className="w-full bg-transparent border border-[hsl(var(--border-bright))] p-1"
+            />
+            <span className="text-[10px]">
+              Default 15 CP per new commander, including splits. Existing saves retain their price.
+            </span>
+          </label>
+          <NumberField
+            label="BATTLE ROUND LIMIT"
+            value={settings.battleRounds}
+            min={1}
+            max={100}
+            onChange={(battleRounds) => setSettings({ ...settings, battleRounds })}
+          />
+          <label className="flex items-start gap-2 text-[11px]">
+            <input
+              type="checkbox"
+              checked={settings.fog}
+              onChange={(event) => setSettings({ ...settings, fog: event.target.checked })}
+              className="accent-[hsl(var(--primary))]"
+            />
+            <span>FOG OF WAR (LOS-based spotting)</span>
+          </label>
+          <label className="flex items-start gap-2 text-[11px]">
+            <input
+              type="checkbox"
+              aria-label="Experimental multi-commander engagements"
+              checked={settings.engagement?.profile === 'multi-commander-v1'}
+              onChange={(event) => {
+                const { engagement: _old, ...rest } = settings;
+                void _old;
+                setSettings(
+                  event.target.checked
+                    ? { ...rest, engagement: { ...EXPERIMENTAL_ENGAGEMENT_PROFILE } }
+                    : rest,
+                );
+              }}
+              className="accent-[hsl(var(--primary))]"
+            />
+            <span>Experimental multi-commander engagements</span>
+          </label>
+          <p className="text-[10px] leading-4">
+            Choose each side’s commanders before deployment. Trial attack price: 5 CP plus 2 per
+            additional attacker; initial defense is free, each additional defender costs 2 CP.
+            Additional commanders keep position and movement.
           </p>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <Button size="lg" onClick={start} className="flex-1" disabled={!canStart}>
-            START NEW GAME
-          </Button>
-          {hasSave && (
-            <Button size="lg" variant="ghost" onClick={() => loadSaved()}>
-              CONTINUE
+          <p className="text-[11px]">
+            Combat tuning:{' '}
+            {ruleSource === 'snapshot'
+              ? 'configuration / campaign preset snapshot'
+              : activeRules
+                ? 'applied Balance Lab rules'
+                : 'code baseline'}
+            . Unsaved Lab drafts never change a launch.
+          </p>
+          {ruleSource === 'snapshot' && (
+            <Button size="sm" variant="ghost" onClick={() => setRuleSource('active')}>
+              USE APPLIED LAB RULES
             </Button>
           )}
-        </div>
-        {!prepared && (
-          <Button variant="ghost" onClick={exportConfiguration} disabled={!canStart}>
-            EXPORT NEW-RUN CONFIGURATION
-          </Button>
-        )}
-        <label className="text-[11px] flex flex-col gap-2">
-          <span>START FROM CUSTOM CONFIGURATION (.json)</span>
-          <input
-            type="file"
-            accept=".json,application/json"
-            aria-label="Start from campaign configuration"
-            className="w-full min-w-0 text-[10px]"
-            onChange={(event) => {
-              void loadConfiguration(event.target.files?.[0]);
-              event.target.value = '';
-            }}
-          />
-          <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
-            Starts a fresh run from the file's map, rules and CP prices. Export a configuration
-            above to customize or share. Imported configurations use their own rules, including the
-            baseline when no rules are supplied; applied Balance Lab overrides are not added. To
-            resume exact progress, use saved games below.
-          </span>
-        </label>
-        {!prepared && (
           <LabEntry settings={configured} problem={setupProblem} selection={selection} />
+        </section>
+        <section
+          aria-label="Campaign summary"
+          className="text-[11px] leading-5 border-t border-[hsl(var(--border-bright))] pt-3"
+        >
+          <h2 className="text-sm tracking-widest">REVIEW CAMPAIGN</h2>
+          <p>
+            {settings.era.toUpperCase()} ·{' '}
+            {importedPlayers
+              ? 'AI Alpha vs Human Bravo'
+              : mode === 'ai'
+                ? 'vs AI'
+                : mode === 'hotseat'
+                  ? 'Hotseat 2P'
+                  : 'AI vs AI'}{' '}
+            · {g.mainCols}×{g.mainRows} · radius {g.subRadius} · terrain seed {settings.seed}
+          </p>
+          <p>
+            {campaignMode === 'classic'
+              ? 'Classic infrastructure'
+              : `${campaignMode === 'advanced' ? `${advancedCount + 2} seeded nodes · node seed ${nodePlacementSeed}` : 'Nodes in every MainHex'} · Capture ${capturePrice} CP / Raze ${razePrice} CP`}{' '}
+            · commander training {commanderPrice || '—'} CP
+          </p>
+          <p>
+            Fog {settings.fog ? 'on' : 'off'} · battle round limit {settings.battleRounds} ·{' '}
+            {settings.engagement ? 'Multi-commander engagements' : 'Standard engagements'}
+          </p>
+        </section>
+        {setupProblem && <p className="text-[11px] text-[hsl(var(--warning))]">{setupProblem}</p>}
+        {error && (
+          <p role="alert" className="text-xs text-[hsl(var(--destructive))]">
+            {error}
+          </p>
         )}
-      </div>
-
-      <LoadList />
-
-      <div className="text-[10px] text-[hsl(var(--muted-foreground))] max-w-[560px] text-center leading-4">
-        Capture the enemy HQ. Move armies across the strategic hex map; attacking an occupied hex
-        opens a tactical battle on the sub-hex grid of that hex and its neighbours. Elevation drives
-        line of sight, movement and fire.
-      </div>
+        <Button
+          size="lg"
+          disabled={!canStart}
+          onClick={() => {
+            const setup = configured();
+            if (setup) newGame(setup);
+          }}
+        >
+          START NEW GAME
+        </Button>
+        <Button variant="ghost" onClick={exportConfiguration} disabled={!canStart}>
+          EXPORT NEW-RUN CONFIGURATION
+        </Button>
+      </main>
     </div>
   );
 }

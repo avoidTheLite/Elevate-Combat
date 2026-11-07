@@ -53,6 +53,7 @@ function turnStartCaptureFixture(): GameState {
 describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrastructure player journeys', () => {
   it('starts from approved defaults and rejects cleared or invalid capture prices', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     fireEvent.click(screen.getByRole('button', { name: 'SIMPLE NODES' }));
     expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(5);
     expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(2);
@@ -86,6 +87,7 @@ describe('GAMES-ELEVATE-CAMPAIGN-UC-001 / GAMES-ELEVATE-CAMPAIGN-UC-002: infrast
     )!.owner;
     fireEvent.click(screen.getByRole('button', { name: 'Save & Quit' }));
     expect(useGameStore.getState().game).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(screen.getByRole('button', { name: 'CONTINUE' }));
     expect(useGameStore.getState().game).toEqual(saved);
     expect(screen.getByRole('button', { name: /Do nothing .* \(0 CP\)/ })).toHaveAttribute(

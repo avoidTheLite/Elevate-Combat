@@ -151,7 +151,7 @@ describe('map command interaction lifecycle', () => {
     expect(result.current.pending).toBeNull();
   });
 
-  it('selection and deselection clear every pending and hover artifact until new intent', () => {
+  it('selection clears pending intent, repeated entity choice persists, and a repeated body click deselects', () => {
     const { result } = mount();
     const key = moveKey();
     const oldHover = result.current.onHover;
@@ -165,7 +165,10 @@ describe('map command interaction lifecycle', () => {
     expect(result.current.pending).toBeNull();
     act(() => oldHover(key));
     expect(result.current.previewKey).toBeNull();
+    act(() => result.current.select(other.id, other.pos!));
+    expect(store().ui.selectedUnit).toBe(other.id);
     act(() => result.current.interact(click(other.pos!)));
+    expect(store().ui.inspectedCell).toBe(other.pos);
     expect(store().ui.selectedUnit).toBeNull();
     expect(result.current.actions).toEqual([]);
   });

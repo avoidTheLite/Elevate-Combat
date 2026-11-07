@@ -13,6 +13,7 @@ import {
   worldOf,
 } from '@iron-ridge/engine';
 import { useGameStore, viewTeam } from '../../stores/useGameStore.ts';
+import { inspectTile } from '../../lib/selection.ts';
 import { ContentsPanel } from './ContentsPanel.tsx';
 import { StrategicSidebar } from './StrategicSidebar.tsx';
 import {
@@ -208,15 +209,15 @@ describe('ContentsPanel', () => {
 });
 
 describe('Recruit panel', () => {
-  it('says recruits join the HQ garrison, shows count/cap and disables at cap', () => {
+  it('shows the inspected HQ garrison count/cap and disables recruitment at cap', () => {
     const s = withRecruits(strategicGame(true), COMMAND.garrisonCap - 1);
     load(s);
+    act(() => inspectTile(s, alphaGarrison(s).pos));
     function Sidebar(): React.ReactElement {
       const g = useGameStore((st) => st.game)!;
       return <StrategicSidebar game={g} view="A" canAct />;
     }
     render(<Sidebar />);
-    expect(screen.getByText(/recruits join the hq garrison/i)).toBeInTheDocument();
     expect(screen.getByTestId('garrison-count')).toHaveTextContent(
       `${COMMAND.garrisonCap - 1}/${COMMAND.garrisonCap}`,
     );
@@ -235,6 +236,7 @@ describe('Recruit panel', () => {
     const s = strategicGame(true);
     s.settings.rules = { units: { ww2_rifle_infantry: { cost: 1 } } };
     load(s);
+    act(() => inspectTile(s, alphaGarrison(s).pos));
     function Sidebar(): React.ReactElement {
       const g = useGameStore((st) => st.game)!;
       return <StrategicSidebar game={g} view="A" canAct />;

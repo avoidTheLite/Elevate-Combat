@@ -7,6 +7,7 @@ export interface ControlPreferences {
   overlap: number;
 }
 export const CONTROL_PREFERENCES_KEY = 'iron-ridge:proposed-map-controls:v1';
+export const CONTROL_PREFERENCES_CHANGED = 'iron-ridge:control-preferences-changed';
 export const DEFAULT_CONTROL_PREFERENCES: ControlPreferences = {
   quickMove: false,
   quickAttack: false,
@@ -47,4 +48,5 @@ export function saveControlPreferences(value: ControlPreferences): void {
   } catch {
     /* Browser storage is optional. */
   }
+  window.dispatchEvent(new Event(CONTROL_PREFERENCES_CHANGED));
 }
