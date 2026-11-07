@@ -57,7 +57,21 @@ async function hit(p, key) {
         y = c.y + dy;
       if (document.elementFromPoint(x, y) !== s.renderer.domElement) continue;
       s.pointer.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-      if (s.pickKey() === key) return { x, y };
+      if (s.pickKey() !== key) continue;
+      const solid = [
+        [-2, -2],
+        [2, -2],
+        [-2, 2],
+        [2, 2],
+      ].every(([sx, sy]) => {
+        if (document.elementFromPoint(x + sx, y + sy) !== s.renderer.domElement) return false;
+        s.pointer.set(
+          ((x + sx - r.left) / r.width) * 2 - 1,
+          -((y + sy - r.top) / r.height) * 2 + 1,
+        );
+        return s.pickKey() === key;
+      });
+      if (solid) return { x, y };
     }
     return null;
   }, key);
@@ -132,6 +146,9 @@ try {
     assert.equal(await context.locator('[data-entity-id]').count(), 0);
     const nearby = context.getByRole('button', { name: 'SELECT NEARBY HQ', exact: true });
     await nearby.waitFor();
+    const emptyShot = `empty-hq-ring-${spec.width}x${spec.height}.png`;
+    await p.screenshot({ path: `${out}/${emptyShot}` });
+    report.screenshots.push(emptyShot);
     if (spec.touch) await nearby.tap();
     else {
       await nearby.focus();
@@ -150,14 +167,24 @@ try {
     report.screenshots.push(shot);
     // Hide mobile context to give the original map input its full viewport.
     const hide = p.getByRole('button', { name: 'HIDE CONTEXT', exact: true });
-    if (spec.touch && (await hide.count())) await hide.tap();
+    if (spec.touch && (await hide.count())) {
+      await hide.tap();
+      await p.waitForTimeout(250);
+    }
     // Selecting a real commander still takes precedence over nearby HQ access.
     const actorHit = await hit(p, fixture.actor.pos);
     assert.ok(actorHit, 'Visible commander');
     await input(actorHit);
+    await p.waitForFunction(
+      (id) => window.__ironRidge.store.getState().ui.selectedArmy === id,
+      fixture.actor.id,
+    );
     now = await state(p);
     assert.equal(now.ui.selectedArmy, fixture.actor.id);
-    if (spec.touch && (await hide.count())) await hide.tap();
+    if (spec.touch && (await hide.count())) {
+      await hide.tap();
+      await p.waitForTimeout(250);
+    }
     point = await hit(p, dest.key);
     assert.ok(point);
     await input(point);
@@ -170,7 +197,10 @@ try {
       0,
     );
     // Open native hover/hold context for the explicit MOVE, rather than a tile-body order.
-    if (spec.touch && (await hide.count())) await hide.tap();
+    if (spec.touch && (await hide.count())) {
+      await hide.tap();
+      await p.waitForTimeout(250);
+    }
     point = await hit(p, dest.key);
     assert.ok(point);
     if (spec.touch) {
