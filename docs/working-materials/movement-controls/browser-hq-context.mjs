@@ -209,12 +209,19 @@ try {
         type: 'touchStart',
         touchPoints: [{ x: point.x, y: point.y }],
       });
-      await p.waitForTimeout(700);
+      await p.waitForTimeout(1200);
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await cdp.detach();
     } else await p.mouse.move(point.x, point.y);
     const callout = p.locator('[data-callout-kind="target"]');
-    await callout.getByRole('button', { name: 'SELECT NEARBY HQ', exact: true }).waitFor();
+    try {
+      await callout.getByRole('button', { name: 'SELECT NEARBY HQ', exact: true }).waitFor();
+    } catch (error) {
+      report.lastState = await state(p);
+      report.calloutText = await callout.allTextContents();
+      await p.screenshot({ path: `${out}/failed-context-${spec.width}.png` });
+      throw error;
+    }
     assert.equal(
       await callout.getByRole('button', { name: 'SELECT HQ GARRISON', exact: true }).count(),
       0,
