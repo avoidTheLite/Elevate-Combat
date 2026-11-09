@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "818b20c3c2945db0f7830a366666029897718523",
+  "implementation_sha": "befd9e2e2398dee576b3cf63886790cba6661cff",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -1167,6 +1167,61 @@
         {
           "path": "apps/web/src/components/game/selectionContext.test.tsx",
           "name": "persistent tile and entity context GAMES-ELEVATE-CAMPAIGN-UC-002: nearby HQ navigation respects fog and yields to a real commander",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context hq: a permanent holder ID selects its same-tile combined node card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context node: a permanent holder ID selects its same-tile combined node card",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context hq: legally stationed center guard remains separate from the empty permanent node roster",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context node: legally stationed center guard remains separate from the empty permanent node roster",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context hq: permanent and temporary callout IDs choose their distinct visible contexts",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context node: permanent and temporary callout IDs choose their distinct visible contexts",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/garrisonContextReview.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: reviewed garrison context rejects stale snapshots, off-tile and hidden permanent IDs while retaining the earlier HQ ring semantics",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceFeedback.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: interface feedback regressions lets native Tab reach SESSION STATUS, wraps both directions and restores the opener after Escape or close",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceFeedback.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: interface feedback regressions normal storage keeps cumulative live preferences synchronized across Settings, multiple controls and remounts",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceFeedback.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: interface feedback regressions quota storage keeps cumulative live preferences synchronized across Settings, multiple controls and remounts",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/components/game/interfaceFeedback.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: interface feedback regressions blocked storage keeps cumulative live preferences synchronized across Settings, multiple controls and remounts",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
