@@ -85,7 +85,7 @@ export function visibleTileEntities(
   const holders: TileEntity[] = seenHolders(game, view)
     .filter((holder) => holder.pos === key)
     // A node card includes its garrison roster; do not duplicate that building.
-    .filter((holder) => !node || holder.kind !== 'garrison')
+    .filter((holder) => !node || holder.kind !== 'garrison' || holder.building === 'temporary')
     .map((holder) => ({
       kind: 'holder',
       id: holder.id,
@@ -129,7 +129,19 @@ export function inspectTile(
 }
 
 export function chooseTileEntity(game: GameState, key: string, id: string): void {
-  const entity = visibleTileEntities(game, key).find((candidate) => candidate.id === id);
+  if (useGameStore.getState().game !== game) return;
+  const entities = visibleTileEntities(game, key);
+  let entity = entities.find((candidate) => candidate.id === id);
+  if (!entity && game.phase === 'strategic') {
+    const represented = seenHolders(game, viewTeam(game)).some(
+      (holder) =>
+        holder.id === id &&
+        holder.pos === key &&
+        holder.kind === 'garrison' &&
+        holder.building !== 'temporary',
+    );
+    if (represented) entity = entities.find((candidate) => candidate.kind === 'node');
+  }
   if (!entity) return;
   useGameStore.getState().setUi({
     inspectedCell: key,

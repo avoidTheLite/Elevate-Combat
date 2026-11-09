@@ -17,7 +17,7 @@ import type { MapCommand, PendingCommand, TargetingMode } from './commands.ts';
 import { holderForClick, isFriendlyNodeCenter, nearbyHqForTile } from '../lib/holders.ts';
 import { viewTeam } from '../stores/useGameStore.ts';
 import {
-  CONTROL_PREFERENCES_CHANGED,
+  subscribeControlPreferences,
   readControlPreferences,
   saveControlPreferences,
 } from './preferences.ts';
@@ -177,15 +177,7 @@ export function useMapControls(game: GameState, ui: UiState, blocked: boolean): 
     };
   }, [cancel]);
 
-  useEffect(() => {
-    const refresh = (): void => setPreferences(readControlPreferences());
-    window.addEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
-    window.addEventListener('storage', refresh);
-    return () => {
-      window.removeEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
-      window.removeEventListener('storage', refresh);
-    };
-  }, []);
+  useEffect(() => subscribeControlPreferences(setPreferences), []);
 
   const setPreference = useCallback((patch: Partial<ControlPreferences>) => {
     const next = { ...readControlPreferences(), ...patch };

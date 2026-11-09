@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  CONTROL_PREFERENCES_CHANGED,
+  subscribeControlPreferences,
   readControlPreferences,
   saveControlPreferences,
 } from '../../controls/preferences.ts';
@@ -15,14 +15,10 @@ export function PlayerSettings({ onClose }: { onClose: () => void }): React.Reac
   const aiSpeed = useGameStore((state) => state.aiSpeed);
   useEffect(() => {
     useGameStore.getState().setAiSpeed(readAiPace());
-    const refresh = (): void => setPreferences(readControlPreferences());
-    window.addEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
-    return () => {
-      window.removeEventListener(CONTROL_PREFERENCES_CHANGED, refresh);
-    };
+    return subscribeControlPreferences(setPreferences);
   }, []);
   const update = (patch: Partial<ControlPreferences>): void => {
-    const next = { ...preferences, ...patch };
+    const next = { ...readControlPreferences(), ...patch };
     setPreferences(next);
     saveControlPreferences(next);
   };

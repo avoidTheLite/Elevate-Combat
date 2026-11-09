@@ -1,1 +1,2 @@
 - List only actual tile occupants, retain movement actors during empty HQ-ring inspection, and offer explicit navigation to the nearby HQ's real tile.
+- Restore native summary keyboard access, preserve live preferences when browser storage fails, and keep temporary guards distinct while permanent-roster callouts select their node context.
