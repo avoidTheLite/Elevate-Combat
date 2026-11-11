@@ -145,10 +145,18 @@ async function importFixture(p, kind, temporary) {
 }
 async function hideContext(p) {
   const button = p.getByRole('button', { name: 'HIDE CONTEXT', exact: true });
-  if (await button.count()) {
-    await button.click();
-    await p.waitForTimeout(250);
-  }
+  // Inspection opens context in an effect; wait for that before hiding it.
+  await button.waitFor();
+  await button.click();
+  await button.waitFor({ state: 'detached' });
+  await p.waitForFunction(() => {
+    const s = window.__ironRidge.scene,
+      r = s.renderer.domElement.getBoundingClientRect();
+    return (
+      Math.abs(r.width - s.container.clientWidth) < 1 &&
+      Math.abs(r.height - s.container.clientHeight) < 1
+    );
+  });
 }
 async function nativeContext(p, key) {
   const point = await hit(p, key);
