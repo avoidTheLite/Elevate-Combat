@@ -1,5 +1,5 @@
 {
-  "implementation_sha": "befd9e2e2398dee576b3cf63886790cba6661cff",
+  "implementation_sha": "cec8c373cd180cae30523c69fd53593c5761f165",
   "entries": [
     {
       "use_case_id": "GAMES-ELEVATE-WORLD-UC-001",
@@ -332,6 +332,61 @@
         {
           "path": "apps/web/src/components/game/NodePanel.test.tsx",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: contextual node work through the real game store keeps placement highlights and action choices within current fog knowledge",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries ignores a retained build confirmation after cancellation removes the visible order",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries ignores the old location callback and preserves a replacement placement",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries ignores an old callback after an identical save reload even when the quote matches",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries reads a newly opened quit gate before the next render",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries reads a newly opened handoff gate before the next render",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries ignores a retained local upgrade confirmation after cancellation",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries ignores retained build and local upgrade confirmations after unmount",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries rejects a retained local confirmation when current action permission or observer changes",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries does not revive a retained local quote after leaving and returning to its tile scope",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries commits a current build once with its quoted CP and ordinary work, then saves exactly",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
+        },
+        {
+          "path": "apps/web/src/components/game/nodeWorkLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-001: retained node confirmation lifecycle boundaries commits a current upgrade once with its quoted CP and engineer action, then saves exactly",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-001"
         }
       ]
@@ -1222,6 +1277,101 @@
         {
           "path": "apps/web/src/components/game/interfaceFeedback.test.tsx",
           "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: interface feedback regressions blocked storage keeps cumulative live preferences synchronized across Settings, multiple controls and remounts",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'hq': touch context stays pinned (temporary=false, prior actor=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'hq': touch context stays pinned (temporary=false, prior actor=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'hq': touch context stays pinned (temporary=true, prior actor=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'hq': touch context stays pinned (temporary=true, prior actor=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'node': touch context stays pinned (temporary=false, prior actor=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'node': touch context stays pinned (temporary=false, prior actor=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'node': touch context stays pinned (temporary=true, prior actor=false)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle 'node': touch context stays pinned (temporary=true, prior actor=true)",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle stale helper inspection preserves a replacement session and its staged move",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle stale retained hook inspection preserves a replacement session and its staged move",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle a retained confirmation cannot spend a pending move in a replacement game with identical actor IDs",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/contextLifecycle.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: context and session lifecycle replacement with the same actor IDs cancels the earlier hover dwell timer",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/controls/useMapControls.performance.test.tsx",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: fog inspection reuses visibility during camera layouts and refreshes after a real move",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with initial camera without updating token descendants",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with world rotation, translation and scale without updating token descendants",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with dirty ancestor transforms without updating token descendants",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with camera pan, rotation and zoom without updating token descendants",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with resized viewport without updating token descendants",
+          "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
+        },
+        {
+          "path": "apps/web/src/render/HexScene.projection.test.ts",
+          "name": "GAMES-ELEVATE-CAMPAIGN-UC-002: tile projection transform scope projects current tile coordinates with perspective firing camera without updating token descendants",
           "use_case_id": "GAMES-ELEVATE-CAMPAIGN-UC-002"
         }
       ]
