@@ -1,37 +1,43 @@
-# Movement controls feedback demo
+# Movement controls review
 
-Use branch `feature/movement-controls-demo`. The commander-movement fix has merged; this demo targets main and retains that correction. The demo itself remains unmerged.
+Review branch: `feature/compact-command-previews`. The earlier movement-control PRs #18/#209 have merged. Game PR #19 and DKR #218 are ready for review. DKR stage artifacts remain drafts pending acceptance.
 
-From the repository root, using Node 22 or later and the pinned pnpm 12.6.0:
+Start with the paired DKR [review entry](https://github.com/avoidTheLite/DKR/blob/feature/compact-command-previews/domains/games/Elevate-Combat/features/campaign/stages/03-execution/movement-controls/REVIEW.md) for the current increment, canonical scope links, immutable source pins, receipt ledger and limitations. This product folder holds launch notes and runnable proof.
+
+## Launch
+
+From the product root, with Node 22+ and pnpm 12.6.0:
 
 ```sh
 corepack pnpm install --frozen-lockfile
 corepack pnpm --filter @iron-ridge/web dev --host 127.0.0.1
 ```
 
-Open the local URL printed by Vite. On setup choose **OPEN PREPARED TACTICAL CONTROLS** for immediate movement, attack and existing engineer/fixed-weapon operations, or **START READY MOVEMENT CAMPAIGN** for the regular sparse strategic-objectives game. These explicit starts replace the browser's current autosave; export any game you want to preserve first. Existing Continue/import flows remain available.
+Open Vite's local URL. **Quick Start Tactical Controls** supplies an immediate playable scene. **Play Scenario → Ready Regular Campaign → Start Scenario** launches the regular sparse-objective campaign. Create Campaign offers editable presets; Resume Game restores exact saves. Explicit starts replace the browser autosave; export a game to preserve it first.
 
-Use **DEMO CONTROLS** for the proposed, adjustable browser preferences. Move/Attack clicks preview by default; **Confirm** executes. Quick Move and Quick Attack can be enabled separately. Selected-unit drags always preview and require confirmation in this proposal. Other drags pan. Selection alone opens no popup. Use hover/context or the camera toolbar **ACTIONS** shortcut for contextual tile controls. Descriptions and detailed preview statistics are in hover/accessibility descriptions and optional Help. On mobile the **DETAILS** toggle exposes the retained sidebar.
+## Tests and browser proof
 
-Canonical intake, design decisions, complete review steps, screenshots and immutable verification live in the matching DKR campaign stage at `features/campaign/stages/03-execution/movement-controls/README.md`; this folder contains only runnable browser proof scripts and launch notes. The demo does not finalize its open design choices or change engine rules.
-
-The browser scripts use the managed cloud Chromium/Playwright paths documented in their source, inspect the real renderer/store, and interact through actual browser input. They never dispatch fabricated game outcomes. Run them from the repository root while Vite is running:
+Run the aggregate suite, typecheck and build from the product root:
 
 ```sh
-node docs/working-materials/movement-controls/browser-commands.mjs
-node docs/working-materials/movement-controls/browser-input.mjs
-node docs/working-materials/movement-controls/browser-feedback.mjs
+corepack pnpm test
+corepack pnpm typecheck
+corepack pnpm build
 ```
 
-Output defaults to `/tmp/ux-controls-commands` and `/tmp/ux-controls-input`. `QA_URL` and `UX_EVIDENCE_DIR` can override the URL/output for the command script; see the input script's environment names for its output override. Physical-device long-press behavior is a separate verification limit.
+The aggregate suite includes engine, web and API tests. Focused regressions and fresh foundation observations are recorded separately in the DKR review entry; their counts are subsets and must not be added to the aggregate.
 
-The November 4 review follow-up adds fog-safe blind-fire details and retained per-player strategic ownership. One visible SubHex updates its MainHex owner; occlusion keeps the last observation. Saves now use schema 5; older saves initialize only currently visible ownership, with no retroactive knowledge of hidden changes.
+Run a browser script from the product root while Vite is running. All accept `QA_URL` (default `http://127.0.0.1:5173/`) and use the managed Chromium/Playwright paths in their source.
 
-Additional reproducible proof (prepared initial fixtures are imported through the ordinary save UI; no fabricated combat outcomes):
+| Scope | Command | Default report | Output directory override |
+|---|---|---|---|
+| Performance/accuracy lifecycle follow-up | `node docs/working-materials/movement-controls/browser-performance-accuracy.mjs` | `/tmp/performance-review/browser/browser-performance-accuracy.json` | `PERFORMANCE_EVIDENCE_DIR` |
+| Accessibility, live preferences, garrison cards | `node docs/working-materials/movement-controls/browser-review-feedback.mjs` | `/tmp/interface-review2/browser/browser-review-feedback.json` | `REVIEW_EVIDENCE_DIR` |
+| HQ-ring inspection and explicit navigation | `node docs/working-materials/movement-controls/browser-hq-context.mjs` | `/tmp/hq-context-review/browser/browser-hq-context.json` | `HQ_EVIDENCE_DIR` |
+| Broad interface and setup | `node docs/working-materials/movement-controls/browser-interface-review.mjs` | `/tmp/interface-review/browser/browser-compact-previews.json` | `COMPACT_EVIDENCE_DIR` |
 
-```sh
-node docs/working-materials/movement-controls/browser-review.mjs
-node docs/working-materials/movement-controls/browser-ownership.mjs
-```
+These scripts reproduce different scopes; running one does not rerun the others. They use ordinary browser input, read-only DEV state/projection inspection and camera adjustment. Prepared fixtures enter through the save importer. The accessibility script injects preference-key storage failures. Touch uses Chromium CDP emulation, with physical-device and prepared-fixture limits in the DKR guide. The current increment's executed scripts/results must be recorded in the review entry.
 
-See the DKR execution guide’s PR-feedback section for pinned results and the independent review. The Copilot setup job’s private CLI clone authentication failure is a separate environment limitation; the review comments themselves were available and addressed.
+The performance/accuracy script distinguishes trusted pen-context events from touch button choices. Headless native touch-hold context menus were not observed in the separate capability probe; they remain unverified, rather than being inferred from a hover callout.
+
+The older `browser-commands`, `browser-input`, `browser-feedback`, `browser-review`, `browser-ownership` and `browser-compact-previews` scripts remain historical proof for their pinned interfaces. Some expect superseded controls or predate Home navigation. Their retained results are historical receipts, not current-increment acceptance.

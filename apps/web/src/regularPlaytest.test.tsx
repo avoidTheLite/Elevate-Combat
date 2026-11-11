@@ -12,6 +12,7 @@ import {
   worldOf,
 } from '@iron-ridge/engine';
 import App from './App.tsx';
+import { inspectTile } from './lib/selection.ts';
 import { useBalanceStore } from './balance/store.ts';
 import {
   regularPlaytestDocument,
@@ -75,7 +76,8 @@ describe('ready regular strategic-objectives playtest', () => {
     'loads an editable normal setup and starts %s with the same explicit trial rules',
     (opponent, controllers) => {
       render(<App />);
-      fireEvent.click(screen.getByRole('button', { name: 'USE READY PLAYTEST SETUP' }));
+      fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
+      fireEvent.click(screen.getByRole('button', { name: 'APPLY PRESET' }));
       expect(screen.getByRole('button', { name: 'ADVANCED SEEDED NODES' })).toHaveAttribute(
         'aria-pressed',
         'true',
@@ -85,7 +87,8 @@ describe('ready regular strategic-objectives playtest', () => {
       expect(screen.getByLabelText('Commander training price (CP)')).toHaveValue(15);
       expect(screen.getByLabelText('Capture Node price (CP)')).toHaveValue(5);
       expect(screen.getByLabelText('Raze Node price (CP)')).toHaveValue(2);
-      expect(useBalanceStore.getState().active).toEqual(PLAYTEST_BALANCE_RULES);
+      expect(useBalanceStore.getState().active).toBeUndefined();
+      expect(useBalanceStore.getState().draft).toEqual({});
       fireEvent.click(screen.getByRole('button', { name: opponent as string }));
       fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
       const game = useGameStore.getState().game!;
@@ -105,7 +108,8 @@ describe('ready regular strategic-objectives playtest', () => {
 
   it('removes preset infrastructure when switching from Ready to Classic before starting', () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'USE READY PLAYTEST SETUP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
+    fireEvent.click(screen.getByRole('button', { name: 'APPLY PRESET' }));
     fireEvent.click(screen.getByRole('button', { name: 'CLASSIC' }));
     fireEvent.click(screen.getByRole('button', { name: 'START NEW GAME' }));
     const game = useGameStore.getState().game!;
@@ -113,7 +117,9 @@ describe('ready regular strategic-objectives playtest', () => {
     expect(game.infrastructure).toBeUndefined();
     expect(game.settings.rules).toEqual(PLAYTEST_BALANCE_RULES);
     expect(game.settings.commanderTrainingCp).toBe(15);
-    expect(screen.getByText(/Classic campaign: recruit at HQ/)).toBeInTheDocument();
+    const hq = game.armies.find((holder) => holder.kind === 'garrison' && holder.team === 'A')!;
+    act(() => inspectTile(game, hq.pos));
+    expect(screen.getByRole('button', { name: /rifle infantry/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Node order')).not.toBeInTheDocument();
   });
 });

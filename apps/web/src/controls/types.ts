@@ -22,6 +22,8 @@ export interface SceneCommandControls {
   /** Changes for session, game revision or actor changes, even at the same tile. */
   selectionScope?: string | null;
   selectedOriginKey: string | null;
+  /** Staged movement needs enough visible tile area for two accessible in-hex controls. */
+  confirmationKey?: string | null;
   protectedKeys: readonly string[];
   trackedKeys: readonly string[];
   onInteraction: (intent: SceneInteraction) => void;
