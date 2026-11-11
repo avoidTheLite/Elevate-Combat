@@ -331,7 +331,7 @@ export class HexScene {
   /** Client-pixel position of a cell's top face (used by smoke tests / tooling). */
   projectKey(key: string): { x: number; y: number } | null {
     if (!this.cellIndex.has(key)) return null;
-    this.world.updateMatrixWorld(true);
+    this.world.updateWorldMatrix(true, false);
     this.activeCamera().updateMatrixWorld();
     const p = this.cellPos(key).applyMatrix4(this.world.matrixWorld).project(this.activeCamera());
     const r = this.renderer.domElement.getBoundingClientRect();
@@ -341,7 +341,8 @@ export class HexScene {
   /** Project a tile's actual top-face polygon into canvas-local CSS pixels. */
   private projectTile(key: string): { center: ScreenPoint; corners: ScreenPoint[] } | null {
     if (!this.cellIndex.has(key)) return null;
-    this.world.updateMatrixWorld(true);
+    // Tile coordinates depend on the world and its ancestors, never token models.
+    this.world.updateWorldMatrix(true, false);
     this.activeCamera().updateMatrixWorld();
     const origin = this.cellPos(key);
     const project = (p: THREE.Vector3): ScreenPoint | null => {

@@ -111,6 +111,7 @@ export function inspectTile(
   key: string,
   view: Team | null = viewTeam(game),
 ): void {
+  if (useGameStore.getState().game !== game) return;
   const { world } = worldOf(game);
   const cell = world.subByKey.get(key);
   if (!cell || (game.phase === 'battle' && !contextFor(game).cells.has(key))) return;

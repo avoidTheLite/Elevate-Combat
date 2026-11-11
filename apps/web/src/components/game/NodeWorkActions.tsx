@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CampaignNodeActionChoice,
   CampaignNodeDefinition,
@@ -109,10 +109,29 @@ export function NodeWorkActions({
   const { plan, startPlacement, selectTile, cancelPlacement } = useNodePlacementStore();
   const scope = `${node.nodeId}:${inspectedCell ?? ''}`;
   const [managed, setManaged] = useState<{ scope: string; id: string } | null>(null);
-  const [pending, setPending] = useState<{
+  const [pending, updatePending] = useState<{
+    game: GameState;
     scope: string;
     choice: CampaignNodeActionChoice;
   } | null>(null);
+  const pendingRef = useRef(pending);
+  const setPending = useCallback((next: typeof pending) => {
+    pendingRef.current = next;
+    updatePending(next);
+  }, []);
+  const liveContext = useRef({ scope, canAct, view });
+  liveContext.current = { scope, canAct, view };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pendingRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    setPending(null);
+  }, [scope, setPending]);
   const [error, setError] = useState<string | null>(null);
   const building = inspectedCell
     ? visibleBuildings.find((candidate) => candidate.subHex === inspectedCell)
@@ -120,7 +139,9 @@ export function NodeWorkActions({
       ? visibleBuildings.find((candidate) => candidate.id === managed.id)
       : undefined;
   const placement = plan?.nodeId === node.nodeId ? plan : null;
-  const quote = placement?.choice ?? (pending?.scope === scope ? pending.choice : null);
+  const quote =
+    placement?.choice ??
+    (pending?.game === game && pending.scope === scope ? pending.choice : null);
   const liveQuote = quote
     ? choices.find(
         (choice) =>
@@ -168,8 +189,26 @@ export function NodeWorkActions({
     setError(null);
   };
   const confirm = (): void => {
-    if (!canAct || !quote) return;
-    const latest = useGameStore.getState().game;
+    const session = useGameStore.getState();
+    if (
+      !mounted.current ||
+      !canAct ||
+      !quote ||
+      session.game !== game ||
+      session.handoff ||
+      session.quitPrompt ||
+      !liveContext.current.canAct ||
+      liveContext.current.scope !== scope ||
+      liveContext.current.view !== view
+    )
+      return;
+    if (
+      placement
+        ? useNodePlacementStore.getState().plan !== placement
+        : !pending || pendingRef.current !== pending || pending.game !== game
+    )
+      return;
+    const latest = session.game;
     const latestNode = latest
       ? campaignNodeViews(latest).find((candidate) => candidate.nodeId === node.nodeId)
       : null;
@@ -261,7 +300,7 @@ export function NodeWorkActions({
                         view,
                       });
                       if (inspectedCell) selectTile(game, inspectedCell);
-                    } else setPending({ scope, choice });
+                    } else setPending({ game, scope, choice });
                   }}
                 >
                   <span>{title}</span>
