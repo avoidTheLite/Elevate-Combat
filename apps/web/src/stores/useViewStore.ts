@@ -6,6 +6,7 @@ const KEY = 'iron-ridge-view-v1';
 
 interface ViewStore {
   overlay: OverlayMode;
+  detailsVisible: boolean;
   setOverlay: (mode: OverlayMode) => void;
 }
 
@@ -21,8 +22,12 @@ function load(): OverlayMode {
 
 export const useViewStore = create<ViewStore>((set) => ({
   overlay: load(),
+  detailsVisible: true,
   setOverlay: (overlay) => {
-    set({ overlay });
+    set((state) => ({
+      overlay,
+      detailsVisible: state.overlay === overlay ? !state.detailsVisible : true,
+    }));
     try {
       localStorage.setItem(KEY, overlay);
     } catch {

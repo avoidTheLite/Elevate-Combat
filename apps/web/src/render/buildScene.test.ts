@@ -40,6 +40,8 @@ import type { UiState } from '../stores/useGameStore.ts';
 import { BASIC_FILL, CAPTURE_COLOR, HEIGHT_FILL, OVERLAYS } from './overlays.ts';
 
 const UI: UiState = {
+  inspectedCell: null,
+  selectedEntity: null,
   selectedMain: null,
   selectedArmy: null,
   checkedUnits: [],

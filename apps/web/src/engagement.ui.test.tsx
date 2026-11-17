@@ -101,6 +101,7 @@ function dismissHandoff(team: 'ALPHA' | 'BRAVO'): void {
 describe('experimental engagement setup', () => {
   it('is opt-in and survives the validated Battle Lab round trip', () => {
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CAMPAIGN' }));
     const experimental = screen.getByRole('checkbox', {
       name: 'Experimental multi-commander engagements',
     });

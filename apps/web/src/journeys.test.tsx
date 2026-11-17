@@ -85,6 +85,7 @@ describe('Continue from each fixture (autosave slot)', () => {
       store().importSave(FIXTURES[name]!);
     });
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     expect(screen.getAllByText(new RegExp(`TURN ${store().game!.turn}`)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /menu/i })).toBeInTheDocument();
   });
@@ -92,6 +93,7 @@ describe('Continue from each fixture (autosave slot)', () => {
   it('hotseat fixture shows the hand-off screen first', () => {
     localStorage.setItem(slotKey('autosave'), FIXTURES['hotseat-fog']!);
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     const team = actingTeam(store().game!) === 'A' ? 'ALPHA' : 'BRAVO';
     expect(screen.getByRole('button', { name: new RegExp(`I AM ${team}`) })).toBeInTheDocument();
@@ -152,12 +154,14 @@ describe('manual save slots', () => {
     });
     const turn = store().game!.turn;
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(screen.getByRole('button', { name: /menu/i }));
     fireEvent.click(await screen.findByRole('button', { name: /save game/i }));
     fireEvent.change(screen.getByLabelText(/save label/i), { target: { value: 'Before push' } });
     fireEvent.click(screen.getByRole('button', { name: /save to slot 2/i }));
     expect(await screen.findByRole('status')).toHaveTextContent(/saved to slot 2/i);
     fireEvent.click(screen.getByRole('button', { name: /abandon/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     // Autosave gone, slot 2 still listed.
     expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Before push/)).toBeInTheDocument();
@@ -173,6 +177,7 @@ describe('manual save slots', () => {
       store().quit();
     });
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(screen.getByRole('button', { name: /delete slot 3/i }));
     expect(screen.queryByRole('button', { name: /load slot 3/i })).not.toBeInTheDocument();
     expect(localStorage.getItem(slotKey('slot3'))).toBeNull();
@@ -201,6 +206,7 @@ describe('export / import', () => {
 
   it('imports a .json file from the setup screen', async () => {
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     const file = new File([FIXTURES['battle-over']!], 'save.json', { type: 'application/json' });
     fireEvent.change(screen.getByLabelText(/import save file/i), { target: { files: [file] } });
     await waitFor(() => expect(store().game).not.toBeNull());
@@ -209,11 +215,12 @@ describe('export / import', () => {
 
   it('a bad import shows an error and keeps the setup screen', () => {
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     act(() => {
       expect(store().importSave(FIXTURES.truncated!)).toBe(false);
     });
     expect(screen.getByRole('alert')).toHaveTextContent(/import failed.*not valid JSON/i);
-    expect(screen.getByRole('button', { name: /start new game/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'RESUME GAME' })).toBeInTheDocument();
   });
 });
 
@@ -221,6 +228,7 @@ describe('corrupt and legacy saves', () => {
   it('a corrupt slot is rejected with a message and removed', () => {
     localStorage.setItem(slotKey('slot1'), FIXTURES.corrupt!);
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     expect(screen.getByText(/CORRUPTED/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /load slot 1/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/save was corrupted and has been removed/i);
@@ -233,6 +241,7 @@ describe('corrupt and legacy saves', () => {
   it('a truncated autosave: CONTINUE fails visibly, never crashes', () => {
     localStorage.setItem(slotKey('autosave'), FIXTURES.truncated!);
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/corrupted.*not valid JSON/i);
     expect(localStorage.getItem(slotKey('autosave'))).toBeNull();
@@ -263,6 +272,7 @@ describe('corrupt and legacy saves', () => {
   it('the V0.9 key is also picked up lazily by the setup screen', () => {
     localStorage.setItem(LEGACY_SAVE_KEY, FIXTURES['legacy-0.9.0']!);
     render(<App />);
+    if (!store().game) fireEvent.click(screen.getByRole('button', { name: 'RESUME GAME' }));
     expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
     expect(screen.getByText(/Autosave \(from V0\.9\)/)).toBeInTheDocument();
   });

@@ -120,6 +120,7 @@ export class HexScene {
   private container: HTMLElement;
   private handlers: SceneHandlers = {};
   private commandControls: SceneCommandControls | null = null;
+  private confirmationToFit: string | null = null;
   private lastLayout: SceneTileAnchor[] = [];
 
   private terrainId = '';
@@ -233,6 +234,7 @@ export class HexScene {
 
   setCommandControls(controls?: SceneCommandControls): void {
     const next = controls && controls.enabled !== false ? controls : null;
+    const confirmationChanged = next?.confirmationKey !== this.commandControls?.confirmationKey;
     if (
       next?.selectedOriginKey !== this.commandControls?.selectedOriginKey ||
       next?.selectionScope !== this.commandControls?.selectionScope ||
@@ -244,6 +246,31 @@ export class HexScene {
       this.lastLayout = [];
     }
     this.commandControls = next;
+    if (confirmationChanged) this.confirmationToFit = next?.confirmationKey ?? null;
+  }
+
+  /** Once after staging, make room for two44px buttons without shrinking touch targets. */
+  private fitConfirmation(key: string): void {
+    const tile = this.projectTile(key);
+    if (!tile) return;
+    const anchor = projectedTileAnchor(key, tile.center, tile.corners);
+    if (!anchor) return;
+    const scale = Math.max(156 / anchor.width, 88 / anchor.height);
+    const fittedViewSize = Math.max(2, Math.min(this.viewSizeGoal, this.viewSize / scale));
+    const offscreen =
+      anchor.x < 52 ||
+      anchor.x > this.container.clientWidth - 52 ||
+      anchor.y < 28 ||
+      anchor.y > this.container.clientHeight - 28;
+    if (fittedViewSize >= this.viewSizeGoal - 0.001 && !offscreen) return;
+    this.focus(key);
+    this.targetGoal.y = this.cellPos(key).y;
+    this.viewSizeGoal = fittedViewSize;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      this.viewSize = this.viewSizeGoal;
+      this.target.copy(this.targetGoal);
+      this.updateCamera(0);
+    }
   }
 
   // ── Public API ──
@@ -304,7 +331,7 @@ export class HexScene {
   /** Client-pixel position of a cell's top face (used by smoke tests / tooling). */
   projectKey(key: string): { x: number; y: number } | null {
     if (!this.cellIndex.has(key)) return null;
-    this.world.updateMatrixWorld(true);
+    this.world.updateWorldMatrix(true, false);
     this.activeCamera().updateMatrixWorld();
     const p = this.cellPos(key).applyMatrix4(this.world.matrixWorld).project(this.activeCamera());
     const r = this.renderer.domElement.getBoundingClientRect();
@@ -314,7 +341,8 @@ export class HexScene {
   /** Project a tile's actual top-face polygon into canvas-local CSS pixels. */
   private projectTile(key: string): { center: ScreenPoint; corners: ScreenPoint[] } | null {
     if (!this.cellIndex.has(key)) return null;
-    this.world.updateMatrixWorld(true);
+    // Tile coordinates depend on the world and its ancestors, never token models.
+    this.world.updateWorldMatrix(true, false);
     this.activeCamera().updateMatrixWorld();
     const origin = this.cellPos(key);
     const project = (p: THREE.Vector3): ScreenPoint | null => {
@@ -846,6 +874,7 @@ export class HexScene {
       this.fxGroup.remove(child);
       disposeObject3D(child); // geometry and material (path line, trajectory, dot)
     }
+    if (spec.commandOverlay) return;
     if (spec.path.length > 1) {
       const pts = spec.path.map((k) => this.cellPos(k).add(new THREE.Vector3(0, 0.15, 0)));
       const g = new THREE.BufferGeometry().setFromPoints(pts);
@@ -960,6 +989,12 @@ export class HexScene {
     this.lastTime = now;
     this.elapsed += dt;
     this.updateCamera(dt);
+    // Effects receive the current SceneSpec before this frame, including any
+    // switch from firing view back to the movement camera.
+    if (this.confirmationToFit) {
+      this.fitConfirmation(this.confirmationToFit);
+      this.confirmationToFit = null;
+    }
     this.updateCommandLayout();
     const t = this.elapsed;
     for (const [id, obj] of this.tokens) {

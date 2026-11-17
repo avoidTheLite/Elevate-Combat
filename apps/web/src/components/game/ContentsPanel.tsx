@@ -33,10 +33,14 @@ function hpTone(frac: number): string {
 export function ContentsPanel({
   game,
   view,
+  holderId,
+  canAct = true,
 }: {
   game: GameState;
   view: Team | null;
-}): React.ReactElement {
+  holderId?: string;
+  canAct?: boolean;
+}): React.ReactElement | null {
   const ui = useGameStore((s) => s.ui);
   const dispatch = useGameStore((s) => s.dispatch);
   const setUi = useGameStore((s) => s.setUi);
@@ -46,7 +50,8 @@ export function ContentsPanel({
   const validTrainingPrice =
     trainingPrice.trim() !== '' && Number.isSafeInteger(enteredTrainingCp) && enteredTrainingCp > 0;
 
-  const holder = seenHolders(game, view).find((a) => a.id === ui.selectedArmy) ?? null;
+  const holder =
+    seenHolders(game, view).find((a) => a.id === (holderId ?? ui.selectedArmy)) ?? null;
   const cap = holder ? holderCapacity(game, holder) : ECONOMY.armyCap;
 
   const title = holder ? holderTitle(holder) : 'CONTENTS';
@@ -58,13 +63,7 @@ export function ContentsPanel({
   ) : undefined;
 
   if (!holder) {
-    return (
-      <Panel id="contents" title={title}>
-        <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
-          Click one of your commanders, or your HQ, to see what it holds.
-        </div>
-      </Panel>
-    );
+    return null;
   }
 
   if (!showsContents(holder, view)) {
@@ -77,9 +76,21 @@ export function ContentsPanel({
     );
   }
 
-  const orders = canOrder(game, holder, view);
-  const checked = ui.checkedUnits.filter((id) => holder.units.some((u) => u.id === id));
-  const setChecked = (ids: string[]): void => setUi({ checkedUnits: ids });
+  const orders = canAct && canOrder(game, holder, view);
+  const checked =
+    ui.selectedArmy === holder.id
+      ? ui.checkedUnits.filter((id) => holder.units.some((u) => u.id === id))
+      : [];
+  const contextNode =
+    holder.kind === 'garrison'
+      ? game.infrastructure?.sites.find((site) => site.mainHex === holder.at)
+      : undefined;
+  const setChecked = (ids: string[]): void =>
+    setUi({
+      selectedArmy: holder.id,
+      selectedEntity: contextNode ? `node:${contextNode.nodeId}` : holder.id,
+      checkedUnits: ids,
+    });
   const toggle = (id: string): void =>
     setChecked(checked.includes(id) ? checked.filter((x) => x !== id) : [...checked, id]);
   const allChecked = holder.units.length > 0 && checked.length === holder.units.length;
@@ -111,7 +122,13 @@ export function ContentsPanel({
     const next = useGameStore.getState().game!;
     const made = next.armies.find((a) => !before.has(a.id));
     // Select the new commander so it can be ordered (or inspected) right away.
-    setUi({ selectedArmy: made?.id ?? holder.id, checkedUnits: [] });
+    setUi({
+      selectedArmy: made?.id ?? holder.id,
+      selectedEntity: made?.id ?? holder.id,
+      inspectedCell: made?.pos ?? holder.pos,
+      selectedMain: made?.at ?? holder.at,
+      checkedUnits: [],
+    });
     setPicking(false);
   };
 

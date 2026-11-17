@@ -12,6 +12,7 @@ import {
 import { TEAM_COLOR } from '../../render/spec.ts';
 import { useViewStore } from '../../stores/useViewStore.ts';
 import { Button } from '../ui/Button.tsx';
+import { isInteractiveKeyTarget } from '../../controls/gestures.ts';
 
 const hex = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -58,11 +59,11 @@ export function OverlayBar({
 }): React.ReactElement {
   const overlay = useViewStore((s) => s.overlay);
   const setOverlay = useViewStore((s) => s.setOverlay);
+  const detailsVisible = useViewStore((s) => s.detailsVisible);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.repeat || isInteractiveKeyTarget(e.target)) return;
       const def = OVERLAYS.find((o) => o.key === e.key);
       if (def) setOverlay(def.id);
     };
@@ -85,31 +86,36 @@ export function OverlayBar({
             size="sm"
             variant={overlay === o.id ? 'default' : 'ghost'}
             aria-pressed={overlay === o.id}
+            aria-expanded={overlay === o.id && detailsVisible}
+            aria-controls="map-overlay-details"
             title={`${o.description} (${o.key})`}
             onClick={() => setOverlay(o.id)}
             className="bg-[hsl(var(--panel)/0.85)]"
           >
-            {o.key} {o.label}
+            {o.key} {o.label} {overlay === o.id ? (detailsVisible ? '▾' : '▸') : ''}
           </Button>
         ))}
       </div>
-      <div
-        className="bg-[hsl(var(--panel)/0.85)] border border-[hsl(var(--border-bright))] px-2 py-1 text-[9px] leading-4 w-max max-w-full"
-        data-testid="overlay-legend"
-      >
-        <ul className={overlay === 'height' ? 'grid grid-cols-3 gap-x-2' : 'flex flex-col'}>
-          {legend.items.map((it) => (
-            <li key={it.label} className="flex items-center gap-1 whitespace-nowrap">
-              <span
-                className="inline-block w-2.5 h-2.5 border"
-                style={{ borderColor: hex(it.color), background: `${hex(it.color)}55` }}
-              />
-              <span className="text-[hsl(var(--muted-foreground))]">{it.label}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="text-[hsl(var(--muted-foreground))] mt-0.5">{legend.note}</div>
-      </div>
+      {detailsVisible && (
+        <div
+          id="map-overlay-details"
+          className="bg-[hsl(var(--panel)/0.85)] border border-[hsl(var(--border-bright))] px-2 py-1 text-[9px] leading-4 w-max max-w-full"
+          data-testid="overlay-legend"
+        >
+          <ul className={overlay === 'height' ? 'grid grid-cols-3 gap-x-2' : 'flex flex-col'}>
+            {legend.items.map((it) => (
+              <li key={it.label} className="flex items-center gap-1 whitespace-nowrap">
+                <span
+                  className="inline-block w-2.5 h-2.5 border"
+                  style={{ borderColor: hex(it.color), background: `${hex(it.color)}55` }}
+                />
+                <span className="text-[hsl(var(--muted-foreground))]">{it.label}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="text-[hsl(var(--muted-foreground))] mt-0.5">{legend.note}</div>
+        </div>
+      )}
     </div>
   );
 }

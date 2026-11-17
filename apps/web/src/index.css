@@ -140,7 +140,8 @@ body {
 .map-callout {
   position: absolute;
   z-index: 1;
-  width: min(260px, calc(100% - 16px));
+  width: min(204px, calc(100% - 16px));
+  padding: 7px;
   max-height: calc(100% - 94px);
   overflow-y: auto;
   pointer-events: auto;
@@ -175,29 +176,13 @@ body {
   color: hsl(var(--muted-foreground));
   font-size: 10px;
 }
-.map-callout ul {
-  margin: 6px 0;
-  padding-left: 16px;
+.map-callout .map-hit-summary {
+  color: hsl(var(--foreground));
+  font-weight: bold;
+  margin: 3px 0 6px;
 }
-.map-preview-details {
-  max-height: 190px;
-  min-height: 32px;
-  flex: 0 1 auto;
-  overflow-y: auto;
-}
-.map-callout[data-callout-kind='target'] {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.map-callout [data-testid='map-command-preview'] {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  min-height: 0;
-}
-.map-callout [data-testid='map-command-preview'] > :not(.map-command-help) {
-  flex-shrink: 0;
+.map-callout .map-tile-summary {
+  margin: 3px 0;
 }
 .map-callout-buttons {
   display: flex;
@@ -230,23 +215,106 @@ body {
   opacity: 0.45;
   cursor: default;
 }
-.map-command-connector {
+.map-command-route {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
-  color: hsl(var(--warning));
+  pointer-events: none;
 }
-.map-command-connector line {
+.map-command-line {
+  fill: none;
   stroke: currentColor;
-  stroke-width: 3px;
-  stroke-dasharray: 7 4;
-}
-.map-command-connector circle {
-  stroke: currentColor;
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
   stroke-width: 2px;
-  fill: hsl(var(--warning) / 0.12);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: stroke-width var(--map-callout-duration, 120ms) ease-out;
+}
+.map-command-route[data-staged='true'] .map-command-line {
+  stroke-width: 4px;
+}
+.map-command-glow {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-dasharray: var(--map-flow-dashes);
+  opacity: 0.8;
+  animation: map-command-flow 0.9s linear infinite;
+  marker-end: none;
+}
+@keyframes map-command-flow {
+  from {
+    stroke-dashoffset: 0px;
+  }
+  to {
+    stroke-dashoffset: calc(-1 * var(--map-flow-spacing));
+  }
+}
+.map-command-route[data-motion='off'] .map-command-glow {
+  animation: none;
+  stroke-dasharray: none;
+  opacity: 0.12;
+}
+.map-move-confirmation {
+  position: absolute;
+  display: flex;
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 2;
+}
+.map-move-confirmation-fallback {
+  left: 50%;
+  bottom: 52px;
+}
+.map-move-confirmation button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: hsl(var(--background) / 0.94);
+  cursor: pointer;
+}
+.map-move-confirm {
+  color: #33ff88;
+}
+.map-move-cancel {
+  color: #ff3366;
+}
+.map-move-confirmation svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.map-move-confirmation button:hover {
+  background: hsl(var(--panel));
+}
+.map-move-confirmation button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.map-move-confirmation button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-command-line {
+    transition: none;
+  }
+  .map-command-glow {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.12;
+  }
 }
 .map-preferences {
   position: fixed;
@@ -314,30 +382,8 @@ body {
   }
 }
 
-.map-command-help summary {
-  cursor: pointer;
-  color: hsl(var(--primary));
-  min-height: 36px;
-  padding: 6px 0;
-}
-.map-command-help summary:focus-visible {
-  outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
-}
 @media (pointer: coarse) {
-  .map-command-help summary,
   .map-context-trigger {
-    min-height: 44px;
-  }
-}
-
-.map-callout .map-command-help {
-  min-height: 36px;
-  flex: 0 1 auto;
-  overflow-y: auto;
-}
-@media (pointer: coarse) {
-  .map-callout .map-command-help {
     min-height: 44px;
   }
 }
@@ -345,4 +391,66 @@ body {
 .map-callout[data-callout-mode='context'],
 .map-callout[data-callout-mode='preview'] {
   overflow-y: auto;
+}
+
+/* Shared home/in-game chrome; preferences never enter GameState. */
+.interface-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: hsl(var(--background) / 0.92);
+}
+.interface-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border: 1px solid hsl(var(--border-bright));
+  background: hsl(var(--panel));
+  font-size: 12px;
+}
+.interface-dialog h2,
+.interface-dialog h3 {
+  color: hsl(var(--primary));
+  letter-spacing: 0.1em;
+}
+.interface-dialog label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.interface-dialog input[type='range'] {
+  width: 100%;
+}
+.interface-dialog select {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border-bright));
+  padding: 6px;
+}
+@media (max-width: 767px) {
+  .interface-modal {
+    align-items: flex-end;
+  }
+  .interface-dialog {
+    max-height: calc(100dvh - 12px);
+  }
+}
+@media (max-width: 767px) and (orientation: landscape) {
+  .game-selection-context {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    width: min(320px, 55vw);
+    z-index: 8;
+    background: hsl(var(--panel));
+  }
 }

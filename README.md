@@ -6,6 +6,8 @@ battles fought on a nested sub-hex grid. The whole game is drawn in an isometric
 The design sources are in [`docs/`](docs/). Every assumption this build made to fill gaps in those
 docs is listed in [`docs/V0.9_ASSUMPTIONS.md`](docs/V0.9_ASSUMPTIONS.md).
 
+For the current compact-command-preview review, start with the [movement-controls launch and test guide](docs/working-materials/movement-controls/README.md). It links the paired DKR review entry, current scope, receipts and limitations.
+
 ## Run
 
 ```sh

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as THREE from 'three';
+import { BufferGeometry, Group, Line, LineBasicMaterial } from 'three';
+import type { SceneSpec } from './spec.ts';
 import { HexScene } from './HexScene.ts';
 import type { SceneCommandControls } from '../controls/types.ts';
 import type { PointerGesture, PointerSample } from '../controls/gestures.ts';
@@ -46,6 +48,23 @@ interface InputHarness {
 }
 
 const cleanup: (() => void)[] = [];
+
+it('GAMES-ELEVATE-CAMPAIGN-UC-002: one projected route removes and disposes prior 3D preview effects', () => {
+  const geometry = new BufferGeometry();
+  const material = new LineBasicMaterial();
+  const oldPath = new Line(geometry, material);
+  const fxGroup = new Group();
+  fxGroup.add(oldPath);
+  const disposeGeometry = vi.spyOn(geometry, 'dispose');
+  const disposeMaterial = vi.spyOn(material, 'dispose');
+  const scene = Object.assign(Object.create(HexScene.prototype), { fxGroup }) as {
+    buildFx: (spec: SceneSpec) => void;
+  };
+  scene.buildFx({ commandOverlay: true, path: ['0,0', '1,0'], trajectory: null } as SceneSpec);
+  expect(fxGroup.children).toHaveLength(0);
+  expect(disposeGeometry).toHaveBeenCalledOnce();
+  expect(disposeMaterial).toHaveBeenCalledOnce();
+});
 afterEach(() => {
   for (const dispose of cleanup.splice(0)) dispose();
   vi.unstubAllGlobals();

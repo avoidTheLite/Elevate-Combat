@@ -42,17 +42,16 @@ export function FoundationDemoGuide({ game }: { game: GameState }): React.ReactE
     >
       <div className="flex-1 min-w-[220px] leading-4">
         <strong className="text-[hsl(var(--warning))]">PREPARED DEMO · {label}</strong>
-        <p>
-          {id === 'capture-start'
-            ? 'Choose Capture Node, Raze Node or Do nothing independently for all three outposts, then confirm. Save & Quit can resume unfinished choices exactly. Inspect a captured node to try its building order.'
-            : id === 'capture-move'
-              ? 'Move Alpha to the enemy center, then choose its outcome. Capture after movement updates network benefits now; building work and deployment wait until the next owner turn.'
-              : 'Your selected Alpha unit stands on the enemy Workshop. Click Raze Tile (1 ACT, 0 CP), then Save or SECURE → RETURN TO CAMPAIGN. Resolve node and garrison choices; inspect the saved Workshop ruin afterward.'}
-        </p>
-        <p className="text-[hsl(var(--muted-foreground))]">
-          Prepared positions · normal game actions and saves · provisional playtest tuning · CP is
-          earned normally. Restart a scenario from MENU → Abandon → setup.
-        </p>
+        <details>
+          <summary>SCENARIO NOTES</summary>
+          <p>
+            {id === 'capture-start'
+              ? 'Choose Capture Node, Raze Node or Do nothing independently for all three outposts, then confirm. Save & Quit can resume unfinished choices exactly. Inspect a captured node to try its building order.'
+              : id === 'capture-move'
+                ? 'Move Alpha to the enemy center, then choose its outcome. Capture after movement updates network benefits now; building work and deployment wait until the next owner turn.'
+                : 'Your selected Alpha unit stands on the enemy Workshop. Click Raze Tile (1 ACT, 0 CP), then Save or SECURE → RETURN TO CAMPAIGN. Resolve node and garrison choices; inspect the saved Workshop ruin afterward.'}
+          </p>
+        </details>
       </div>
       <div className="flex gap-1 items-center">
         {id === 'capture-move' && (

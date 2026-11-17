@@ -12,6 +12,7 @@ import {
   validateGameState,
 } from '@iron-ridge/engine';
 import type { AttackFx } from '../render/effects.ts';
+import { readAiPace } from '../lib/playerPreferences.ts';
 import { effectVisibility, planAttackFx } from '../render/effects.ts';
 import type { SlotId, SlotInfo } from './saveSlots.ts';
 import {
@@ -26,6 +27,10 @@ import {
 } from './saveSlots.ts';
 
 export interface UiState {
+  /** Persistent inspected SubHex; never part of the saved GameState. */
+  inspectedCell: string | null;
+  /** Deliberate choice among the visible cards on the inspected tile. */
+  selectedEntity: string | null;
   selectedMain: string | null;
   /** Selected strategic holder (commander or garrison) — own or a visible enemy. */
   selectedArmy: string | null;
@@ -38,6 +43,8 @@ export interface UiState {
 }
 
 const EMPTY_UI: UiState = {
+  inspectedCell: null,
+  selectedEntity: null,
   selectedMain: null,
   selectedArmy: null,
   checkedUnits: [],
@@ -191,7 +198,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   fx: null,
   fxBusyUntil: 0,
   handoff: null,
-  aiSpeed: 220,
+  aiSpeed: readAiPace(),
   quitPrompt: false,
   loadError: null,
   saveNotice: null,
@@ -320,10 +327,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (ho) patch.handoff = ho;
     // Leaving a battle / phase change invalidates tactical selection.
     if (res.state.phase !== game.phase)
-      patch.ui = { ...get().ui, selectedUnit: null, deployPick: null, placingFort: false };
+      patch.ui = {
+        ...get().ui,
+        inspectedCell: null,
+        selectedEntity: null,
+        selectedUnit: null,
+        deployPick: null,
+        placingFort: false,
+      };
     // A new side on turn (hotseat) must not inherit the previous side's selection.
-    if (res.state.active !== game.active)
-      patch.ui = { ...(patch.ui ?? get().ui), selectedArmy: null, checkedUnits: [] };
+    if (res.state.active !== game.active || ho) patch.ui = { ...EMPTY_UI };
     // Ticked units that left the selected holder (transfer, battle) are unticked.
     const ui = patch.ui ?? get().ui;
     const held = res.state.armies.find((a) => a.id === ui.selectedArmy);
@@ -358,7 +371,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const patch: Partial<GameStore> = { game: next };
     if (res.outcome) Object.assign(patch, attackPatch(game, next, res.outcome, get().fx));
     if (next.phase !== game.phase)
-      patch.ui = { ...get().ui, selectedUnit: null, deployPick: null, placingFort: false };
+      patch.ui = {
+        ...get().ui,
+        inspectedCell: null,
+        selectedEntity: null,
+        selectedUnit: null,
+        deployPick: null,
+        placingFort: false,
+      };
     set(patch);
   },
 
